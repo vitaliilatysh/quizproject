@@ -1,0 +1,46 @@
+#login-body {
+    padding-top: 25vh;
+    padding-bottom: 40px;
+    background-color: #eee;
+}
+
+#signup-body {
+    padding-top: 15vh;
+    padding-bottom: 40px;
+    background-color: #eee;
+}
+
+.form-container {
+    padding: 30px;
+}
+
+#tprofile{
+    top: 50%;
+    left: 50%;
+    position: fixed;
+    width:30em;
+    height:18em;
+    margin-top: -9em; /*set to a negative number 1/2 of your height*/
+    margin-left: -15em; /*set to a negative number 1/2 of your width*/
+}
+#hello {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.invalidMessage{
+    width: 100%;
+    margin-top: .25rem;
+    font-size: 80%;
+    color: #dc3545;
+}
+
+#lang-select{
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: auto;
+}
+
