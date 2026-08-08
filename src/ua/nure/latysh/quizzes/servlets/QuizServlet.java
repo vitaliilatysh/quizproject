@@ -1,6 +1,5 @@
 package ua.nure.latysh.quizzes.servlets;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.dto.QuizDto;
 import ua.nure.latysh.quizzes.entities.Level;
 import ua.nure.latysh.quizzes.entities.Quiz;
@@ -22,10 +21,19 @@ import java.util.ResourceBundle;
 @WebServlet("/quizzes")
 public class QuizServlet extends HttpServlet {
 
-    private final static Logger logger = Logger.getLogger(QuizServlet.class);
-    private QuizService quizService = new QuizService();
-    private SubjectService subjectService = new SubjectService();
-    private LevelService levelService = new LevelService();
+    private final QuizService quizService;
+    private final SubjectService subjectService;
+    private final LevelService levelService;
+
+    public QuizServlet() {
+        this(new QuizService(), new SubjectService(), new LevelService());
+    }
+
+    QuizServlet(QuizService quizService, SubjectService subjectService, LevelService levelService) {
+        this.quizService = quizService;
+        this.subjectService = subjectService;
+        this.levelService = levelService;
+    }
 
     @Override
     protected void doGet(HttpServletRequest request,
@@ -42,7 +50,7 @@ public class QuizServlet extends HttpServlet {
 
         if (action == null) {
             doGet(request, response);
-
+            return;
         }
         switch (action) {
             case "add":
@@ -63,6 +71,8 @@ public class QuizServlet extends HttpServlet {
             case "search":
                 search(request, response);
                 break;
+            default:
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unknown action: " + action);
         }
     }
 

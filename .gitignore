@@ -1,3 +1,6 @@
 /.idea
 out
 /.svn
+/target
+.m2/
+*.iml
