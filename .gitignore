@@ -1,6 +1,8 @@
 /.idea
 out
 /.svn
-/target
-.m2/
 *.iml
+/.gradle
+/build
+/.m2
+/target
