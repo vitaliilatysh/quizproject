@@ -19,31 +19,32 @@ import java.util.List;
 
 public class QuizService {
 
-    private QuizRepository quizRepository;
-    private SubjectRepository subjectRepository = new SubjectRepositoryImpl();
-    private LevelRepository levelRepository = new LevelRepositoryImpl();
-    private QuestionRepository questionRepository = new QuestionRepositoryImpl();
+    private final QuizRepository quizRepository;
+    private final SubjectRepository subjectRepository;
+    private final LevelRepository levelRepository;
+    private final QuestionRepository questionRepository;
 
     public QuizService() {
-        this.quizRepository = new QuizRepositoryImpl();
+        this(new QuizRepositoryImpl(), new SubjectRepositoryImpl(),
+                new LevelRepositoryImpl(), new QuestionRepositoryImpl());
+    }
+
+    public QuizService(QuizRepository quizRepository,
+                       SubjectRepository subjectRepository,
+                       LevelRepository levelRepository,
+                       QuestionRepository questionRepository) {
+        this.quizRepository = quizRepository;
+        this.subjectRepository = subjectRepository;
+        this.levelRepository = levelRepository;
+        this.questionRepository = questionRepository;
     }
 
     public List<QuizDto> getAllQuizzes() {
-        List<Quiz> quizzes = quizRepository.findAll();
-        convertToDto(quizzes);
-
-        return convertToDto(quizzes);
+        return convertToDto(quizRepository.findAll());
     }
 
     public boolean addQuiz(QuizDto quizDto) {
-        Level level = levelRepository.findByName(quizDto.getComplexity());
-        Subject subject = subjectRepository.findByName(quizDto.getSubjectName());
-        Quiz quiz = new Quiz();
-        quiz.setName(quizDto.getName());
-        quiz.setLevelId(level.getId());
-        quiz.setSubjectId(subject.getId());
-        quiz.setTimeToPass(quizDto.getTimeToPass());
-        return quizRepository.save(quiz);
+        return quizRepository.save(toEntity(quizDto));
     }
 
     public void deleteQuiz(Quiz quiz) {
@@ -59,15 +60,7 @@ public class QuizService {
     }
 
     public void updateQuiz(QuizDto quizDto) {
-        Level level = levelRepository.findByName(quizDto.getComplexity());
-        Subject subject = subjectRepository.findByName(quizDto.getSubjectName());
-        Quiz quiz = new Quiz();
-        quiz.setId(quizDto.getId());
-        quiz.setName(quizDto.getName());
-        quiz.setLevelId(level.getId());
-        quiz.setSubjectId(subject.getId());
-        quiz.setTimeToPass(quizDto.getTimeToPass());
-        quizRepository.update(quiz);
+        quizRepository.update(toEntity(quizDto));
     }
 
     public List<Quiz> findQuizzesBySubjectId(int subjectId) {
@@ -75,22 +68,17 @@ public class QuizService {
     }
 
     public List<QuizDto> findQuizBySubjectName(String subjectName) {
-
-        List<Quiz> quizzes = quizRepository.findBySubjectName(subjectName);
-
-        return convertToDto(quizzes);
+        return convertToDto(quizRepository.findBySubjectName(subjectName));
     }
 
     private List<QuizDto> convertToDto(List<Quiz> quizzes) {
         List<QuizDto> quizDtos = new ArrayList<>();
         for (Quiz quiz : quizzes) {
-            QuizDto quizDto = new QuizDto();
-            int subjectId = quiz.getSubjectId();
-            int levelId = quiz.getLevelId();
-            Subject subject = subjectRepository.findById(subjectId);
-            Level level = levelRepository.findById(levelId);
+            Subject subject = subjectRepository.findById(quiz.getSubjectId());
+            Level level = levelRepository.findById(quiz.getLevelId());
             List<Question> questionsPerQuiz = questionRepository.findAllByQuizId(quiz.getId());
 
+            QuizDto quizDto = new QuizDto();
             quizDto.setId(quiz.getId());
             quizDto.setName(quiz.getName());
             quizDto.setSubjectName(subject.getName());
@@ -100,5 +88,18 @@ public class QuizService {
             quizDtos.add(quizDto);
         }
         return quizDtos;
+    }
+
+    private Quiz toEntity(QuizDto quizDto) {
+        Level level = levelRepository.findByName(quizDto.getComplexity());
+        Subject subject = subjectRepository.findByName(quizDto.getSubjectName());
+
+        Quiz quiz = new Quiz();
+        quiz.setId(quizDto.getId());
+        quiz.setName(quizDto.getName());
+        quiz.setLevelId(level.getId());
+        quiz.setSubjectId(subject.getId());
+        quiz.setTimeToPass(quizDto.getTimeToPass());
+        return quiz;
     }
 }
