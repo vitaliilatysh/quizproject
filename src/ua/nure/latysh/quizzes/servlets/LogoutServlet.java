@@ -19,11 +19,13 @@ public class LogoutServlet extends HttpServlet {
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
 
         HttpSession session = request.getSession(false);
-        User user = (User) request.getSession().getAttribute("user");
         if (session != null) {
-            logger.info(user.getLogin() + " logged out");
+            User user = (User) session.getAttribute("user");
+            if (user != null) {
+                logger.info(user.getLogin() + " logged out");
+            }
             session.invalidate();
         }
-        response.sendRedirect("/SummaryTask4");
+        response.sendRedirect(request.getContextPath() + "/");
     }
 }
