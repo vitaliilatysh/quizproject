@@ -16,7 +16,15 @@ import java.util.ResourceBundle;
 public class LoginServlet extends HttpServlet {
 
     private static final Logger logger = Logger.getLogger(LoginServlet.class);
-    private UserService userService = new UserService();
+    private final UserService userService;
+
+    public LoginServlet() {
+        this(new UserService());
+    }
+
+    LoginServlet(UserService userService) {
+        this.userService = userService;
+    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -28,14 +36,28 @@ public class LoginServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         req.setCharacterEncoding("UTF-8");
 
-        String login = (req.getParameter("username") != null) ? req.getParameter("username").trim() : null;
-        String password = (req.getParameter("password") != null) ? req.getParameter("password").trim() : null;
-        User user = userService.findByLoginAndPassword(login, password);
+        String usernameParameter = req.getParameter("username");
+        String login = usernameParameter == null ? null : usernameParameter.trim();
+        String password = req.getParameter("password");
 
         Locale lang = (Locale) req.getSession().getAttribute("lang");
+        if (lang == null) {
+            lang = Locale.getDefault();
+        }
         ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
 
-        if (user != null && user.getStatusId() != 2) {
+        if (login == null || login.isEmpty() || password == null || password.isBlank()) {
+            forwardWithError(req, resp, login, mybundle.getString("validation.input.required"));
+            return;
+        }
+
+        User user = userService.findByLoginAndPassword(login, password);
+
+        if (user == null) {
+            forwardWithError(req, resp, login, mybundle.getString("validation.input.username.notfound"));
+        } else if (user.getStatusId() == 2) {
+            forwardWithError(req, resp, login, mybundle.getString("validation.user.blocked"));
+        } else {
             HttpSession oldSession = req.getSession(false);
             if (oldSession != null) {
                 oldSession.invalidate();
@@ -54,24 +76,13 @@ public class LoginServlet extends HttpServlet {
             userService.updateUserLoginDate(user);
             resp.sendRedirect("quizzes");
             logger.info(user.getLogin() + " logged in");
-        } else if (user == null) {
-
-            req.getSession().setAttribute("lang", lang);
-            req.setAttribute("loginMessage",mybundle.getString("validation.input.username.notfound"));
-            req.setAttribute("username", login);
-            req.setAttribute("password", password);
-            req.getRequestDispatcher("/").forward(req, resp);
-        } else if (user.getStatusId() == 2) {
-
-            req.getSession().setAttribute("lang", lang);
-            req.setAttribute("loginMessage", mybundle.getString("validation.user.blocked"));
-            req.setAttribute("username", login);
-            req.setAttribute("password", password);
-            req.getRequestDispatcher("/").forward(req, resp);
-        } else if (login.isEmpty() && password.isEmpty()) {
-            req.getRequestDispatcher("/").forward(req, resp);
-        } else {
-            req.getRequestDispatcher("/").include(req, resp);
         }
+    }
+
+    private void forwardWithError(HttpServletRequest request, HttpServletResponse response,
+                                  String login, String message) throws ServletException, IOException {
+        request.setAttribute("loginMessage", message);
+        request.setAttribute("username", login);
+        request.getRequestDispatcher("/").forward(request, response);
     }
 }

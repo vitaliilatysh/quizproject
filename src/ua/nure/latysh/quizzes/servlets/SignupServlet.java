@@ -16,7 +16,15 @@ import java.util.ResourceBundle;
 public class SignupServlet extends HttpServlet {
 
     private static final Logger logger = Logger.getLogger(SignupServlet.class);
-    private UserService userService = new UserService();
+    private final UserService userService;
+
+    public SignupServlet() {
+        this(new UserService());
+    }
+
+    SignupServlet(UserService userService) {
+        this.userService = userService;
+    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -28,11 +36,26 @@ public class SignupServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         req.setCharacterEncoding("UTF-8");
 
-        String login = req.getParameter("username");
+        String usernameParameter = req.getParameter("username");
+        String login = usernameParameter == null ? null : usernameParameter.trim();
         String firstName = req.getParameter("firstName");
         String lastName = req.getParameter("lastName");
         String password = req.getParameter("password");
         String confirmPassword = req.getParameter("confirmPassword");
+
+        Locale lang = (Locale) req.getSession().getAttribute("lang");
+        if (lang == null) {
+            lang = Locale.getDefault();
+        }
+        ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
+
+        if (login == null || login.isEmpty() || password == null || password.isBlank()
+                || confirmPassword == null || confirmPassword.isBlank()) {
+            populateSignupForm(req, login, firstName, lastName);
+            req.setAttribute("confirmPwMessage", mybundle.getString("validation.input.required"));
+            req.getRequestDispatcher("signup.jsp").forward(req, resp);
+            return;
+        }
 
         User newUser = new User();
         newUser.setLogin(login);
@@ -44,11 +67,9 @@ public class SignupServlet extends HttpServlet {
         newUser.setStatusId(1);
 
         User user = userService.findUserByLogin(login);
-        Locale lang = (Locale) req.getSession().getAttribute("lang");
-        ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
-        req.getSession().setAttribute("lang", lang);
+        boolean passwordsMatch = password.equals(confirmPassword);
 
-        if (user == null && password != null && password.equalsIgnoreCase(confirmPassword)) {
+        if (user == null && passwordsMatch) {
             userService.save(newUser);
             User savedUser = userService.findUserByLogin(newUser.getLogin());
             HttpSession oldSession = req.getSession(false);
@@ -69,38 +90,22 @@ public class SignupServlet extends HttpServlet {
             req.setAttribute("user", savedUser);
             resp.sendRedirect("quizzes");
             logger.info(newUser.getLogin() + "logged in");
-        } else if(user != null && !password.equalsIgnoreCase(confirmPassword)){
-
-            req.setAttribute("usernameMessage", mybundle.getString("validation.input.username.exist"));
-            req.setAttribute("confirmPwMessage", mybundle.getString("validation.password"));
-            req.setAttribute("username", login);
-            req.setAttribute("firstName", firstName);
-            req.setAttribute("lastName", lastName);
-            req.setAttribute("password", password);
-            req.setAttribute("confirmPassword", confirmPassword);
+        } else {
+            populateSignupForm(req, login, firstName, lastName);
+            if (user != null) {
+                req.setAttribute("usernameMessage", mybundle.getString("validation.input.username.exist"));
+            }
+            if (!passwordsMatch) {
+                req.setAttribute("confirmPwMessage", mybundle.getString("validation.password"));
+            }
             req.getRequestDispatcher("signup.jsp").forward(req, resp);
-            logger.info(user.getLogin() + "has mismatching passwords");
-        } else if(user != null && password.equalsIgnoreCase(confirmPassword)){
-            req.setAttribute("username", login);
-            req.setAttribute("firstName", firstName);
-            req.setAttribute("lastName", lastName);
-            req.setAttribute("password", password);
-            req.setAttribute("confirmPassword", confirmPassword);
-            req.setAttribute("usernameMessage", mybundle.getString("validation.input.username.exist"));
-            req.getRequestDispatcher("signup.jsp").forward(req, resp);
-            logger.info(user.getLogin() + "already exists");
-        } else if(user == null && password !=null && !password.equalsIgnoreCase(confirmPassword)){
-            req.setAttribute("confirmPwMessage", mybundle.getString("validation.password"));
-            req.setAttribute("username", login);
-            req.setAttribute("firstName", firstName);
-            req.setAttribute("lastName", lastName);
-            req.setAttribute("password", password);
-            req.setAttribute("confirmPassword", confirmPassword);
-            req.getRequestDispatcher("signup.jsp").forward(req, resp);
-            logger.info("Passwords mismatched");
-        }else{
-            resp.sendRedirect("signup");
-
         }
+    }
+
+    private void populateSignupForm(HttpServletRequest request, String login,
+                                    String firstName, String lastName) {
+        request.setAttribute("username", login);
+        request.setAttribute("firstName", firstName);
+        request.setAttribute("lastName", lastName);
     }
 }

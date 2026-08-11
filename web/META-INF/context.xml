@@ -4,7 +4,7 @@
               maxIdle="30" maxWait="10000"
               username="root"
               password="root"
-              driverClassName="com.mysql.jdbc.Driver"
+              driverClassName="com.mysql.cj.jdbc.Driver"
               url="jdbc:mysql://localhost:3306/tests_db?characterEncoding=UTF-8"/>
 </Context>
 

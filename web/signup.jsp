@@ -34,11 +34,11 @@
                            type="text">
                 </div>
                 <div class="form-group">
-                    <input class="form-control" id="password" name="password" value="${password}" placeholder="<fmt:message key="input.password.placeholder"/>" required minlength="5" maxlength="15" pattern="[^\s]{5,15}"
+                    <input class="form-control" id="password" name="password" placeholder="<fmt:message key="input.password.placeholder"/>" required minlength="5" maxlength="15" pattern="[^\s]{5,15}"
                            type="password">
                 </div>
                 <div class="form-group">
-                    <input class="form-control" id="confirmPassword" name="confirmPassword" value="${confirmPassword}" placeholder="${placeholder}" required minlength="5" maxlength="15" pattern="[^\s]{5,15}"
+                    <input class="form-control" id="confirmPassword" name="confirmPassword" placeholder="${placeholder}" required minlength="5" maxlength="15" pattern="[^\s]{5,15}"
                            type="password">
                     <div class="invalidMessage">
                         ${confirmPwMessage}
