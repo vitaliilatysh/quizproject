@@ -18,6 +18,10 @@ repositories {
     mavenCentral()
 }
 
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 sourceSets {
     main {
         java.srcDirs = ['src']
