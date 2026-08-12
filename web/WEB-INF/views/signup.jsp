@@ -35,10 +35,12 @@
                            type="text">
                 </div>
                 <div class="form-group">
+                    <label class="sr-only" for="password"><fmt:message key="input.password.placeholder"/></label>
                     <input class="form-control" id="password" name="password" placeholder="<fmt:message key="input.password.placeholder"/>" required minlength="8" maxlength="128" pattern="[^\s]{8,128}"
                            type="password">
                 </div>
                 <div class="form-group">
+                    <label class="sr-only" for="confirmPassword">${placeholder}</label>
                     <input class="form-control" id="confirmPassword" name="confirmPassword" placeholder="${placeholder}" required minlength="8" maxlength="128" pattern="[^\s]{8,128}"
                            type="password">
                     <div class="invalidMessage">
