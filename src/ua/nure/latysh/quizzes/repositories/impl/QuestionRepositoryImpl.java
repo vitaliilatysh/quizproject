@@ -5,13 +5,17 @@ import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.repositories.QuestionRepository;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
 public class QuestionRepositoryImpl implements QuestionRepository {
 
-    private final static Logger logger = Logger.getLogger(QuestionRepositoryImpl.class);
+    private static final Logger logger = Logger.getLogger(QuestionRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public QuestionRepositoryImpl() {
@@ -34,13 +38,13 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     @Override
     public Question findById(int questionId) {
         Question question = new Question();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from questions where id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT * FROM questions WHERE id = ?")) {
             statement.setInt(1, questionId);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                question = extractQuestion(resultSet);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    question = extractQuestion(resultSet);
+                }
             }
         } catch (SQLException e) {
             logger.error(e);
@@ -50,57 +54,52 @@ public class QuestionRepositoryImpl implements QuestionRepository {
 
     @Override
     public void delete(Question question) {
-        if (findById(question.getId()) != null) {
-            try (Connection connection = dbConnector.getConnection()) {
-                PreparedStatement statement = connection.prepareStatement("DELETE FROM questions WHERE id=?");
-                statement.setInt(1, question.getId());
-                statement.executeUpdate();
-            } catch (SQLException e) {
-                logger.error(e);
-            }
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("DELETE FROM questions WHERE id = ?")) {
+            statement.setInt(1, question.getId());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error(e);
         }
     }
 
     @Override
     public Question saveQuestion(Question question) {
-        Question newQuestion = new Question();
-        Connection connection = null;
-        PreparedStatement statement = null;
-        ResultSet rs = null;
-        try {
-            connection = dbConnector.getConnection();
-            connection.setAutoCommit(false);
-            statement = connection.prepareStatement("INSERT INTO questions (question, quiz_id) VALUES (?, ?)");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO questions (question, quiz_id) VALUES (?, ?)",
+                     Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, question.getQuestion());
             statement.setInt(2, question.getQuizId());
             statement.executeUpdate();
-            statement = connection.prepareStatement("SELECT * FROM questions WHERE id = (SELECT MAX(id) FROM questions WHERE quiz_id=?)");
-            statement.setInt(1, question.getQuizId());
-            rs = statement.executeQuery();
-            if (rs.next()) {
-                newQuestion = extractQuestion(rs);
+            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    Question savedQuestion = new Question();
+                    savedQuestion.setId(generatedKeys.getInt(1));
+                    savedQuestion.setQuestion(question.getQuestion());
+                    savedQuestion.setQuizId(question.getQuizId());
+                    return savedQuestion;
+                }
             }
-            connection.commit();
         } catch (SQLException e) {
-            dbConnector.rollback(connection);
             logger.error(e);
-        } finally {
-            dbConnector.close(connection, statement, rs);
         }
-        return newQuestion;
+        return new Question();
     }
 
     @Override
     public boolean save(Question element) {
-        return false;
+        return saveQuestion(element).getId() > 0;
     }
 
     @Override
     public void update(Question question) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("UPDATE questions SET question=? WHERE id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE questions SET question = ?, quiz_id = ? WHERE id = ?")) {
             statement.setString(1, question.getQuestion());
-            statement.setInt(2, question.getId());
+            statement.setInt(2, question.getQuizId());
+            statement.setInt(3, question.getId());
             statement.executeUpdate();
         } catch (SQLException e) {
             logger.error(e);
@@ -110,23 +109,14 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     @Override
     public List<Question> findAll() {
         List<Question> questions = new ArrayList<>();
-        Statement stmt = null;
-        ResultSet rs = null;
-        Connection con = null;
-        try {
-            con = dbConnector.getConnection();
-            con.setAutoCommit(false);
-            stmt = con.createStatement();
-            rs = stmt.executeQuery("SELECT * from questions");
-            while (rs.next()) {
-                questions.add(extractQuestion(rs));
+        try (Connection connection = dbConnector.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT * FROM questions")) {
+            while (resultSet.next()) {
+                questions.add(extractQuestion(resultSet));
             }
-            con.commit();
-        } catch (SQLException ex) {
-            dbConnector.rollback(con);
-            logger.error(ex);
-        } finally {
-            dbConnector.close(con, stmt, rs);
+        } catch (SQLException e) {
+            logger.error(e);
         }
         return questions;
     }
@@ -134,24 +124,17 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     @Override
     public List<Question> findAllByQuizId(int quizId) {
         List<Question> questions = new ArrayList<>();
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-        Connection con = null;
-        try {
-            con = dbConnector.getConnection();
-            con.setAutoCommit(false);
-            stmt = con.prepareStatement("select * from questions where quiz_id=?");
-            stmt.setInt(1, quizId);
-            rs = stmt.executeQuery();
-            while (rs.next()) {
-                questions.add(extractQuestion(rs));
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT * FROM questions WHERE quiz_id = ?")) {
+            statement.setInt(1, quizId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    questions.add(extractQuestion(resultSet));
+                }
             }
-            con.commit();
-        } catch (SQLException ex) {
-            dbConnector.rollback(con);
-            logger.error(ex);
-        } finally {
-            dbConnector.close(con, stmt, rs);
+        } catch (SQLException e) {
+            logger.error(e);
         }
         return questions;
     }
@@ -159,13 +142,14 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     @Override
     public Question findByName(String questionName) {
         Question question = new Question();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from questions where question=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT * FROM questions WHERE question = ?")) {
             statement.setString(1, questionName);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                question = extractQuestion(resultSet);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    question = extractQuestion(resultSet);
+                }
             }
         } catch (SQLException e) {
             logger.error(e);

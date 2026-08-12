@@ -5,13 +5,17 @@ import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Answer;
 import ua.nure.latysh.quizzes.repositories.AnswerRepository;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
 public class AnswerRepositoryImpl implements AnswerRepository {
 
-    private final static Logger logger = Logger.getLogger(AnswerRepositoryImpl.class);
+    private static final Logger logger = Logger.getLogger(AnswerRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public AnswerRepositoryImpl() {
@@ -25,13 +29,13 @@ public class AnswerRepositoryImpl implements AnswerRepository {
     @Override
     public Answer findById(int answerId) {
         Answer answer = new Answer();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from answers where id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT * FROM answers WHERE id = ?")) {
             statement.setInt(1, answerId);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                answer = extractAnswer(resultSet);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    answer = extractAnswer(resultSet);
+                }
             }
         } catch (SQLException e) {
             logger.error(e);
@@ -41,21 +45,20 @@ public class AnswerRepositoryImpl implements AnswerRepository {
 
     @Override
     public void delete(Answer answer) {
-//        if (findById(subject.getId()) != null) {
-//            try (Connection connection = dbConnector.getConnection()) {
-//                PreparedStatement statement = connection.prepareStatement("DELETE FROM subjects WHERE id=?");
-//                statement.setInt(1, subject.getId());
-//                statement.executeUpdate();
-//            } catch (SQLException e) {
-//                e.printStackTrace();
-//            }
-//        }
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("DELETE FROM answers WHERE id = ?")) {
+            statement.setInt(1, answer.getId());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error(e);
+        }
     }
 
     @Override
     public boolean save(Answer answer) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("INSERT INTO answers (answer, correct, question_id) VALUES (?, ?, ?)");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO answers (answer, correct, question_id) VALUES (?, ?, ?)")) {
             statement.setString(1, answer.getAnswer());
             statement.setBoolean(2, answer.isCorrect());
             statement.setInt(3, answer.getQuestionId());
@@ -69,8 +72,9 @@ public class AnswerRepositoryImpl implements AnswerRepository {
 
     @Override
     public void update(Answer answer) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("UPDATE answers SET answer=?, correct=? WHERE id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE answers SET answer = ?, correct = ? WHERE id = ?")) {
             statement.setString(1, answer.getAnswer());
             statement.setBoolean(2, answer.isCorrect());
             statement.setInt(3, answer.getId());
@@ -83,23 +87,14 @@ public class AnswerRepositoryImpl implements AnswerRepository {
     @Override
     public List<Answer> findAll() {
         List<Answer> answers = new ArrayList<>();
-        Statement stmt = null;
-        ResultSet rs = null;
-        Connection con = null;
-        try {
-            con = dbConnector.getConnection();
-            con.setAutoCommit(false);
-            stmt = con.createStatement();
-            rs = stmt.executeQuery("SELECT * from answers");
-            while (rs.next()) {
-                answers.add(extractAnswer(rs));
+        try (Connection connection = dbConnector.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT * FROM answers")) {
+            while (resultSet.next()) {
+                answers.add(extractAnswer(resultSet));
             }
-            con.commit();
-        } catch (SQLException ex) {
-            dbConnector.rollback(con);
-            logger.error(ex);
-        } finally {
-            dbConnector.close(con, stmt, rs);
+        } catch (SQLException e) {
+            logger.error(e);
         }
         return answers;
     }
@@ -117,24 +112,17 @@ public class AnswerRepositoryImpl implements AnswerRepository {
     @Override
     public List<Answer> findAllByQuestionId(int questionId) {
         List<Answer> answers = new ArrayList<>();
-        PreparedStatement pstmt = null;
-        ResultSet rs = null;
-        Connection con = null;
-        try {
-            con = dbConnector.getConnection();
-            con.setAutoCommit(false);
-            pstmt = con.prepareStatement("SELECT * from answers inner join questions on questions.id = answers.question_id where question_id=?");
-            pstmt.setLong(1, questionId);
-            rs = pstmt.executeQuery();
-            while (rs.next()) {
-                answers.add(extractAnswer(rs));
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT * FROM answers WHERE question_id = ?")) {
+            statement.setInt(1, questionId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    answers.add(extractAnswer(resultSet));
+                }
             }
-            con.commit();
-        } catch (SQLException ex) {
-            dbConnector.rollback(con);
-            logger.error(ex);
-        } finally {
-            dbConnector.close(con, pstmt, rs);
+        } catch (SQLException e) {
+            logger.error(e);
         }
         return answers;
     }

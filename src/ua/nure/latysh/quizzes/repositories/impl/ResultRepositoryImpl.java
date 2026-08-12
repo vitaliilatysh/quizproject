@@ -5,13 +5,17 @@ import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Result;
 import ua.nure.latysh.quizzes.repositories.ResultRepository;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ResultRepositoryImpl implements ResultRepository {
 
-    private final static Logger logger = Logger.getLogger(ResultRepositoryImpl.class);
+    private static final Logger logger = Logger.getLogger(ResultRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public ResultRepositoryImpl() {
@@ -23,41 +27,38 @@ public class ResultRepositoryImpl implements ResultRepository {
     }
 
     @Override
-    public Result findById(int answerId) {
-//        Subject foundSubject = new Subject();
-//        try (Connection connection = dbConnector.getConnection()) {
-//            PreparedStatement statement = connection.prepareStatement("select * from subjects where id=?");
-//            statement.setInt(1, subjectId);
-//            ResultSet resultSet = statement.executeQuery();
-//
-//            if (resultSet.next()) {
-//                foundSubject.setId(resultSet.getInt("id"));
-//                foundSubject.setName(resultSet.getString("name"));
-//            }
-//        } catch (SQLException e) {
-//            e.printStackTrace();
-//        }
-//        return foundSubject;
-        return new Result();
+    public Result findById(int resultId) {
+        Result result = new Result();
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT * FROM results WHERE id = ?")) {
+            statement.setInt(1, resultId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    result = extractResult(resultSet);
+                }
+            }
+        } catch (SQLException e) {
+            logger.error(e);
+        }
+        return result;
     }
 
     @Override
-    public void delete(Result answer) {
-//        if (findById(subject.getId()) != null) {
-//            try (Connection connection = dbConnector.getConnection()) {
-//                PreparedStatement statement = connection.prepareStatement("DELETE FROM subjects WHERE id=?");
-//                statement.setInt(1, subject.getId());
-//                statement.executeUpdate();
-//            } catch (SQLException e) {
-//                e.printStackTrace();
-//            }
-//        }
+    public void delete(Result result) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("DELETE FROM results WHERE id = ?")) {
+            statement.setInt(1, result.getId());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error(e);
+        }
     }
 
     @Override
     public boolean save(Result result) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("INSERT INTO results (answer_id, attempt_id) VALUES (?, ?)");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO results (answer_id, attempt_id) VALUES (?, ?)")) {
             statement.setInt(1, result.getAnswerId());
             statement.setInt(2, result.getAttemptId());
             statement.executeUpdate();
@@ -69,37 +70,30 @@ public class ResultRepositoryImpl implements ResultRepository {
     }
 
     @Override
-    public void update(Result answer) {
-//        try (Connection connection = dbConnector.getConnection()) {
-//            PreparedStatement statement = connection.prepareStatement("UPDATE subjects SET name=? WHERE id=?");
-//            statement.setString(1, subject.getName());
-//            statement.setInt(2, subject.getId());
-//            statement.executeUpdate();
-//        } catch (SQLException e) {
-//            e.printStackTrace();
-//        }
+    public void update(Result result) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE results SET answer_id = ?, attempt_id = ? WHERE id = ?")) {
+            statement.setInt(1, result.getAnswerId());
+            statement.setInt(2, result.getAttemptId());
+            statement.setInt(3, result.getId());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error(e);
+        }
     }
 
     @Override
     public List<Result> findAll() {
         List<Result> results = new ArrayList<>();
-        Statement stmt = null;
-        ResultSet rs = null;
-        Connection con = null;
-        try {
-            con = dbConnector.getConnection();
-            con.setAutoCommit(false);
-            stmt = con.createStatement();
-            rs = stmt.executeQuery("SELECT * from results");
-            while (rs.next()) {
-                results.add(extractResult(rs));
+        try (Connection connection = dbConnector.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT * FROM results")) {
+            while (resultSet.next()) {
+                results.add(extractResult(resultSet));
             }
-            con.commit();
-        } catch (SQLException ex) {
-            dbConnector.rollback(con);
-            logger.error(ex);
-        } finally {
-            dbConnector.close(con, stmt, rs);
+        } catch (SQLException e) {
+            logger.error(e);
         }
         return results;
     }
@@ -116,13 +110,14 @@ public class ResultRepositoryImpl implements ResultRepository {
     @Override
     public List<Result> findByAttemptId(int attemptId) {
         List<Result> results = new ArrayList<>();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from results where attempt_id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT * FROM results WHERE attempt_id = ?")) {
             statement.setInt(1, attemptId);
-            ResultSet resultSet = statement.executeQuery();
-
-            while (resultSet.next()) {
-                results.add(extractResult(resultSet));
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    results.add(extractResult(resultSet));
+                }
             }
         } catch (SQLException e) {
             logger.error(e);
@@ -133,13 +128,15 @@ public class ResultRepositoryImpl implements ResultRepository {
     @Override
     public List<Result> findAllByUserId(int userId) {
         List<Result> results = new ArrayList<>();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from results inner join attempts on results.attempt_id = attempts.id where user_id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT results.* FROM results JOIN attempts ON results.attempt_id = attempts.id "
+                             + "WHERE attempts.user_id = ?")) {
             statement.setInt(1, userId);
-            ResultSet resultSet = statement.executeQuery();
-
-            while (resultSet.next()) {
-                results.add(extractResult(resultSet));
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    results.add(extractResult(resultSet));
+                }
             }
         } catch (SQLException e) {
             logger.error(e);

@@ -5,7 +5,12 @@ import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.User;
 import ua.nure.latysh.quizzes.repositories.UserRepository;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,13 +45,13 @@ public class UserRepositoryImpl implements UserRepository {
     @Override
     public User findById(int questionId) {
         User user = new User();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from users where id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT * FROM users WHERE id = ?")) {
             statement.setInt(1, questionId);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                user = extractUser(resultSet);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    user = extractUser(resultSet);
+                }
             }
         } catch (SQLException e) {
             logger.error(e);
@@ -56,21 +61,21 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public void delete(User user) {
-//        if (findById(question.getId()) != null) {
-//            try (Connection connection = dbConnector.getConnection()) {
-//                PreparedStatement statement = connection.prepareStatement("DELETE FROM questions WHERE id=?");
-//                statement.setInt(1, question.getId());
-//                statement.executeUpdate();
-//            } catch (SQLException e) {
-//                e.printStackTrace();
-//            }
-//        }
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("DELETE FROM users WHERE id = ?")) {
+            statement.setInt(1, user.getId());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error(e);
+        }
     }
 
     @Override
     public boolean save(User user) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("INSERT INTO users (login, password, first_name, last_name, register_date, status_id, role_id) VALUES (?,?,?,?,?,?,?)");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO users (login, password, first_name, last_name, register_date, status_id, role_id) "
+                             + "VALUES (?, ?, ?, ?, ?, ?, ?)")) {
             statement.setString(1, user.getLogin());
             statement.setString(2, user.getPassword());
             statement.setString(3, user.getFirstName());
@@ -88,8 +93,9 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public void update(User user) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("UPDATE users SET status_id=? WHERE id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE users SET status_id = ? WHERE id = ?")) {
             statement.setInt(1, user.getStatusId());
             statement.setInt(2, user.getId());
             statement.executeUpdate();
@@ -99,8 +105,9 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     public void updateLoginDate(User user) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("UPDATE users SET login_date=? WHERE id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE users SET login_date = ? WHERE id = ?")) {
             statement.setTimestamp(1, new Timestamp(user.getLoginDateTime().getTime()));
             statement.setInt(2, user.getId());
             statement.executeUpdate();
@@ -112,29 +119,22 @@ public class UserRepositoryImpl implements UserRepository {
     @Override
     public List<User> findAll() {
         List<User> users = new ArrayList<>();
-        Statement stmt = null;
-        ResultSet rs = null;
-        Connection con = null;
-        try {
-            con = dbConnector.getConnection();
-            con.setAutoCommit(false);
-            stmt = con.createStatement();
-            rs = stmt.executeQuery("SELECT * from users where role_id<>1");
-            while (rs.next()) {
-                users.add(extractUser(rs));
+        try (Connection connection = dbConnector.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT * FROM users WHERE role_id <> 1")) {
+            while (resultSet.next()) {
+                users.add(extractUser(resultSet));
             }
-            con.commit();
-        } catch (SQLException ex) {
-            dbConnector.rollback(con);
-        } finally {
-            dbConnector.close(con, stmt, rs);
+        } catch (SQLException e) {
+            logger.error(e);
         }
         return users;
     }
 
     public void updatePassword(User user) {
         try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("UPDATE users SET password=? WHERE id=?")) {
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE users SET password = ? WHERE id = ?")) {
             statement.setString(1, user.getPassword());
             statement.setInt(2, user.getId());
             statement.executeUpdate();
@@ -146,15 +146,15 @@ public class UserRepositoryImpl implements UserRepository {
     @Override
     public User findByLogin(String login) {
         User user = new User();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from users where login=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT * FROM users WHERE login = ?")) {
             statement.setString(1, login);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                user = extractUser(resultSet);
-            } else {
-                user = null;
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    user = extractUser(resultSet);
+                } else {
+                    user = null;
+                }
             }
         } catch (SQLException e) {
             logger.error(e);

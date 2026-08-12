@@ -29,6 +29,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class RepositoryCoverageTest {
@@ -52,6 +54,7 @@ public class RepositoryCoverageTest {
         AnswerRepositoryImpl failing = new AnswerRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
         assertNotNull(failing.findById(1));
+        failing.delete(answer);
         assertFalse(failing.save(answer));
         failing.update(answer);
         assertTrue(failing.findAllByQuestionId(2).isEmpty());
@@ -111,6 +114,9 @@ public class RepositoryCoverageTest {
         failed.failPreparedStatements();
         assertNotNull(failing.findById(1));
         assertNotNull(failing.findByName("hard"));
+        failing.delete(level);
+        assertFalse(failing.save(level));
+        failing.update(level);
         failed.failStatements();
         assertTrue(failing.findAll().isEmpty());
     }
@@ -126,7 +132,7 @@ public class RepositoryCoverageTest {
         repository.delete(question);
         ok.oneRow();
         assertNotNull(repository.saveQuestion(question));
-        assertFalse(repository.save(question));
+        assertTrue(repository.save(question));
         repository.update(question);
         ok.oneRow();
         assertEquals(1, repository.findAll().size());
@@ -141,11 +147,21 @@ public class RepositoryCoverageTest {
         assertNotNull(failing.findById(1));
         failing.delete(question);
         assertNotNull(failing.saveQuestion(question));
+        assertFalse(failing.save(question));
         failing.update(question);
         assertTrue(failing.findAllByQuizId(2).isEmpty());
         assertNotNull(failing.findByName("Question"));
         failed.failStatements();
         assertTrue(failing.findAll().isEmpty());
+
+        Fixture withoutGeneratedKey = new Fixture();
+        withoutGeneratedKey.noGeneratedKey();
+        assertEquals(0, new QuestionRepositoryImpl(withoutGeneratedKey.dbConnector)
+                .saveQuestion(question).getId());
+
+        verify(ok.connection, times(2)).prepareStatement(
+                "INSERT INTO questions (question, quiz_id) VALUES (?, ?)",
+                Statement.RETURN_GENERATED_KEYS);
     }
 
     @Test
@@ -190,6 +206,7 @@ public class RepositoryCoverageTest {
         Fixture ok = new Fixture();
         ResultRepositoryImpl repository = new ResultRepositoryImpl(ok.dbConnector);
         Result result = result();
+        ok.oneRow();
         assertNotNull(repository.findById(1));
         repository.delete(result);
         assertTrue(repository.save(result));
@@ -204,7 +221,10 @@ public class RepositoryCoverageTest {
         Fixture failed = new Fixture();
         ResultRepositoryImpl failing = new ResultRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
+        assertNotNull(failing.findById(1));
+        failing.delete(result);
         assertFalse(failing.save(result));
+        failing.update(result);
         assertTrue(failing.findByAttemptId(2).isEmpty());
         assertTrue(failing.findAllByUserId(3).isEmpty());
         failed.failStatements();
@@ -228,7 +248,9 @@ public class RepositoryCoverageTest {
         RoleRepositoryImpl failingRoles = new RoleRepositoryImpl(roleFailed.dbConnector);
         roleFailed.failPreparedStatements();
         assertNotNull(failingRoles.findById(1));
+        failingRoles.delete(role);
         assertFalse(failingRoles.save(role));
+        failingRoles.update(role);
         roleFailed.failStatements();
         assertTrue(failingRoles.findAll().isEmpty());
 
@@ -247,7 +269,9 @@ public class RepositoryCoverageTest {
         StatusRepositoryImpl failingStatuses = new StatusRepositoryImpl(statusFailed.dbConnector);
         statusFailed.failPreparedStatements();
         assertNotNull(failingStatuses.findById(1));
+        failingStatuses.delete(status);
         assertFalse(failingStatuses.save(status));
+        failingStatuses.update(status);
         statusFailed.failStatements();
         assertTrue(failingStatuses.findAll().isEmpty());
     }
@@ -303,6 +327,7 @@ public class RepositoryCoverageTest {
         UserRepositoryImpl failing = new UserRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
         assertNotNull(failing.findById(1));
+        failing.delete(user);
         assertFalse(failing.save(user));
         failing.update(user);
         failing.updateLoginDate(user);
@@ -431,6 +456,11 @@ public class RepositoryCoverageTest {
         private void empty() throws SQLException {
             reset(resultSet);
             when(resultSet.next()).thenReturn(false);
+        }
+
+        private void noGeneratedKey() throws SQLException {
+            reset(generatedKeys);
+            when(generatedKeys.next()).thenReturn(false);
         }
 
         private void failPreparedStatements() throws SQLException {

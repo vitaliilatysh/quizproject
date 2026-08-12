@@ -5,13 +5,17 @@ import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Role;
 import ua.nure.latysh.quizzes.repositories.RoleRepository;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
 public class RoleRepositoryImpl implements RoleRepository {
 
-    private final static Logger logger = Logger.getLogger(RoleRepositoryImpl.class);
+    private static final Logger logger = Logger.getLogger(RoleRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public RoleRepositoryImpl() {
@@ -25,13 +29,13 @@ public class RoleRepositoryImpl implements RoleRepository {
     @Override
     public Role findById(int roleId) {
         Role role = new Role();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from roles where id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT * FROM roles WHERE id = ?")) {
             statement.setInt(1, roleId);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                role = extractRole(resultSet);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    role = extractRole(resultSet);
+                }
             }
         } catch (SQLException e) {
             logger.error(e);
@@ -40,24 +44,21 @@ public class RoleRepositoryImpl implements RoleRepository {
     }
 
     @Override
-    public void delete(Role answer) {
-//        if (findById(subject.getId()) != null) {
-//            try (Connection connection = dbConnector.getConnection()) {
-//                PreparedStatement statement = connection.prepareStatement("DELETE FROM subjects WHERE id=?");
-//                statement.setInt(1, subject.getId());
-//                statement.executeUpdate();
-//            } catch (SQLException e) {
-//                e.printStackTrace();
-//            }
-//        }
+    public void delete(Role role) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("DELETE FROM roles WHERE id = ?")) {
+            statement.setInt(1, role.getId());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error(e);
+        }
     }
 
     @Override
     public boolean save(Role role) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("INSERT INTO roles (id, role) VALUES (?, ?)");
-            statement.setInt(1, role.getId());
-            statement.setString(2, role.getRole());
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("INSERT INTO roles (name) VALUES (?)")) {
+            statement.setString(1, role.getRole());
             statement.executeUpdate();
             return true;
         } catch (SQLException e) {
@@ -67,37 +68,28 @@ public class RoleRepositoryImpl implements RoleRepository {
     }
 
     @Override
-    public void update(Role answer) {
-//        try (Connection connection = dbConnector.getConnection()) {
-//            PreparedStatement statement = connection.prepareStatement("UPDATE subjects SET name=? WHERE id=?");
-//            statement.setString(1, subject.getName());
-//            statement.setInt(2, subject.getId());
-//            statement.executeUpdate();
-//        } catch (SQLException e) {
-//            e.printStackTrace();
-//        }
+    public void update(Role role) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("UPDATE roles SET name = ? WHERE id = ?")) {
+            statement.setString(1, role.getRole());
+            statement.setInt(2, role.getId());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error(e);
+        }
     }
 
     @Override
     public List<Role> findAll() {
         List<Role> roles = new ArrayList<>();
-        Statement stmt = null;
-        ResultSet rs = null;
-        Connection con = null;
-        try {
-            con = dbConnector.getConnection();
-            con.setAutoCommit(false);
-            stmt = con.createStatement();
-            rs = stmt.executeQuery("SELECT * from roles");
-            while (rs.next()) {
-                roles.add(extractRole(rs));
+        try (Connection connection = dbConnector.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT * FROM roles")) {
+            while (resultSet.next()) {
+                roles.add(extractRole(resultSet));
             }
-            con.commit();
-        } catch (SQLException ex) {
-            dbConnector.rollback(con);
-            logger.error(ex);
-        } finally {
-            dbConnector.close(con, stmt, rs);
+        } catch (SQLException e) {
+            logger.error(e);
         }
         return roles;
     }
