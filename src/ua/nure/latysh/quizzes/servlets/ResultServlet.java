@@ -40,7 +40,7 @@ public class ResultServlet extends HttpServlet {
         Object attemptAttribute = session == null ? null : session.getAttribute("attemptId");
         User user = session == null ? null : (User) session.getAttribute("user");
         if (!(attemptAttribute instanceof Integer) || user == null) {
-            response.sendError(HttpServletResponse.SC_CONFLICT, "No active attempt");
+            ServletResponseHandler.sendError(response, HttpServletResponse.SC_CONFLICT, "No active attempt");
             return;
         }
 
@@ -48,7 +48,7 @@ public class ResultServlet extends HttpServlet {
         try {
             answerIds = parseAnswerIds(request.getParameterValues("answerId"));
         } catch (NumberFormatException exception) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid answer id");
+            ServletResponseHandler.sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid answer id");
             return;
         }
 
@@ -57,12 +57,12 @@ public class ResultServlet extends HttpServlet {
         } catch (QuizSubmissionException exception) {
             int status = exception.getReason() == QuizSubmissionException.Reason.INVALID_ANSWER
                     ? HttpServletResponse.SC_BAD_REQUEST : HttpServletResponse.SC_CONFLICT;
-            response.sendError(status, exception.getMessage());
+            ServletResponseHandler.sendError(response, status, exception.getMessage());
             return;
         }
 
         clearAttempt(session);
-        response.sendRedirect("quizzes");
+        ServletResponseHandler.redirect(response, "quizzes");
     }
 
     @Override
@@ -72,7 +72,7 @@ public class ResultServlet extends HttpServlet {
         User user = (User) session.getAttribute("user");
         List<ResultDto> results = resultService.getAllResultsByUserId(user.getId());
         request.setAttribute("userResults", results);
-        request.getRequestDispatcher("/WEB-INF/views/results.jsp").forward(request, response);
+        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/results.jsp"), request, response);
         logger.info(user.getLogin() + " opened quiz results");
     }
 
