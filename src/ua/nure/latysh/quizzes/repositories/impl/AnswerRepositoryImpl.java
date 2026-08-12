@@ -12,7 +12,15 @@ import java.util.List;
 public class AnswerRepositoryImpl implements AnswerRepository {
 
     private final static Logger logger = Logger.getLogger(AnswerRepositoryImpl.class);
-    private DbConnector dbConnector = DbConnector.getInstance();
+    private final DbConnector dbConnector;
+
+    public AnswerRepositoryImpl() {
+        this(DbConnector.getInstance());
+    }
+
+    AnswerRepositoryImpl(DbConnector dbConnector) {
+        this.dbConnector = dbConnector;
+    }
 
     @Override
     public Answer findById(int answerId) {

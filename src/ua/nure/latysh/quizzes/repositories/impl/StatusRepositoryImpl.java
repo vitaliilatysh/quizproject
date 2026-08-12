@@ -2,7 +2,6 @@ package ua.nure.latysh.quizzes.repositories.impl;
 
 import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
-import ua.nure.latysh.quizzes.entities.Answer;
 import ua.nure.latysh.quizzes.entities.Status;
 import ua.nure.latysh.quizzes.repositories.StatusRepository;
 
@@ -13,7 +12,15 @@ import java.util.List;
 public class StatusRepositoryImpl implements StatusRepository {
 
     private final static Logger logger = Logger.getLogger(StatusRepositoryImpl.class);
-    private DbConnector dbConnector = DbConnector.getInstance();
+    private final DbConnector dbConnector;
+
+    public StatusRepositoryImpl() {
+        this(DbConnector.getInstance());
+    }
+
+    StatusRepositoryImpl(DbConnector dbConnector) {
+        this.dbConnector = dbConnector;
+    }
 
     @Override
     public Status findById(int statusId) {

@@ -16,7 +16,15 @@ import java.io.IOException;
 public class ProfileServlet extends HttpServlet {
 
     private static final Logger logger = Logger.getLogger(ProfileServlet.class);
-    private UserService userService = new UserService();
+    private final UserService userService;
+
+    public ProfileServlet() {
+        this(new UserService());
+    }
+
+    ProfileServlet(UserService userService) {
+        this.userService = userService;
+    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {

@@ -17,12 +17,20 @@ import java.util.Date;
 import java.util.List;
 
 public class UserService {
-    private RoleRepository roleRepository = new RoleRepositoryImpl();
-    private StatusRepository statusRepository = new StatusRepositoryImpl();
-    private UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final StatusRepository statusRepository;
+    private final UserRepository userRepository;
 
     public UserService() {
-        this.userRepository = new UserRepositoryImpl();
+        this(new UserRepositoryImpl(), new RoleRepositoryImpl(), new StatusRepositoryImpl());
+    }
+
+    public UserService(UserRepository userRepository,
+                       RoleRepository roleRepository,
+                       StatusRepository statusRepository) {
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.statusRepository = statusRepository;
     }
 
     public User findByLoginAndPassword(String login, String password) {

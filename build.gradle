@@ -63,6 +63,23 @@ tasks.named('jacocoTestReport') {
     }
 }
 
+tasks.named('jacocoTestCoverageVerification') {
+    dependsOn tasks.named('test')
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 1.0
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}
+
 sonar {
     properties {
         property 'sonar.projectKey', 'vitaliilatysh_quizproject'

@@ -42,4 +42,4 @@ jobs:
       - name: Test, collect coverage, and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew clean test jacocoTestReport sonar --no-daemon
+        run: ./gradlew clean check jacocoTestReport sonar --no-daemon

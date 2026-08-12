@@ -2,9 +2,7 @@ package ua.nure.latysh.quizzes.repositories.impl;
 
 import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
-import ua.nure.latysh.quizzes.entities.Answer;
 import ua.nure.latysh.quizzes.entities.Role;
-import ua.nure.latysh.quizzes.repositories.AnswerRepository;
 import ua.nure.latysh.quizzes.repositories.RoleRepository;
 
 import java.sql.*;
@@ -14,7 +12,15 @@ import java.util.List;
 public class RoleRepositoryImpl implements RoleRepository {
 
     private final static Logger logger = Logger.getLogger(RoleRepositoryImpl.class);
-    private DbConnector dbConnector = DbConnector.getInstance();
+    private final DbConnector dbConnector;
+
+    public RoleRepositoryImpl() {
+        this(DbConnector.getInstance());
+    }
+
+    RoleRepositoryImpl(DbConnector dbConnector) {
+        this.dbConnector = dbConnector;
+    }
 
     @Override
     public Role findById(int roleId) {
