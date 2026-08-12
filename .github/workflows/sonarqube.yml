@@ -42,9 +42,4 @@ jobs:
       - name: Test, collect coverage, and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          ./gradlew dependencies --write-locks --no-daemon
-          echo "GRADLE_LOCKFILE_BEGIN"
-          cat gradle.lockfile
-          echo "GRADLE_LOCKFILE_END"
-          ./gradlew clean check jacocoTestReport sonar --no-daemon
+        run: ./gradlew clean check jacocoTestReport sonar --no-daemon
