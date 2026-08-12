@@ -133,8 +133,8 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     public void updatePassword(User user) {
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("UPDATE users SET password=? WHERE id=?");
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("UPDATE users SET password=? WHERE id=?")) {
             statement.setString(1, user.getPassword());
             statement.setInt(2, user.getId());
             statement.executeUpdate();
