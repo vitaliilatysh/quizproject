@@ -39,4 +39,24 @@ public class LoginServletTest {
         verify(request, never()).setAttribute(eq("password"), any());
         verify(dispatcher).forward(request, response);
     }
+
+    @Test
+    public void missingUsernameIsRejectedBeforeAuthentication() throws Exception {
+        UserService userService = mock(UserService.class);
+        LoginServlet servlet = new LoginServlet(userService);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        HttpSession session = mock(HttpSession.class);
+        RequestDispatcher dispatcher = mock(RequestDispatcher.class);
+        when(request.getParameter("password")).thenReturn("secret");
+        when(request.getSession()).thenReturn(session);
+        when(session.getAttribute("lang")).thenReturn(Locale.ENGLISH);
+        when(request.getRequestDispatcher("/")).thenReturn(dispatcher);
+
+        servlet.doPost(request, response);
+
+        verify(userService, never()).findByLoginAndPassword(any(), any());
+        verify(request).setAttribute("username", null);
+        verify(dispatcher).forward(request, response);
+    }
 }
