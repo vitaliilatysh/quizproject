@@ -35,7 +35,7 @@ public class LoginServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        req.getRequestDispatcher("/WEB-INF/views/index.jsp").forward(req, resp);
+        ServletResponseHandler.forward(req.getRequestDispatcher("/WEB-INF/views/index.jsp"), req, resp);
         logger.info("Log in page opened");
     }
 
@@ -89,15 +89,15 @@ public class LoginServlet extends HttpServlet {
             req.setAttribute("user", user);
             user.setLoginDateTime(new Date());
             userService.updateUserLoginDate(user);
-            resp.sendRedirect("quizzes");
+            ServletResponseHandler.redirect(resp, "quizzes");
             logger.info(user.getLogin() + " logged in");
         }
     }
 
     private void forwardWithError(HttpServletRequest request, HttpServletResponse response,
-                                  String login, String message) throws ServletException, IOException {
+                                  String login, String message) {
         request.setAttribute("loginMessage", message);
         request.setAttribute("username", login);
-        request.getRequestDispatcher("/").forward(request, response);
+        ServletResponseHandler.forward(request.getRequestDispatcher("/"), request, response);
     }
 }
