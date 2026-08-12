@@ -1,12 +1,6 @@
--- Legacy manual migration. Flyway applies the equivalent V2__secure_attempts.sql automatically.
-USE tests_db;
-
--- Expand the password column for versioned PBKDF2 hashes. Existing plaintext
--- passwords are upgraded automatically after their next successful login.
 ALTER TABLE users
   MODIFY password VARCHAR(255) NOT NULL;
 
--- Add authoritative server-side attempt timing without invalidating old rows.
 ALTER TABLE attempts
   ADD COLUMN start_time DATETIME NULL AFTER score,
   ADD COLUMN expires_at DATETIME NULL AFTER start_time,
@@ -22,8 +16,6 @@ ALTER TABLE attempts
   MODIFY start_time DATETIME NOT NULL,
   MODIFY expires_at DATETIME NOT NULL;
 
--- Old versions could persist the same answer more than once after repeated
--- submissions. Keep the earliest row before enforcing idempotency.
 DELETE invalid_result
 FROM results invalid_result
 LEFT JOIN answers answer ON answer.id = invalid_result.answer_id

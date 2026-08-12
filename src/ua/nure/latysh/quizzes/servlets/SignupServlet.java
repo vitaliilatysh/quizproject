@@ -10,6 +10,7 @@ import javax.servlet.http.*;
 import java.io.IOException;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.ResourceBundle;
 
 @WebServlet("/signup")
@@ -68,12 +69,13 @@ public class SignupServlet extends HttpServlet {
         newUser.setRoleId(2);
         newUser.setStatusId(1);
 
-        User user = userService.findUserByLogin(login);
+        Optional<User> user = userService.findUserByLogin(login);
         boolean passwordsMatch = password.equals(confirmPassword);
 
-        if (user == null && passwordsMatch) {
+        if (user.isEmpty() && passwordsMatch) {
             userService.save(newUser);
-            User savedUser = userService.findUserByLogin(newUser.getLogin());
+            User savedUser = userService.findUserByLogin(newUser.getLogin())
+                    .orElseThrow(() -> new IllegalStateException("Saved user could not be reloaded"));
             savedUser.setPassword(null);
             HttpSession oldSession = req.getSession(false);
             if (oldSession != null) {
@@ -93,7 +95,7 @@ public class SignupServlet extends HttpServlet {
             logger.info(newUser.getLogin() + "logged in");
         } else {
             populateSignupForm(req, login, firstName, lastName);
-            if (user != null) {
+            if (user.isPresent()) {
                 req.setAttribute("usernameMessage", mybundle.getString("validation.input.username.exist"));
             }
             if (!passwordsMatch) {

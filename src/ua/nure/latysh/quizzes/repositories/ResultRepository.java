@@ -1,6 +1,5 @@
 package ua.nure.latysh.quizzes.repositories;
 
-import ua.nure.latysh.quizzes.entities.Answer;
 import ua.nure.latysh.quizzes.entities.Result;
 
 import java.util.List;

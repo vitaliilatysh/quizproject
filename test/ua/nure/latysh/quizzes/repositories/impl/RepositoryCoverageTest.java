@@ -12,6 +12,7 @@ import ua.nure.latysh.quizzes.entities.Role;
 import ua.nure.latysh.quizzes.entities.Status;
 import ua.nure.latysh.quizzes.entities.Subject;
 import ua.nure.latysh.quizzes.entities.User;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -22,9 +23,9 @@ import java.sql.Timestamp;
 import java.util.Date;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -41,7 +42,7 @@ public class RepositoryCoverageTest {
         AnswerRepositoryImpl repository = new AnswerRepositoryImpl(ok.dbConnector);
         Answer answer = answer();
         ok.oneRow();
-        assertNotNull(repository.findById(1));
+        assertTrue(repository.findById(1).isPresent());
         repository.delete(answer);
         assertTrue(repository.save(answer));
         repository.update(answer);
@@ -53,13 +54,13 @@ public class RepositoryCoverageTest {
         Fixture failed = new Fixture();
         AnswerRepositoryImpl failing = new AnswerRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
-        assertNotNull(failing.findById(1));
-        failing.delete(answer);
-        assertFalse(failing.save(answer));
-        failing.update(answer);
-        assertTrue(failing.findAllByQuestionId(2).isEmpty());
+        assertThrows(RepositoryException.class, () -> failing.findById(1));
+        assertThrows(RepositoryException.class, () -> failing.delete(answer));
+        assertThrows(RepositoryException.class, () -> failing.save(answer));
+        assertThrows(RepositoryException.class, () -> failing.update(answer));
+        assertThrows(RepositoryException.class, () -> failing.findAllByQuestionId(2));
         failed.failStatements();
-        assertTrue(failing.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failing::findAll);
     }
 
     @Test
@@ -68,7 +69,7 @@ public class RepositoryCoverageTest {
         AttemptRepositoryImpl repository = new AttemptRepositoryImpl(ok.dbConnector);
         Attempt attempt = attempt();
         ok.oneRow();
-        assertNotNull(repository.findById(1));
+        assertTrue(repository.findById(1).isPresent());
         repository.delete(attempt);
         assertTrue(repository.save(attempt));
         repository.update(attempt);
@@ -77,21 +78,21 @@ public class RepositoryCoverageTest {
         ok.oneRow();
         assertEquals(1, repository.findAllByUserId(3).size());
         ok.oneRow();
-        assertNotNull(repository.findLastByUserId(3));
+        assertTrue(repository.findLastByUserId(3).isPresent());
         ok.oneRow();
         assertEquals(1, repository.findAllBetweenFinishDates("from", "to").size());
 
         Fixture failed = new Fixture();
         AttemptRepositoryImpl failing = new AttemptRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
-        assertNotNull(failing.findById(1));
-        assertFalse(failing.save(attempt));
-        failing.update(attempt);
-        assertTrue(failing.findAllByUserId(3).isEmpty());
-        assertNotNull(failing.findLastByUserId(3));
-        assertTrue(failing.findAllBetweenFinishDates("from", "to").isEmpty());
+        assertThrows(RepositoryException.class, () -> failing.findById(1));
+        assertThrows(RepositoryException.class, () -> failing.save(attempt));
+        assertThrows(RepositoryException.class, () -> failing.update(attempt));
+        assertThrows(RepositoryException.class, () -> failing.findAllByUserId(3));
+        assertThrows(RepositoryException.class, () -> failing.findLastByUserId(3));
+        assertThrows(RepositoryException.class, () -> failing.findAllBetweenFinishDates("from", "to"));
         failed.failStatements();
-        assertTrue(failing.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failing::findAll);
     }
 
     @Test
@@ -100,9 +101,9 @@ public class RepositoryCoverageTest {
         LevelRepositoryImpl repository = new LevelRepositoryImpl(ok.dbConnector);
         Level level = level();
         ok.oneRow();
-        assertNotNull(repository.findById(1));
+        assertTrue(repository.findById(1).isPresent());
         ok.oneRow();
-        assertNotNull(repository.findByName("hard"));
+        assertTrue(repository.findByName("hard").isPresent());
         repository.delete(level);
         assertTrue(repository.save(level));
         repository.update(level);
@@ -112,13 +113,13 @@ public class RepositoryCoverageTest {
         Fixture failed = new Fixture();
         LevelRepositoryImpl failing = new LevelRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
-        assertNotNull(failing.findById(1));
-        assertNotNull(failing.findByName("hard"));
-        failing.delete(level);
-        assertFalse(failing.save(level));
-        failing.update(level);
+        assertThrows(RepositoryException.class, () -> failing.findById(1));
+        assertThrows(RepositoryException.class, () -> failing.findByName("hard"));
+        assertThrows(RepositoryException.class, () -> failing.delete(level));
+        assertThrows(RepositoryException.class, () -> failing.save(level));
+        assertThrows(RepositoryException.class, () -> failing.update(level));
         failed.failStatements();
-        assertTrue(failing.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failing::findAll);
     }
 
     @Test
@@ -127,7 +128,7 @@ public class RepositoryCoverageTest {
         QuestionRepositoryImpl repository = new QuestionRepositoryImpl(ok.dbConnector);
         Question question = question();
         ok.oneRow();
-        assertNotNull(repository.findById(1));
+        assertTrue(repository.findById(1).isPresent());
         ok.oneRow();
         repository.delete(question);
         ok.oneRow();
@@ -139,25 +140,25 @@ public class RepositoryCoverageTest {
         ok.oneRow();
         assertEquals(1, repository.findAllByQuizId(2).size());
         ok.oneRow();
-        assertNotNull(repository.findByName("Question"));
+        assertTrue(repository.findByName("Question").isPresent());
 
         Fixture failed = new Fixture();
         QuestionRepositoryImpl failing = new QuestionRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
-        assertNotNull(failing.findById(1));
-        failing.delete(question);
-        assertNotNull(failing.saveQuestion(question));
-        assertFalse(failing.save(question));
-        failing.update(question);
-        assertTrue(failing.findAllByQuizId(2).isEmpty());
-        assertNotNull(failing.findByName("Question"));
+        assertThrows(RepositoryException.class, () -> failing.findById(1));
+        assertThrows(RepositoryException.class, () -> failing.delete(question));
+        assertThrows(RepositoryException.class, () -> failing.saveQuestion(question));
+        assertThrows(RepositoryException.class, () -> failing.save(question));
+        assertThrows(RepositoryException.class, () -> failing.update(question));
+        assertThrows(RepositoryException.class, () -> failing.findAllByQuizId(2));
+        assertThrows(RepositoryException.class, () -> failing.findByName("Question"));
         failed.failStatements();
-        assertTrue(failing.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failing::findAll);
 
         Fixture withoutGeneratedKey = new Fixture();
         withoutGeneratedKey.noGeneratedKey();
-        assertEquals(0, new QuestionRepositoryImpl(withoutGeneratedKey.dbConnector)
-                .saveQuestion(question).getId());
+        assertThrows(RepositoryException.class,
+                () -> new QuestionRepositoryImpl(withoutGeneratedKey.dbConnector).saveQuestion(question));
 
         verify(ok.connection, times(2)).prepareStatement(
                 "INSERT INTO questions (question, quiz_id) VALUES (?, ?)",
@@ -170,17 +171,17 @@ public class RepositoryCoverageTest {
         QuizRepositoryImpl repository = new QuizRepositoryImpl(ok.dbConnector);
         Quiz quiz = quiz();
         ok.oneRow();
-        assertNotNull(repository.findByName("Quiz"));
+        assertTrue(repository.findByName("Quiz").isPresent());
         ok.empty();
-        assertNotNull(repository.findByName("missing"));
+        assertTrue(repository.findByName("missing").isEmpty());
         ok.oneRow();
         assertEquals(1, repository.findBySubjectId(2).size());
         ok.oneRow();
         assertEquals(1, repository.findBySubjectName("Java").size());
         ok.oneRow();
-        assertNotNull(repository.findById(1));
+        assertTrue(repository.findById(1).isPresent());
         ok.empty();
-        assertNotNull(repository.findById(404));
+        assertTrue(repository.findById(404).isEmpty());
         repository.delete(quiz);
         assertTrue(repository.save(quiz));
         repository.update(quiz);
@@ -190,15 +191,15 @@ public class RepositoryCoverageTest {
         Fixture failed = new Fixture();
         QuizRepositoryImpl failing = new QuizRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
-        assertNotNull(failing.findByName("Quiz"));
-        assertTrue(failing.findBySubjectId(2).isEmpty());
-        assertTrue(failing.findBySubjectName("Java").isEmpty());
-        assertNotNull(failing.findById(1));
-        failing.delete(quiz);
-        assertFalse(failing.save(quiz));
-        failing.update(quiz);
+        assertThrows(RepositoryException.class, () -> failing.findByName("Quiz"));
+        assertThrows(RepositoryException.class, () -> failing.findBySubjectId(2));
+        assertThrows(RepositoryException.class, () -> failing.findBySubjectName("Java"));
+        assertThrows(RepositoryException.class, () -> failing.findById(1));
+        assertThrows(RepositoryException.class, () -> failing.delete(quiz));
+        assertThrows(RepositoryException.class, () -> failing.save(quiz));
+        assertThrows(RepositoryException.class, () -> failing.update(quiz));
         failed.failStatements();
-        assertTrue(failing.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failing::findAll);
     }
 
     @Test
@@ -207,7 +208,7 @@ public class RepositoryCoverageTest {
         ResultRepositoryImpl repository = new ResultRepositoryImpl(ok.dbConnector);
         Result result = result();
         ok.oneRow();
-        assertNotNull(repository.findById(1));
+        assertTrue(repository.findById(1).isPresent());
         repository.delete(result);
         assertTrue(repository.save(result));
         repository.update(result);
@@ -221,14 +222,14 @@ public class RepositoryCoverageTest {
         Fixture failed = new Fixture();
         ResultRepositoryImpl failing = new ResultRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
-        assertNotNull(failing.findById(1));
-        failing.delete(result);
-        assertFalse(failing.save(result));
-        failing.update(result);
-        assertTrue(failing.findByAttemptId(2).isEmpty());
-        assertTrue(failing.findAllByUserId(3).isEmpty());
+        assertThrows(RepositoryException.class, () -> failing.findById(1));
+        assertThrows(RepositoryException.class, () -> failing.delete(result));
+        assertThrows(RepositoryException.class, () -> failing.save(result));
+        assertThrows(RepositoryException.class, () -> failing.update(result));
+        assertThrows(RepositoryException.class, () -> failing.findByAttemptId(2));
+        assertThrows(RepositoryException.class, () -> failing.findAllByUserId(3));
         failed.failStatements();
-        assertTrue(failing.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failing::findAll);
     }
 
     @Test
@@ -237,7 +238,7 @@ public class RepositoryCoverageTest {
         RoleRepositoryImpl roles = new RoleRepositoryImpl(roleOk.dbConnector);
         Role role = role();
         roleOk.oneRow();
-        assertNotNull(roles.findById(1));
+        assertTrue(roles.findById(1).isPresent());
         roles.delete(role);
         assertTrue(roles.save(role));
         roles.update(role);
@@ -247,18 +248,18 @@ public class RepositoryCoverageTest {
         Fixture roleFailed = new Fixture();
         RoleRepositoryImpl failingRoles = new RoleRepositoryImpl(roleFailed.dbConnector);
         roleFailed.failPreparedStatements();
-        assertNotNull(failingRoles.findById(1));
-        failingRoles.delete(role);
-        assertFalse(failingRoles.save(role));
-        failingRoles.update(role);
+        assertThrows(RepositoryException.class, () -> failingRoles.findById(1));
+        assertThrows(RepositoryException.class, () -> failingRoles.delete(role));
+        assertThrows(RepositoryException.class, () -> failingRoles.save(role));
+        assertThrows(RepositoryException.class, () -> failingRoles.update(role));
         roleFailed.failStatements();
-        assertTrue(failingRoles.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failingRoles::findAll);
 
         Fixture statusOk = new Fixture();
         StatusRepositoryImpl statuses = new StatusRepositoryImpl(statusOk.dbConnector);
         Status status = status();
         statusOk.oneRow();
-        assertNotNull(statuses.findById(1));
+        assertTrue(statuses.findById(1).isPresent());
         statuses.delete(status);
         assertTrue(statuses.save(status));
         statuses.update(status);
@@ -268,12 +269,12 @@ public class RepositoryCoverageTest {
         Fixture statusFailed = new Fixture();
         StatusRepositoryImpl failingStatuses = new StatusRepositoryImpl(statusFailed.dbConnector);
         statusFailed.failPreparedStatements();
-        assertNotNull(failingStatuses.findById(1));
-        failingStatuses.delete(status);
-        assertFalse(failingStatuses.save(status));
-        failingStatuses.update(status);
+        assertThrows(RepositoryException.class, () -> failingStatuses.findById(1));
+        assertThrows(RepositoryException.class, () -> failingStatuses.delete(status));
+        assertThrows(RepositoryException.class, () -> failingStatuses.save(status));
+        assertThrows(RepositoryException.class, () -> failingStatuses.update(status));
         statusFailed.failStatements();
-        assertTrue(failingStatuses.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failingStatuses::findAll);
     }
 
     @Test
@@ -282,9 +283,9 @@ public class RepositoryCoverageTest {
         SubjectRepositoryImpl repository = new SubjectRepositoryImpl(ok.dbConnector);
         Subject subject = subject();
         ok.oneRow();
-        assertNotNull(repository.findByName("Java"));
+        assertTrue(repository.findByName("Java").isPresent());
         ok.oneRow();
-        assertNotNull(repository.findById(1));
+        assertTrue(repository.findById(1).isPresent());
         ok.oneRow();
         repository.delete(subject);
         assertTrue(repository.save(subject));
@@ -295,13 +296,13 @@ public class RepositoryCoverageTest {
         Fixture failed = new Fixture();
         SubjectRepositoryImpl failing = new SubjectRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
-        assertNotNull(failing.findByName("Java"));
-        assertNotNull(failing.findById(1));
-        failing.delete(subject);
-        assertFalse(failing.save(subject));
-        failing.update(subject);
+        assertThrows(RepositoryException.class, () -> failing.findByName("Java"));
+        assertThrows(RepositoryException.class, () -> failing.findById(1));
+        assertThrows(RepositoryException.class, () -> failing.delete(subject));
+        assertThrows(RepositoryException.class, () -> failing.save(subject));
+        assertThrows(RepositoryException.class, () -> failing.update(subject));
         failed.failStatements();
-        assertTrue(failing.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failing::findAll);
     }
 
     @Test
@@ -310,7 +311,7 @@ public class RepositoryCoverageTest {
         UserRepositoryImpl repository = new UserRepositoryImpl(ok.dbConnector);
         User user = user();
         ok.oneRow();
-        assertNotNull(repository.findById(1));
+        assertTrue(repository.findById(1).isPresent());
         repository.delete(user);
         assertTrue(repository.save(user));
         repository.update(user);
@@ -319,22 +320,22 @@ public class RepositoryCoverageTest {
         ok.oneRow();
         assertEquals(1, repository.findAll().size());
         ok.oneRow();
-        assertNotNull(repository.findByLogin("user"));
+        assertTrue(repository.findByLogin("user").isPresent());
         ok.empty();
-        assertEquals(null, repository.findByLogin("missing"));
+        assertTrue(repository.findByLogin("missing").isEmpty());
 
         Fixture failed = new Fixture();
         UserRepositoryImpl failing = new UserRepositoryImpl(failed.dbConnector);
         failed.failPreparedStatements();
-        assertNotNull(failing.findById(1));
-        failing.delete(user);
-        assertFalse(failing.save(user));
-        failing.update(user);
-        failing.updateLoginDate(user);
-        failing.updatePassword(user);
-        assertNotNull(failing.findByLogin("user"));
+        assertThrows(RepositoryException.class, () -> failing.findById(1));
+        assertThrows(RepositoryException.class, () -> failing.delete(user));
+        assertThrows(RepositoryException.class, () -> failing.save(user));
+        assertThrows(RepositoryException.class, () -> failing.update(user));
+        assertThrows(RepositoryException.class, () -> failing.updateLoginDate(user));
+        assertThrows(RepositoryException.class, () -> failing.updatePassword(user));
+        assertThrows(RepositoryException.class, () -> failing.findByLogin("user"));
         failed.failStatements();
-        assertTrue(failing.findAll().isEmpty());
+        assertThrows(RepositoryException.class, failing::findAll);
     }
 
     private static Answer answer() {

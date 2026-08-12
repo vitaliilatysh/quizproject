@@ -16,6 +16,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 public class UserService {
     private final RoleRepository roleRepository;
@@ -44,10 +45,11 @@ public class UserService {
     }
 
     public User findByLoginAndPassword(String login, String password) {
-        User user = userRepository.findByLogin(login);
-        if (user == null) {
+        Optional<User> foundUser = userRepository.findByLogin(login);
+        if (foundUser.isEmpty()) {
             return null;
         }
+        User user = foundUser.get();
 
         String storedPassword = user.getPassword();
         boolean matches = passwordHasher.isEncoded(storedPassword)
@@ -65,7 +67,7 @@ public class UserService {
         return user;
     }
 
-    public User findUserByLogin(String login) {
+    public Optional<User> findUserByLogin(String login) {
         return userRepository.findByLogin(login);
     }
 
@@ -74,7 +76,7 @@ public class UserService {
         return convertUsersToUsersDto(users);
     }
 
-    public User findUserById(int userId){
+    public Optional<User> findUserById(int userId){
         return userRepository.findById(userId);
     }
     public UserDto convertUserToUserDto(User user) {
@@ -87,9 +89,10 @@ public class UserService {
         Date loginDate = user.getLoginDateTime();
         userDto.setRegisterDateTime(simpleDateFormat.format(date));
         userDto.setLoginDateTime(simpleDateFormat.format(loginDate));
-        Role role = roleRepository.findById(user.getRoleId());
+        Role role = RequiredEntity.get(roleRepository.findById(user.getRoleId()), "Role " + user.getRoleId());
         userDto.setRole(role.getRole());
-        Status status = statusRepository.findById(user.getStatusId());
+        Status status = RequiredEntity.get(statusRepository.findById(user.getStatusId()),
+                "Status " + user.getStatusId());
         userDto.setStatus(status.getStatus());
         return userDto;
     }
@@ -105,13 +108,13 @@ public class UserService {
     }
 
     public void blockUser(String userId) {
-        User user = userRepository.findById(Integer.parseInt(userId));
+        User user = RequiredEntity.get(userRepository.findById(Integer.parseInt(userId)), "User " + userId);
         user.setStatusId(2);
         userRepository.update(user);
     }
 
     public void unblockUser(String userId) {
-        User user = userRepository.findById(Integer.parseInt(userId));
+        User user = RequiredEntity.get(userRepository.findById(Integer.parseInt(userId)), "User " + userId);
         user.setStatusId(1);
         userRepository.update(user);
     }

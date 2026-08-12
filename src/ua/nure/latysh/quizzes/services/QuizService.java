@@ -16,6 +16,7 @@ import ua.nure.latysh.quizzes.repositories.impl.SubjectRepositoryImpl;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class QuizService {
 
@@ -51,11 +52,11 @@ public class QuizService {
         quizRepository.delete(quiz);
     }
 
-    public Quiz findQuizById(int quizId) {
+    public Optional<Quiz> findQuizById(int quizId) {
         return quizRepository.findById(quizId);
     }
 
-    public Quiz findQuizByName(String quizName) {
+    public Optional<Quiz> findQuizByName(String quizName) {
         return quizRepository.findByName(quizName);
     }
 
@@ -74,8 +75,10 @@ public class QuizService {
     private List<QuizDto> convertToDto(List<Quiz> quizzes) {
         List<QuizDto> quizDtos = new ArrayList<>();
         for (Quiz quiz : quizzes) {
-            Subject subject = subjectRepository.findById(quiz.getSubjectId());
-            Level level = levelRepository.findById(quiz.getLevelId());
+            Subject subject = RequiredEntity.get(subjectRepository.findById(quiz.getSubjectId()),
+                    "Subject " + quiz.getSubjectId());
+            Level level = RequiredEntity.get(levelRepository.findById(quiz.getLevelId()),
+                    "Level " + quiz.getLevelId());
             List<Question> questionsPerQuiz = questionRepository.findAllByQuizId(quiz.getId());
 
             QuizDto quizDto = new QuizDto();
@@ -91,8 +94,10 @@ public class QuizService {
     }
 
     private Quiz toEntity(QuizDto quizDto) {
-        Level level = levelRepository.findByName(quizDto.getComplexity());
-        Subject subject = subjectRepository.findByName(quizDto.getSubjectName());
+        Level level = RequiredEntity.get(levelRepository.findByName(quizDto.getComplexity()),
+                "Level " + quizDto.getComplexity());
+        Subject subject = RequiredEntity.get(subjectRepository.findByName(quizDto.getSubjectName()),
+                "Subject " + quizDto.getSubjectName());
 
         Quiz quiz = new Quiz();
         quiz.setId(quizDto.getId());

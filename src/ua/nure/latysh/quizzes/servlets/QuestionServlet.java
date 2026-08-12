@@ -107,7 +107,8 @@ public class QuestionServlet extends HttpServlet {
         Locale lang = (Locale) request.getSession().getAttribute("lang");
         ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
 
-        Question foundQuestion = questionService.findQuestionById(questionId);
+        Question foundQuestion = questionService.findQuestionById(questionId)
+                .orElseThrow(() -> new IllegalArgumentException("Question not found: " + questionId));
         foundQuestion.setQuestion(question);
 
         List<Answer> answers = answerService.findAnswersByQuestionId(questionId);
@@ -172,7 +173,8 @@ public class QuestionServlet extends HttpServlet {
 
     private void deleteQuestion(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
         int questionId = Integer.parseInt(request.getParameter("question"));
-        Question question = questionService.findQuestionById(questionId);
+        Question question = questionService.findQuestionById(questionId)
+                .orElseThrow(() -> new IllegalArgumentException("Question not found: " + questionId));
         int quizId = question.getQuizId();
         questionService.deleteQuestion(question);
 
@@ -184,7 +186,8 @@ public class QuestionServlet extends HttpServlet {
 
     private void editQuestion(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         int questionId = Integer.parseInt(request.getParameter("question"));
-        Question question = questionService.findQuestionById(questionId);
+        Question question = questionService.findQuestionById(questionId)
+                .orElseThrow(() -> new IllegalArgumentException("Question not found: " + questionId));
         List<Answer> answers = answerService.findAnswersByQuestionId(questionId);
 
         request.setAttribute("answerA", answers.get(0).getAnswer());
@@ -216,7 +219,8 @@ public class QuestionServlet extends HttpServlet {
 
     private void runQuestions(HttpServletRequest request, HttpServletResponse response) throws IOException {
         int quizId = Integer.parseInt(request.getParameter("quiz"));
-        Quiz quiz = quizService.findQuizById(quizId);
+        Quiz quiz = quizService.findQuizById(quizId)
+                .orElseThrow(() -> new IllegalArgumentException("Quiz not found: " + quizId));
         int minutesForQuiz = quiz.getTimeToPass() * 60;
 
         List<Answer> answers;

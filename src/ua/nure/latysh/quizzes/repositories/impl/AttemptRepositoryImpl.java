@@ -1,9 +1,9 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Attempt;
 import ua.nure.latysh.quizzes.exceptions.QuizSubmissionException;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.AttemptRepository;
 
 import java.sql.Connection;
@@ -18,10 +18,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 public class AttemptRepositoryImpl implements AttemptRepository {
-    private static final Logger logger = Logger.getLogger(AttemptRepositoryImpl.class);
     private static final String INSERT_ATTEMPT =
             "INSERT INTO attempts (score, start_time, expires_at, quiz_id, user_id, completed) VALUES (?,?,?,?,?,?)";
     private static final String SELECT_ATTEMPT_FOR_UPDATE =
@@ -46,20 +46,19 @@ public class AttemptRepositoryImpl implements AttemptRepository {
     }
 
     @Override
-    public Attempt findById(int attemptId) {
-        Attempt attempt = new Attempt();
+    public Optional<Attempt> findById(int attemptId) {
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement("SELECT * FROM attempts WHERE id=?")) {
             statement.setInt(1, attemptId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
-                    attempt = extractAttempt(resultSet);
+                    return Optional.of(extractAttempt(resultSet));
                 }
             }
         } catch (SQLException exception) {
-            logger.error(exception);
+            throw failure("find attempt by id", exception);
         }
-        return attempt;
+        return Optional.empty();
     }
 
     @Override
@@ -69,19 +68,14 @@ public class AttemptRepositoryImpl implements AttemptRepository {
             statement.setInt(1, attempt.getId());
             statement.executeUpdate();
         } catch (SQLException exception) {
-            logger.error(exception);
+            throw failure("delete attempt", exception);
         }
     }
 
     @Override
     public boolean save(Attempt attempt) {
-        try {
-            create(attempt);
-            return true;
-        } catch (IllegalStateException exception) {
-            logger.error(exception);
-            return false;
-        }
+        create(attempt);
+        return true;
     }
 
     @Override
@@ -97,13 +91,13 @@ public class AttemptRepositoryImpl implements AttemptRepository {
             statement.executeUpdate();
             try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
                 if (!generatedKeys.next()) {
-                    throw new IllegalStateException("Attempt insert returned no generated id");
+                    throw new RepositoryException("Attempt insert returned no generated id", null);
                 }
                 attempt.setId(generatedKeys.getInt(1));
                 return attempt;
             }
         } catch (SQLException exception) {
-            throw new IllegalStateException("Could not create attempt", exception);
+            throw failure("create attempt", exception);
         }
     }
 
@@ -118,7 +112,7 @@ public class AttemptRepositoryImpl implements AttemptRepository {
             statement.setInt(4, attempt.getId());
             statement.executeUpdate();
         } catch (SQLException exception) {
-            logger.error(exception);
+            throw failure("update attempt", exception);
         }
     }
 
@@ -133,21 +127,20 @@ public class AttemptRepositoryImpl implements AttemptRepository {
     }
 
     @Override
-    public Attempt findLastByUserId(int userId) {
-        Attempt attempt = new Attempt();
+    public Optional<Attempt> findLastByUserId(int userId) {
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT * FROM attempts WHERE user_id=? ORDER BY id DESC LIMIT 1")) {
             statement.setInt(1, userId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
-                    attempt = extractAttempt(resultSet);
+                    return Optional.of(extractAttempt(resultSet));
                 }
             }
         } catch (SQLException exception) {
-            logger.error(exception);
+            throw failure("find latest attempt", exception);
         }
-        return attempt;
+        return Optional.empty();
     }
 
     @Override
@@ -157,32 +150,31 @@ public class AttemptRepositoryImpl implements AttemptRepository {
 
     @Override
     public Attempt complete(int attemptId, int userId, Set<Integer> answerIds, Date completedAt) {
-        Connection connection = dbConnector.getConnection();
-        if (connection == null) {
-            throw new IllegalStateException("Database connection is unavailable");
-        }
-        try {
+        try (Connection connection = dbConnector.getConnection()) {
             connection.setAutoCommit(false);
-            Attempt attempt = lockAttempt(connection, attemptId, userId);
-            validateActiveAttempt(attempt, completedAt);
-            QuizAnswerData answerData = loadQuizAnswers(connection, attempt.getQuizId());
-            validateAnswers(answerData, answerIds);
-            int score = calculateScore(answerData, answerIds);
-            insertResults(connection, attemptId, answerIds);
-            markCompleted(connection, attemptId, userId, score, completedAt);
-            connection.commit();
-            attempt.setScore(score);
-            attempt.setEndTime(completedAt);
-            attempt.setCompleted(true);
-            return attempt;
-        } catch (QuizSubmissionException exception) {
-            dbConnector.rollback(connection);
-            throw exception;
+            try {
+                Attempt attempt = lockAttempt(connection, attemptId, userId);
+                validateActiveAttempt(attempt, completedAt);
+                QuizAnswerData answerData = loadQuizAnswers(connection, attempt.getQuizId());
+                validateAnswers(answerData, answerIds);
+                int score = calculateScore(answerData, answerIds);
+                insertResults(connection, attemptId, answerIds);
+                markCompleted(connection, attemptId, userId, score, completedAt);
+                connection.commit();
+                attempt.setScore(score);
+                attempt.setEndTime(completedAt);
+                attempt.setCompleted(true);
+                return attempt;
+            } catch (QuizSubmissionException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } catch (SQLException exception) {
+                RepositoryException failure = failure("complete attempt", exception);
+                rollback(connection, failure);
+                throw failure;
+            }
         } catch (SQLException exception) {
-            dbConnector.rollback(connection);
-            throw new IllegalStateException("Could not complete attempt", exception);
-        } finally {
-            dbConnector.close(connection, null, null);
+            throw failure("close attempt transaction", exception);
         }
     }
 
@@ -301,7 +293,7 @@ public class AttemptRepositoryImpl implements AttemptRepository {
                 }
             }
         } catch (SQLException exception) {
-            logger.error(exception);
+            throw failure("list attempts", exception);
         }
         return attempts;
     }
@@ -317,6 +309,18 @@ public class AttemptRepositoryImpl implements AttemptRepository {
         attempt.setUserId(resultSet.getInt("user_id"));
         attempt.setCompleted(resultSet.getBoolean("completed"));
         return attempt;
+    }
+
+    private void rollback(Connection connection, RuntimeException failure) {
+        try {
+            dbConnector.rollback(connection);
+        } catch (RepositoryException rollbackFailure) {
+            failure.addSuppressed(rollbackFailure);
+        }
+    }
+
+    private RepositoryException failure(String operation, SQLException exception) {
+        return new RepositoryException("Could not " + operation, exception);
     }
 
     private static final class QuizAnswerData {

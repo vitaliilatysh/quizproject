@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public class AttemptService {
@@ -62,7 +63,7 @@ public class AttemptService {
         return attemptRepository.complete(attemptId, userId, answerIds, Date.from(clock.instant()));
     }
 
-    public Attempt findTheLatestForUser(User user) {
+    public Optional<Attempt> findTheLatestForUser(User user) {
         return attemptRepository.findLastByUserId(user.getId());
     }
 

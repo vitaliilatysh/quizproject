@@ -1,7 +1,17 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'org.flywaydb:flyway-mysql:13.0.0'
+    }
+}
+
 plugins {
     id 'java'
     id 'war'
     id 'jacoco'
+    id 'org.flywaydb.flyway' version '13.0.0'
     id 'org.sonarqube' version '7.3.1.8318'
 }
 
@@ -40,6 +50,17 @@ dependencies {
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:5.23.0'
+    testImplementation 'com.mysql:mysql-connector-j:8.0.33'
+    testImplementation 'org.flywaydb:flyway-core:13.0.0'
+    testImplementation 'org.flywaydb:flyway-mysql:13.0.0'
+    testImplementation 'org.testcontainers:testcontainers-mysql:2.0.5'
+}
+
+flyway {
+    url = providers.environmentVariable('DB_URL').orElse('jdbc:mysql://localhost:3306/tests_db').get()
+    user = providers.environmentVariable('DB_USERNAME').orElse('root').get()
+    password = providers.environmentVariable('DB_PASSWORD').orElse('').get()
+    locations = ['classpath:db/migration']
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -49,6 +70,16 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('test') {
     useJUnit()
+    exclude '**/MySqlRepositoryIntegrationTest.class'
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Runs MySQL repository tests in Testcontainers.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/MySqlRepositoryIntegrationTest.class'
+    shouldRunAfter tasks.named('test')
 }
 
 jacoco {

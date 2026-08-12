@@ -20,6 +20,7 @@ import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -51,7 +52,7 @@ public class QuestionServletCoverageTest {
         Question question = question(3, 12, "Question");
         List<Answer> answers = answers();
         when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(question));
-        when(dependencies.questionService.findQuestionById(3)).thenReturn(question);
+        when(dependencies.questionService.findQuestionById(3)).thenReturn(Optional.of(question));
         when(dependencies.answerService.findAnswersByQuestionId(3)).thenReturn(answers);
 
         WebContext get = context();
@@ -104,7 +105,7 @@ public class QuestionServletCoverageTest {
         ua.nure.latysh.quizzes.entities.Attempt attempt = new ua.nure.latysh.quizzes.entities.Attempt();
         attempt.setId(44);
         attempt.setExpiresAt(new java.util.Date(1_700_000_000_000L));
-        when(dependencies.quizService.findQuizById(12)).thenReturn(quiz);
+        when(dependencies.quizService.findQuizById(12)).thenReturn(Optional.of(quiz));
         when(dependencies.attemptService.startAttempt(persistedUser, quiz)).thenReturn(attempt);
         when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(first, second));
         when(dependencies.answerService.findAnswersByQuestionId(1)).thenReturn(List.of(answer(1, false)));
@@ -157,7 +158,7 @@ public class QuestionServletCoverageTest {
         Dependencies dependencies = new Dependencies();
         QuestionServlet servlet = dependencies.servlet();
         when(dependencies.questionService.findQuestionById(3))
-                .thenAnswer(invocation -> question(3, 12, "Original"));
+                .thenAnswer(invocation -> Optional.of(question(3, 12, "Original")));
         when(dependencies.answerService.findAnswersByQuestionId(3))
                 .thenAnswer(invocation -> answers());
         when(dependencies.questionService.findQuestionsByQuizId(12))

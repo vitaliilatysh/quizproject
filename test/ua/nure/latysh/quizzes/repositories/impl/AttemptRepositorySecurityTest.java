@@ -4,6 +4,7 @@ import org.junit.Test;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Attempt;
 import ua.nure.latysh.quizzes.exceptions.QuizSubmissionException;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -45,7 +46,7 @@ public class AttemptRepositorySecurityTest {
         verify(fixture.insertStatement, times(2)).addBatch();
         verify(fixture.insertStatement).executeBatch();
         verify(fixture.connection).commit();
-        verify(fixture.dbConnector).close(fixture.connection, null, null);
+        verify(fixture.connection).close();
     }
 
     @Test
@@ -99,18 +100,18 @@ public class AttemptRepositorySecurityTest {
         try {
             new AttemptRepositoryImpl(fixture.dbConnector).complete(5, 7, Set.of(), COMPLETED_AT);
             fail("Expected JDBC failure");
-        } catch (IllegalStateException expected) {
+        } catch (RepositoryException expected) {
             assertTrue(expected.getMessage().contains("complete attempt"));
         }
         verify(fixture.dbConnector).rollback(fixture.connection);
-        verify(fixture.dbConnector).close(fixture.connection, null, null);
+        verify(fixture.connection).close();
 
         DbConnector unavailable = mock(DbConnector.class);
-        when(unavailable.getConnection()).thenReturn(null);
+        when(unavailable.getConnection()).thenThrow(new RepositoryException("unavailable", null));
         try {
             new AttemptRepositoryImpl(unavailable).complete(5, 7, Set.of(), COMPLETED_AT);
             fail("Expected missing connection failure");
-        } catch (IllegalStateException expected) {
+        } catch (RepositoryException expected) {
             assertTrue(expected.getMessage().contains("unavailable"));
         }
     }
@@ -132,13 +133,13 @@ public class AttemptRepositorySecurityTest {
         try {
             new AttemptRepositoryImpl(dbConnector).create(attempt);
             fail("Expected missing generated id failure");
-        } catch (IllegalStateException expected) {
+        } catch (RepositoryException expected) {
             assertTrue(expected.getMessage().contains("generated id"));
         }
     }
 
     @Test
-    public void deleteHandlesJdbcFailuresWithoutEscapingTheRepositoryBoundary() throws Exception {
+    public void deleteExposesJdbcFailuresAtTheRepositoryBoundary() throws Exception {
         DbConnector dbConnector = mock(DbConnector.class);
         Connection connection = mock(Connection.class);
         when(dbConnector.getConnection()).thenReturn(connection);
@@ -146,7 +147,12 @@ public class AttemptRepositorySecurityTest {
         Attempt attempt = new Attempt();
         attempt.setId(5);
 
-        new AttemptRepositoryImpl(dbConnector).delete(attempt);
+        try {
+            new AttemptRepositoryImpl(dbConnector).delete(attempt);
+            fail("Expected JDBC failure");
+        } catch (RepositoryException expected) {
+            assertTrue(expected.getMessage().contains("delete attempt"));
+        }
 
         verify(connection).prepareStatement("DELETE FROM attempts WHERE id=?");
     }
@@ -160,7 +166,11 @@ public class AttemptRepositorySecurityTest {
             assertEquals(reason, expected.getReason());
         }
         verify(fixture.dbConnector).rollback(fixture.connection);
-        verify(fixture.dbConnector).close(fixture.connection, null, null);
+        try {
+            verify(fixture.connection).close();
+        } catch (SQLException exception) {
+            fail(exception.getMessage());
+        }
     }
 
     private static final class CompletionFixture {

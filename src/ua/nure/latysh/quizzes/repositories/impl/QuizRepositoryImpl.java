@@ -1,8 +1,8 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Quiz;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.QuizRepository;
 
 import java.sql.Connection;
@@ -12,10 +12,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class QuizRepositoryImpl implements QuizRepository {
-
-    private static final Logger logger = Logger.getLogger(QuizRepositoryImpl.class);
     private static final String SELECT_ALL = "SELECT * FROM quizzes";
     private static final String SELECT_BY_ID = "SELECT * FROM quizzes WHERE id = ?";
     private static final String SELECT_BY_NAME = "SELECT * FROM quizzes WHERE name = ?";
@@ -40,93 +39,42 @@ public class QuizRepositoryImpl implements QuizRepository {
     }
 
     @Override
-    public Quiz findByName(String quizName) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(SELECT_BY_NAME)) {
-            statement.setString(1, quizName);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    Quiz quiz = extractQuiz(resultSet);
-                    logger.info("Found " + quizName);
-                    return quiz;
-                }
-            }
-        } catch (SQLException ex) {
-            logger.error(ex);
-        }
-        return new Quiz();
+    public Optional<Quiz> findByName(String quizName) {
+        return findOne(SELECT_BY_NAME, statement -> statement.setString(1, quizName));
     }
 
     @Override
     public List<Quiz> findBySubjectId(int subjectId) {
-        List<Quiz> quizzes = findMany(SELECT_BY_SUBJECT_ID, statement -> statement.setInt(1, subjectId));
-        logger.info("Found " + quizzes.size() + " by subjectId:" + subjectId);
-        return quizzes;
+        return findMany(SELECT_BY_SUBJECT_ID, statement -> statement.setInt(1, subjectId));
     }
 
     @Override
     public List<Quiz> findBySubjectName(String subjectName) {
-        List<Quiz> quizzes = findMany(SELECT_BY_SUBJECT_NAME,
-                statement -> statement.setString(1, "%" + subjectName + "%"));
-        logger.info("Found " + quizzes.size() + " by subject name:" + subjectName);
-        return quizzes;
+        return findMany(SELECT_BY_SUBJECT_NAME, statement -> statement.setString(1, "%" + subjectName + "%"));
     }
 
     @Override
-    public Quiz findById(int quizId) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(SELECT_BY_ID)) {
-            statement.setInt(1, quizId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    Quiz quiz = extractQuiz(resultSet);
-                    logger.info("Found " + quiz.getName() + " by quiz id:" + quizId);
-                    return quiz;
-                }
-            }
-        } catch (SQLException ex) {
-            logger.error(ex);
-        }
-        return new Quiz();
+    public Optional<Quiz> findById(int quizId) {
+        return findOne(SELECT_BY_ID, statement -> statement.setInt(1, quizId));
     }
 
     @Override
     public void delete(Quiz quiz) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(DELETE)) {
-            statement.setInt(1, quiz.getId());
-            statement.executeUpdate();
-            logger.info("Deleted " + quiz.getName());
-        } catch (SQLException ex) {
-            logger.error(ex);
-        }
+        execute(DELETE, statement -> statement.setInt(1, quiz.getId()), "delete quiz");
     }
 
     @Override
     public boolean save(Quiz quiz) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(INSERT)) {
-            setQuizFields(statement, quiz);
-            statement.executeUpdate();
-            logger.info("Saved " + quiz.getName());
-            return true;
-        } catch (SQLException ex) {
-            logger.error(ex);
-            return false;
-        }
+        execute(INSERT, statement -> setQuizFields(statement, quiz), "save quiz");
+        return true;
     }
 
     @Override
     public void update(Quiz quiz) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(UPDATE)) {
+        execute(UPDATE, statement -> {
             setQuizFields(statement, quiz);
             statement.setInt(5, quiz.getId());
-            statement.executeUpdate();
-            logger.info("Updated " + quiz.getName());
-        } catch (SQLException ex) {
-            logger.error(ex);
-        }
+        }, "update quiz");
     }
 
     @Override
@@ -138,11 +86,22 @@ public class QuizRepositoryImpl implements QuizRepository {
             while (resultSet.next()) {
                 quizzes.add(extractQuiz(resultSet));
             }
-            logger.info("Found " + quizzes.size() + " quizzes");
-        } catch (SQLException ex) {
-            logger.error(ex);
+            return quizzes;
+        } catch (SQLException exception) {
+            throw failure("list quizzes", exception);
         }
-        return quizzes;
+    }
+
+    private Optional<Quiz> findOne(String sql, StatementConfigurer configurer) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? Optional.of(extractQuiz(resultSet)) : Optional.empty();
+            }
+        } catch (SQLException exception) {
+            throw failure("find quiz", exception);
+        }
     }
 
     private List<Quiz> findMany(String sql, StatementConfigurer configurer) {
@@ -155,10 +114,20 @@ public class QuizRepositoryImpl implements QuizRepository {
                     quizzes.add(extractQuiz(resultSet));
                 }
             }
-        } catch (SQLException ex) {
-            logger.error(ex);
+            return quizzes;
+        } catch (SQLException exception) {
+            throw failure("list quizzes", exception);
         }
-        return quizzes;
+    }
+
+    private void execute(String sql, StatementConfigurer configurer, String operation) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw failure(operation, exception);
+        }
     }
 
     private void setQuizFields(PreparedStatement statement, Quiz quiz) throws SQLException {
@@ -176,6 +145,10 @@ public class QuizRepositoryImpl implements QuizRepository {
         quiz.setLevelId(resultSet.getInt("level_id"));
         quiz.setSubjectId(resultSet.getInt("subject_id"));
         return quiz;
+    }
+
+    private RepositoryException failure(String operation, SQLException exception) {
+        return new RepositoryException("Could not " + operation, exception);
     }
 
     @FunctionalInterface

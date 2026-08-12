@@ -8,6 +8,7 @@ import ua.nure.latysh.quizzes.repositories.impl.QuestionRepositoryImpl;
 import ua.nure.latysh.quizzes.repositories.impl.QuizRepositoryImpl;
 
 import java.util.List;
+import java.util.Optional;
 
 public class QuestionService {
     private final QuestionRepository questionRepository;
@@ -27,7 +28,7 @@ public class QuestionService {
     }
 
     public Question addQuestion(String questionName, int quizId) {
-        Quiz foundQuiz = quizRepository.findById(quizId);
+        Quiz foundQuiz = RequiredEntity.get(quizRepository.findById(quizId), "Quiz " + quizId);
         Question newQuestion = new Question();
         newQuestion.setQuestion(questionName);
         newQuestion.setQuizId(foundQuiz.getId());
@@ -38,11 +39,11 @@ public class QuestionService {
         questionRepository.delete(question);
     }
 
-    public Question findQuestionById(int questionId) {
+    public Optional<Question> findQuestionById(int questionId) {
         return questionRepository.findById(questionId);
     }
 
-    public Question findQuestionByName(String questionName) {
+    public Optional<Question> findQuestionByName(String questionName) {
         return questionRepository.findByName(questionName);
     }
 

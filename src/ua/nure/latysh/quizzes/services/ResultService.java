@@ -49,9 +49,10 @@ public class ResultService {
 
         for (Attempt attempt : attempts) {
             ResultDto resultDto = new ResultDto();
-            User user = userService.findUserById(attempt.getUserId());
+            User user = RequiredEntity.get(userService.findUserById(attempt.getUserId()),
+                    "User " + attempt.getUserId());
             resultDto.setUsername(user.getLogin());
-            resultDto.setQuizName(quizRepository.findById(attempt.getQuizId()).getName());
+            resultDto.setQuizName(findQuiz(attempt.getQuizId()).getName());
             resultDto.setQuizScore(attempt.getScore());
             SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
             resultDto.setEndTime(simpleDateFormat.format(attempt.getEndTime()));
@@ -66,9 +67,10 @@ public class ResultService {
 
         for (Attempt attempt : attempts) {
             ResultDto resultDto = new ResultDto();
-            User user = userService.findUserById(attempt.getUserId());
+            User user = RequiredEntity.get(userService.findUserById(attempt.getUserId()),
+                    "User " + attempt.getUserId());
             resultDto.setUsername(user.getLogin());
-            resultDto.setQuizName(quizRepository.findById(attempt.getQuizId()).getName());
+            resultDto.setQuizName(findQuiz(attempt.getQuizId()).getName());
             resultDto.setQuizScore(attempt.getScore());
             SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
             resultDto.setEndTime(simpleDateFormat.format(attempt.getEndTime()));
@@ -84,7 +86,7 @@ public class ResultService {
         for (Attempt attempt : attempts) {
             ResultDto resultDto = new ResultDto();
             resultDto.setAttemptId(attempt.getId());
-            resultDto.setQuizName(quizRepository.findById(attempt.getQuizId()).getName());
+            resultDto.setQuizName(findQuiz(attempt.getQuizId()).getName());
             resultDto.setQuizScore(attempt.getScore());
             SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
             resultDto.setEndTime(simpleDateFormat.format(attempt.getEndTime()));
@@ -107,9 +109,10 @@ public class ResultService {
         int userCorrectQuestions = 0;
 
         if (results.size() != 0) {
-            int questionId = answerRepository.findById(results.get(0).getAnswerId()).getQuestionId();
+            int questionId = findAnswer(results.get(0).getAnswerId()).getQuestionId();
 
-            Question question = questionRepository.findById(questionId);
+            Question question = RequiredEntity.get(questionRepository.findById(questionId),
+                    "Question " + questionId);
             int quizId = question.getQuizId();
             List<Question> questions = questionRepository.findAllByQuizId(quizId);
             totalQuestions = questions.size();
@@ -122,8 +125,9 @@ public class ResultService {
                 List<Answer> userCorrectAnswersList = new ArrayList<>();
 
                 for (Result result : results) {
-                    if (answerRepository.findById(result.getAnswerId()).getQuestionId() == q.getId()) {
-                        userAnswersPerQuestion.add(answerRepository.findById(result.getAnswerId()));
+                    Answer answer = findAnswer(result.getAnswerId());
+                    if (answer.getQuestionId() == q.getId()) {
+                        userAnswersPerQuestion.add(answer);
                     }
                 }
                 for (Answer answer : userAnswersPerQuestion) {
@@ -149,5 +153,13 @@ public class ResultService {
         }
 
         return (userCorrectQuestions / (float) totalQuestions) * 100;
+    }
+
+    private Quiz findQuiz(int quizId) {
+        return RequiredEntity.get(quizRepository.findById(quizId), "Quiz " + quizId);
+    }
+
+    private Answer findAnswer(int answerId) {
+        return RequiredEntity.get(answerRepository.findById(answerId), "Answer " + answerId);
     }
 }

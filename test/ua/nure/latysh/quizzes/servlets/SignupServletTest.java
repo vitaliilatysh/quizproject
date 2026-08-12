@@ -9,6 +9,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.util.Locale;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -35,7 +36,7 @@ public class SignupServletTest {
         when(request.getParameter("confirmPassword")).thenReturn("secret12");
         when(request.getSession()).thenReturn(session);
         when(session.getAttribute("lang")).thenReturn(Locale.ENGLISH);
-        when(userService.findUserByLogin("student")).thenReturn(null);
+        when(userService.findUserByLogin("student")).thenReturn(Optional.empty());
         when(request.getRequestDispatcher("/WEB-INF/views/signup.jsp")).thenReturn(dispatcher);
 
         servlet.doPost(request, response);

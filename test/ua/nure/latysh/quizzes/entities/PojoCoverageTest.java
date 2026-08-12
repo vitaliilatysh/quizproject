@@ -5,6 +5,7 @@ import ua.nure.latysh.quizzes.dto.ProfileDto;
 import ua.nure.latysh.quizzes.dto.QuizDto;
 import ua.nure.latysh.quizzes.dto.ResultDto;
 import ua.nure.latysh.quizzes.dto.UserDto;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 
 import java.lang.reflect.Method;
 import java.util.Date;
@@ -36,6 +37,9 @@ public class PojoCoverageTest {
                 assertEquals(type.getSimpleName() + "." + property, value, getter.invoke(target));
             }
         }
+
+        RepositoryException repositoryException = new RepositoryException("database", new Exception("cause"));
+        assertEquals("database", repositoryException.getMessage());
     }
 
     private Object sampleValue(Class<?> type) {
