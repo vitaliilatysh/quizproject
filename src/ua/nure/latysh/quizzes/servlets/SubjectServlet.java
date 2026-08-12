@@ -14,7 +14,15 @@ import java.util.List;
 @WebServlet("/subjects")
 public class SubjectServlet extends HttpServlet {
 
-    private SubjectService subjectService = new SubjectService();
+    private final SubjectService subjectService;
+
+    public SubjectServlet() {
+        this(new SubjectService());
+    }
+
+    SubjectServlet(SubjectService subjectService) {
+        this.subjectService = subjectService;
+    }
 
     protected void doGet(HttpServletRequest request,
                          HttpServletResponse response) throws ServletException, IOException {

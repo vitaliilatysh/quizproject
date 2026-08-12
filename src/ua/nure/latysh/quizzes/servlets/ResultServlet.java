@@ -20,9 +20,21 @@ import java.util.List;
 public class ResultServlet extends HttpServlet {
 
     private static final Logger logger = Logger.getLogger(ProfileServlet.class);
-    private ResultService resultService = new ResultService();
-    private UserService userService = new UserService();
-    private AttemptService attemptService = new AttemptService();
+    private final ResultService resultService;
+    private final UserService userService;
+    private final AttemptService attemptService;
+
+    public ResultServlet() {
+        this(new ResultService(), new UserService(), new AttemptService());
+    }
+
+    ResultServlet(ResultService resultService,
+                  UserService userService,
+                  AttemptService attemptService) {
+        this.resultService = resultService;
+        this.userService = userService;
+        this.attemptService = attemptService;
+    }
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {

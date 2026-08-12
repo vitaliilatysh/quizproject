@@ -17,11 +17,28 @@ import java.util.*;
 public class QuestionServlet extends HttpServlet {
 
     private static final Logger logger = Logger.getLogger(QuestionServlet.class);
-    private QuizService quizService = new QuizService();
-    private QuestionService questionService = new QuestionService();
-    private AnswerService answerService = new AnswerService();
-    private AttemptService attemptService = new AttemptService();
-    private UserService userService = new UserService();
+    private final QuizService quizService;
+    private final QuestionService questionService;
+    private final AnswerService answerService;
+    private final AttemptService attemptService;
+    private final UserService userService;
+
+    public QuestionServlet() {
+        this(new QuizService(), new QuestionService(), new AnswerService(),
+                new AttemptService(), new UserService());
+    }
+
+    QuestionServlet(QuizService quizService,
+                    QuestionService questionService,
+                    AnswerService answerService,
+                    AttemptService attemptService,
+                    UserService userService) {
+        this.quizService = quizService;
+        this.questionService = questionService;
+        this.answerService = answerService;
+        this.attemptService = attemptService;
+        this.userService = userService;
+    }
 
     @Override
     protected void doGet(HttpServletRequest request,
@@ -139,7 +156,7 @@ public class QuestionServlet extends HttpServlet {
             }
 
             questionService.updateQuestion(foundQuestion);
-            Question savedQuestion = questionService.findQuestionById(foundQuestion.getId());
+            questionService.findQuestionById(foundQuestion.getId());
 
             for (Answer answer : answers) {
                 answerService.updateAnswer(answer);

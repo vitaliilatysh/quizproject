@@ -13,7 +13,15 @@ import java.util.List;
 
 @WebServlet("/users")
 public class UserServlet extends HttpServlet {
-    private UserService userService = new UserService();
+    private final UserService userService;
+
+    public UserServlet() {
+        this(new UserService());
+    }
+
+    UserServlet(UserService userService) {
+        this.userService = userService;
+    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
