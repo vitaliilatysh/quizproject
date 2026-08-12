@@ -12,7 +12,15 @@ import java.util.List;
 public class SubjectRepositoryImpl implements SubjectRepository {
 
     private final static Logger logger = Logger.getLogger(SubjectRepositoryImpl.class);
-    private DbConnector dbConnector = DbConnector.getInstance();
+    private final DbConnector dbConnector;
+
+    public SubjectRepositoryImpl() {
+        this(DbConnector.getInstance());
+    }
+
+    SubjectRepositoryImpl(DbConnector dbConnector) {
+        this.dbConnector = dbConnector;
+    }
 
     private Subject extractSubject(ResultSet rs)
             throws SQLException {

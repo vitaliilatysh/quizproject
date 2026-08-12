@@ -12,7 +12,15 @@ import java.util.List;
 public class QuestionRepositoryImpl implements QuestionRepository {
 
     private final static Logger logger = Logger.getLogger(QuestionRepositoryImpl.class);
-    private DbConnector dbConnector = DbConnector.getInstance();
+    private final DbConnector dbConnector;
+
+    public QuestionRepositoryImpl() {
+        this(DbConnector.getInstance());
+    }
+
+    QuestionRepositoryImpl(DbConnector dbConnector) {
+        this.dbConnector = dbConnector;
+    }
 
     private Question extractQuestion(ResultSet rs)
             throws SQLException {
@@ -130,7 +138,7 @@ public class QuestionRepositoryImpl implements QuestionRepository {
         ResultSet rs = null;
         Connection con = null;
         try {
-            con = DbConnector.getInstance().getConnection();
+            con = dbConnector.getConnection();
             con.setAutoCommit(false);
             stmt = con.prepareStatement("select * from questions where quiz_id=?");
             stmt.setInt(1, quizId);

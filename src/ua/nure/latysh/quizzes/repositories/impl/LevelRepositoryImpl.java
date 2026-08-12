@@ -12,7 +12,15 @@ import java.util.List;
 public class LevelRepositoryImpl implements LevelRepository {
 
     private final static Logger logger = Logger.getLogger(LevelRepositoryImpl.class);
-    private DbConnector dbConnector = DbConnector.getInstance();
+    private final DbConnector dbConnector;
+
+    public LevelRepositoryImpl() {
+        this(DbConnector.getInstance());
+    }
+
+    LevelRepositoryImpl(DbConnector dbConnector) {
+        this.dbConnector = dbConnector;
+    }
 
     private Level extractLevel(ResultSet rs)
             throws SQLException {

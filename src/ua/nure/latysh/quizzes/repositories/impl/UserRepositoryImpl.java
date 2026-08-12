@@ -2,9 +2,7 @@ package ua.nure.latysh.quizzes.repositories.impl;
 
 import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
-import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.entities.User;
-import ua.nure.latysh.quizzes.repositories.QuestionRepository;
 import ua.nure.latysh.quizzes.repositories.UserRepository;
 
 import java.sql.*;
@@ -14,7 +12,15 @@ import java.util.List;
 public class UserRepositoryImpl implements UserRepository {
 
     private static final Logger logger = Logger.getLogger(UserRepositoryImpl.class);
-    private DbConnector dbConnector = DbConnector.getInstance();
+    private final DbConnector dbConnector;
+
+    public UserRepositoryImpl() {
+        this(DbConnector.getInstance());
+    }
+
+    UserRepositoryImpl(DbConnector dbConnector) {
+        this.dbConnector = dbConnector;
+    }
 
     private User extractUser(ResultSet rs)
             throws SQLException {

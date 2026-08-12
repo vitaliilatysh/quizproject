@@ -12,7 +12,15 @@ import java.util.List;
 public class ResultRepositoryImpl implements ResultRepository {
 
     private final static Logger logger = Logger.getLogger(ResultRepositoryImpl.class);
-    private DbConnector dbConnector = DbConnector.getInstance();
+    private final DbConnector dbConnector;
+
+    public ResultRepositoryImpl() {
+        this(DbConnector.getInstance());
+    }
+
+    ResultRepositoryImpl(DbConnector dbConnector) {
+        this.dbConnector = dbConnector;
+    }
 
     @Override
     public Result findById(int answerId) {
