@@ -7,10 +7,14 @@ import ua.nure.latysh.quizzes.repositories.impl.LevelRepositoryImpl;
 import java.util.List;
 
 public class LevelService {
-    private LevelRepository levelRepository;
+    private final LevelRepository levelRepository;
 
     public LevelService() {
-        this.levelRepository = new LevelRepositoryImpl();
+        this(new LevelRepositoryImpl());
+    }
+
+    public LevelService(LevelRepository levelRepository) {
+        this.levelRepository = levelRepository;
     }
 
     public Level findAnswerById(String levelName) {

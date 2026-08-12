@@ -10,11 +10,16 @@ import ua.nure.latysh.quizzes.repositories.impl.QuizRepositoryImpl;
 import java.util.List;
 
 public class QuestionService {
-    private QuestionRepository questionRepository;
-    private QuizRepository quizRepository = new QuizRepositoryImpl();
+    private final QuestionRepository questionRepository;
+    private final QuizRepository quizRepository;
 
     public QuestionService() {
-        this.questionRepository = new QuestionRepositoryImpl();
+        this(new QuestionRepositoryImpl(), new QuizRepositoryImpl());
+    }
+
+    public QuestionService(QuestionRepository questionRepository, QuizRepository quizRepository) {
+        this.questionRepository = questionRepository;
+        this.quizRepository = quizRepository;
     }
 
     public List<Question> getAllQuestions() {

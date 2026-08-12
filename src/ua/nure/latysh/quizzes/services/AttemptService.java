@@ -5,14 +5,17 @@ import ua.nure.latysh.quizzes.entities.User;
 import ua.nure.latysh.quizzes.repositories.AttemptRepository;
 import ua.nure.latysh.quizzes.repositories.impl.AttemptRepositoryImpl;
 
-import java.util.Date;
 import java.util.List;
 
 public class AttemptService {
-    private AttemptRepository attemptRepository;
+    private final AttemptRepository attemptRepository;
 
     public AttemptService() {
-        this.attemptRepository = new AttemptRepositoryImpl();
+        this(new AttemptRepositoryImpl());
+    }
+
+    public AttemptService(AttemptRepository attemptRepository) {
+        this.attemptRepository = attemptRepository;
     }
 
     public List<Attempt> getAllAttempts() {
@@ -38,21 +41,4 @@ public class AttemptService {
     public void updateAttemptByScore(Attempt attempt) {
         attemptRepository.update(attempt);
     }
-
-//
-//    public void deleteQuestion(Question question) {
-//        questionRepository.delete(question);
-//    }
-////
-//    public Answer findAnswerById(int answerId) {
-//        return answerRepository.findById(answerId);
-//    }
-////
-////    public void updateQuestion(Question question) {
-////        questionRepository.update(question);
-////    }
-//
-//    public List<Answer> findAnswersByQuestionId(int questionId) {
-//        return answerRepository.findAllByQuestionId(questionId);
-//    }
 }

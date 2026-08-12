@@ -7,10 +7,14 @@ import ua.nure.latysh.quizzes.repositories.impl.AnswerRepositoryImpl;
 import java.util.List;
 
 public class AnswerService {
-    private AnswerRepository answerRepository;
+    private final AnswerRepository answerRepository;
 
     public AnswerService() {
-        this.answerRepository = new AnswerRepositoryImpl();
+        this(new AnswerRepositoryImpl());
+    }
+
+    public AnswerService(AnswerRepository answerRepository) {
+        this.answerRepository = answerRepository;
     }
 
     public List<Answer> getAllAnswers() {
@@ -21,11 +25,6 @@ public class AnswerService {
         return answerRepository.save(answer);
     }
 
-    //
-//    public void deleteQuestion(Question question) {
-//        questionRepository.delete(question);
-//    }
-//
     public Answer findAnswerById(int answerId) {
         return answerRepository.findById(answerId);
     }

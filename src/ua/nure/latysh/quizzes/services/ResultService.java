@@ -17,15 +17,30 @@ import java.util.Date;
 import java.util.List;
 
 public class ResultService {
-    private QuizRepository quizRepository = new QuizRepositoryImpl();
-    private ResultRepository resultRepository = new ResultRepositoryImpl();
-    private AnswerRepository answerRepository = new AnswerRepositoryImpl();
-    private QuestionRepository questionRepository = new QuestionRepositoryImpl();
-    private AttemptService attemptService = new AttemptService();
-    private UserService userService = new UserService();
+    private final QuizRepository quizRepository;
+    private final ResultRepository resultRepository;
+    private final AnswerRepository answerRepository;
+    private final QuestionRepository questionRepository;
+    private final AttemptService attemptService;
+    private final UserService userService;
 
     public ResultService() {
-        this.resultRepository = new ResultRepositoryImpl();
+        this(new QuizRepositoryImpl(), new ResultRepositoryImpl(), new AnswerRepositoryImpl(),
+                new QuestionRepositoryImpl(), new AttemptService(), new UserService());
+    }
+
+    public ResultService(QuizRepository quizRepository,
+                         ResultRepository resultRepository,
+                         AnswerRepository answerRepository,
+                         QuestionRepository questionRepository,
+                         AttemptService attemptService,
+                         UserService userService) {
+        this.quizRepository = quizRepository;
+        this.resultRepository = resultRepository;
+        this.answerRepository = answerRepository;
+        this.questionRepository = questionRepository;
+        this.attemptService = attemptService;
+        this.userService = userService;
     }
 
     public List<ResultDto> getAllResults(){
@@ -88,7 +103,6 @@ public class ResultService {
 
     public float getResultForQuizByAttemptId(int attemptId) {
         List<Result> results = resultRepository.findByAttemptId(attemptId);
-        List<Question> questions = null;
         int totalQuestions = 0;
         int userCorrectQuestions = 0;
 
@@ -97,7 +111,7 @@ public class ResultService {
 
             Question question = questionRepository.findById(questionId);
             int quizId = question.getQuizId();
-            questions = questionRepository.findAllByQuizId(quizId);
+            List<Question> questions = questionRepository.findAllByQuizId(quizId);
             totalQuestions = questions.size();
 
             for (Question q : questions) {

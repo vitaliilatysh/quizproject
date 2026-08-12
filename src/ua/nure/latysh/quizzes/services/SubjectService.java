@@ -8,10 +8,14 @@ import java.util.List;
 
 public class SubjectService {
 
-    private SubjectRepository subjectRepository;
+    private final SubjectRepository subjectRepository;
 
     public SubjectService() {
-        this.subjectRepository = new SubjectRepositoryImpl();
+        this(new SubjectRepositoryImpl());
+    }
+
+    public SubjectService(SubjectRepository subjectRepository) {
+        this.subjectRepository = subjectRepository;
     }
 
     public List<Subject> getAllSubjects(){
