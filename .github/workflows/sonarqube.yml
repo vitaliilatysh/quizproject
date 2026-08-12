@@ -39,6 +39,9 @@ jobs:
           cache-provider: basic
           validate-wrappers: true
 
+      - name: Refresh dependency lock state
+        run: ./gradlew dependencies --write-locks --no-daemon && cat gradle.lockfile
+
       - name: Test, collect coverage, and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
