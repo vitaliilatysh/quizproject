@@ -22,6 +22,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -109,24 +110,20 @@ public class AttemptRepositorySecurityTest {
         CompletionFixture rollbackFailure = new CompletionFixture(true, false, FUTURE,
                 new int[0], new int[0], new boolean[0], 1);
         when(rollbackFailure.connection.prepareStatement(anyString())).thenThrow(new SQLException("failed"));
-        org.mockito.Mockito.doThrow(new RepositoryException("rollback failed", null))
+        doThrow(new RepositoryException("rollback failed", null))
                 .when(rollbackFailure.dbConnector).rollback(rollbackFailure.connection);
-        try {
-            new AttemptRepositoryImpl(rollbackFailure.dbConnector).complete(5, 7, Set.of(), COMPLETED_AT);
-            fail("Expected JDBC failure with suppressed rollback failure");
-        } catch (RepositoryException expected) {
-            assertEquals(1, expected.getSuppressed().length);
-        }
+        AttemptRepositoryImpl rollbackRepository = new AttemptRepositoryImpl(rollbackFailure.dbConnector);
+        RepositoryException suppressed = org.junit.Assert.assertThrows(RepositoryException.class,
+                () -> rollbackRepository.complete(5, 7, Set.of(), COMPLETED_AT));
+        assertEquals(1, suppressed.getSuppressed().length);
 
         CompletionFixture closeFailure = new CompletionFixture(true, false, FUTURE,
                 new int[0], new int[0], new boolean[0], 1);
-        org.mockito.Mockito.doThrow(new SQLException("close failed")).when(closeFailure.connection).close();
-        try {
-            new AttemptRepositoryImpl(closeFailure.dbConnector).complete(5, 7, Set.of(), COMPLETED_AT);
-            fail("Expected transaction close failure");
-        } catch (RepositoryException expected) {
-            assertTrue(expected.getMessage().contains("close attempt transaction"));
-        }
+        doThrow(new SQLException("close failed")).when(closeFailure.connection).close();
+        AttemptRepositoryImpl closeRepository = new AttemptRepositoryImpl(closeFailure.dbConnector);
+        RepositoryException closeException = org.junit.Assert.assertThrows(RepositoryException.class,
+                () -> closeRepository.complete(5, 7, Set.of(), COMPLETED_AT));
+        assertTrue(closeException.getMessage().contains("close attempt transaction"));
 
         DbConnector unavailable = mock(DbConnector.class);
         when(unavailable.getConnection()).thenThrow(new RepositoryException("unavailable", null));
@@ -169,12 +166,10 @@ public class AttemptRepositorySecurityTest {
         Attempt attempt = new Attempt();
         attempt.setId(5);
 
-        try {
-            new AttemptRepositoryImpl(dbConnector).delete(attempt);
-            fail("Expected JDBC failure");
-        } catch (RepositoryException expected) {
-            assertTrue(expected.getMessage().contains("delete attempt"));
-        }
+        AttemptRepositoryImpl repository = new AttemptRepositoryImpl(dbConnector);
+        RepositoryException expected = org.junit.Assert.assertThrows(RepositoryException.class,
+                () -> repository.delete(attempt));
+        assertTrue(expected.getMessage().contains("delete attempt"));
 
         verify(connection).prepareStatement("DELETE FROM attempts WHERE id=?");
     }

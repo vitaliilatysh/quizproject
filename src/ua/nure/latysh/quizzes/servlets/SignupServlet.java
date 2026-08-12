@@ -74,8 +74,12 @@ public class SignupServlet extends HttpServlet {
 
         if (user.isEmpty() && passwordsMatch) {
             userService.save(newUser);
-            User savedUser = userService.findUserByLogin(newUser.getLogin())
-                    .orElseThrow(() -> new IllegalStateException("Saved user could not be reloaded"));
+            Optional<User> reloadedUser = userService.findUserByLogin(newUser.getLogin());
+            if (reloadedUser.isEmpty()) {
+                resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Saved user could not be reloaded");
+                return;
+            }
+            User savedUser = reloadedUser.get();
             savedUser.setPassword(null);
             HttpSession oldSession = req.getSession(false);
             if (oldSession != null) {

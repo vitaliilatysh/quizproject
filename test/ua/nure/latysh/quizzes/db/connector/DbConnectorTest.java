@@ -57,10 +57,11 @@ public class DbConnectorTest {
         assertThrows(RepositoryException.class, () -> connector.rollback(connection));
 
         resetSingleton();
-        try (MockedConstruction<InitialContext> ignored = mockConstruction(InitialContext.class,
+        try (MockedConstruction<InitialContext> construction = mockConstruction(InitialContext.class,
                 (initialContext, context) -> when(initialContext.lookup("java:/comp/env"))
                         .thenThrow(new NamingException("missing")))) {
             assertThrows(RepositoryException.class, DbConnector::getInstance);
+            assertEquals(1, construction.constructed().size());
         }
     }
 

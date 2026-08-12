@@ -171,8 +171,8 @@ public class RepositoryCoverageTest {
 
         Fixture withoutGeneratedKey = new Fixture();
         withoutGeneratedKey.noGeneratedKey();
-        assertThrows(RepositoryException.class,
-                () -> new QuestionRepositoryImpl(withoutGeneratedKey.dbConnector).saveQuestion(question));
+        QuestionRepositoryImpl missingKeyRepository = new QuestionRepositoryImpl(withoutGeneratedKey.dbConnector);
+        assertThrows(RepositoryException.class, () -> missingKeyRepository.saveQuestion(question));
 
         verify(ok.connection, times(2)).prepareStatement(
                 "INSERT INTO questions (question, quiz_id) VALUES (?, ?)",

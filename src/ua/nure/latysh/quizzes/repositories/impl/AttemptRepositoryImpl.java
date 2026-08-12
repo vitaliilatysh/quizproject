@@ -152,29 +152,34 @@ public class AttemptRepositoryImpl implements AttemptRepository {
     public Attempt complete(int attemptId, int userId, Set<Integer> answerIds, Date completedAt) {
         try (Connection connection = dbConnector.getConnection()) {
             connection.setAutoCommit(false);
-            try {
-                Attempt attempt = lockAttempt(connection, attemptId, userId);
-                validateActiveAttempt(attempt, completedAt);
-                QuizAnswerData answerData = loadQuizAnswers(connection, attempt.getQuizId());
-                validateAnswers(answerData, answerIds);
-                int score = calculateScore(answerData, answerIds);
-                insertResults(connection, attemptId, answerIds);
-                markCompleted(connection, attemptId, userId, score, completedAt);
-                connection.commit();
-                attempt.setScore(score);
-                attempt.setEndTime(completedAt);
-                attempt.setCompleted(true);
-                return attempt;
-            } catch (QuizSubmissionException exception) {
-                rollback(connection, exception);
-                throw exception;
-            } catch (SQLException exception) {
-                RepositoryException failure = failure("complete attempt", exception);
-                rollback(connection, failure);
-                throw failure;
-            }
+            return completeTransaction(connection, attemptId, userId, answerIds, completedAt);
         } catch (SQLException exception) {
             throw failure("close attempt transaction", exception);
+        }
+    }
+
+    private Attempt completeTransaction(Connection connection, int attemptId, int userId,
+                                        Set<Integer> answerIds, Date completedAt) {
+        try {
+            Attempt attempt = lockAttempt(connection, attemptId, userId);
+            validateActiveAttempt(attempt, completedAt);
+            QuizAnswerData answerData = loadQuizAnswers(connection, attempt.getQuizId());
+            validateAnswers(answerData, answerIds);
+            int score = calculateScore(answerData, answerIds);
+            insertResults(connection, attemptId, answerIds);
+            markCompleted(connection, attemptId, userId, score, completedAt);
+            connection.commit();
+            attempt.setScore(score);
+            attempt.setEndTime(completedAt);
+            attempt.setCompleted(true);
+            return attempt;
+        } catch (QuizSubmissionException exception) {
+            rollback(connection, exception);
+            throw exception;
+        } catch (SQLException exception) {
+            RepositoryException failure = failure("complete attempt", exception);
+            rollback(connection, failure);
+            throw failure;
         }
     }
 

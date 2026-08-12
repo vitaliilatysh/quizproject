@@ -17,7 +17,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.junit.Assert.assertThrows;
 
 public class SignupServletTest {
 
@@ -49,7 +48,7 @@ public class SignupServletTest {
     }
 
     @Test
-    public void savedUserMustBeReloadable() {
+    public void savedUserMustBeReloadable() throws Exception {
         UserService userService = mock(UserService.class);
         SignupServlet servlet = new SignupServlet(userService);
         HttpServletRequest request = mock(HttpServletRequest.class);
@@ -65,6 +64,10 @@ public class SignupServletTest {
         when(session.getAttribute("lang")).thenReturn(Locale.ENGLISH);
         when(userService.findUserByLogin("student")).thenReturn(Optional.empty());
 
-        assertThrows(IllegalStateException.class, () -> servlet.doPost(request, response));
+        servlet.doPost(request, response);
+
+        verify(response).sendError(
+                HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                "Saved user could not be reloaded");
     }
 }

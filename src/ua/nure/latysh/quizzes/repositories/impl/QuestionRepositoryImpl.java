@@ -93,7 +93,8 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     public List<Question> findAllByQuizId(int quizId) {
         List<Question> questions = new ArrayList<>();
         try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT * FROM questions WHERE quiz_id = ?")) {
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT id, question, quiz_id FROM questions WHERE quiz_id = ?")) {
             statement.setInt(1, quizId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {

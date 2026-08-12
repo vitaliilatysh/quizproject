@@ -74,6 +74,12 @@ public class QuizServletCoverageTest {
         verify(quizService).deleteQuiz(quiz);
         verify(delete.response).sendRedirect("quizzes");
 
+        WebContext invalidDelete = context();
+        when(invalidDelete.request.getParameter("action")).thenReturn("delete");
+        when(invalidDelete.request.getParameter("quiz")).thenReturn("invalid");
+        servlet.doPost(invalidDelete.request, invalidDelete.response);
+        verify(invalidDelete.response).sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid identifier");
+
         WebContext edit = context();
         when(edit.request.getParameter("action")).thenReturn("edit");
         when(edit.request.getParameter("quiz")).thenReturn("4");

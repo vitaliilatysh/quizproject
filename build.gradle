@@ -118,6 +118,7 @@ sonar {
         property 'sonar.gradle.scanAll', 'true'
         property 'sonar.qualitygate.wait', 'true'
         property 'sonar.cpd.exclusions', 'web/WEB-INF/views/**/*.jsp'
+        property 'sonar.exclusions', 'resources/db/migration/**/*.sql'
     }
 }
 

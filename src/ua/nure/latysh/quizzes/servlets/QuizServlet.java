@@ -80,8 +80,21 @@ public class QuizServlet extends HttpServlet {
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String quizId = req.getParameter("quiz");
-        quizService.findQuizById(Integer.parseInt(quizId)).ifPresent(quizService::deleteQuiz);
+        Integer parsedQuizId = parseId(quizId, resp);
+        if (parsedQuizId == null) {
+            return;
+        }
+        quizService.findQuizById(parsedQuizId).ifPresent(quizService::deleteQuiz);
         resp.sendRedirect("quizzes");
+    }
+
+    private Integer parseId(String value, HttpServletResponse response) throws IOException {
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException exception) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid identifier");
+            return null;
+        }
     }
 
     @Override
