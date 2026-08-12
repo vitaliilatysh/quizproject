@@ -31,12 +31,12 @@ public class SignupServletTest {
         when(request.getParameter("username")).thenReturn("student");
         when(request.getParameter("firstName")).thenReturn("Test");
         when(request.getParameter("lastName")).thenReturn("User");
-        when(request.getParameter("password")).thenReturn("Secret");
-        when(request.getParameter("confirmPassword")).thenReturn("secret");
+        when(request.getParameter("password")).thenReturn("Secret12");
+        when(request.getParameter("confirmPassword")).thenReturn("secret12");
         when(request.getSession()).thenReturn(session);
         when(session.getAttribute("lang")).thenReturn(Locale.ENGLISH);
         when(userService.findUserByLogin("student")).thenReturn(null);
-        when(request.getRequestDispatcher("signup.jsp")).thenReturn(dispatcher);
+        when(request.getRequestDispatcher("/WEB-INF/views/signup.jsp")).thenReturn(dispatcher);
 
         servlet.doPost(request, response);
 

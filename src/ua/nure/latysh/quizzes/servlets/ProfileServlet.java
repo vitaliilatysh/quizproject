@@ -32,7 +32,7 @@ public class ProfileServlet extends HttpServlet {
         User user = (User) httpSession.getAttribute("user");
 
         req.setAttribute("user", userService.convertUserToUserDto(user));
-        req.getRequestDispatcher("profile.jsp").forward(req, resp);
+        req.getRequestDispatcher("/WEB-INF/views/profile.jsp").forward(req, resp);
         logger.info(user.getLogin() + "opened the profile");
     }
 }

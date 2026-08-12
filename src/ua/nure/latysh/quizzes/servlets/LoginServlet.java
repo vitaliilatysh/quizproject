@@ -3,6 +3,7 @@ package ua.nure.latysh.quizzes.servlets;
 import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.entities.User;
 import ua.nure.latysh.quizzes.services.UserService;
+import ua.nure.latysh.quizzes.security.LoginAttemptLimiter;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -17,18 +18,24 @@ public class LoginServlet extends HttpServlet {
 
     private static final Logger logger = Logger.getLogger(LoginServlet.class);
     private final UserService userService;
+    private final LoginAttemptLimiter loginAttemptLimiter;
 
     public LoginServlet() {
-        this(new UserService());
+        this(new UserService(), new LoginAttemptLimiter());
     }
 
     LoginServlet(UserService userService) {
+        this(userService, new LoginAttemptLimiter());
+    }
+
+    LoginServlet(UserService userService, LoginAttemptLimiter loginAttemptLimiter) {
         this.userService = userService;
+        this.loginAttemptLimiter = loginAttemptLimiter;
     }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        req.getRequestDispatcher("index.jsp").forward(req, resp);
+        ServletResponseHandler.forward(req.getRequestDispatcher("/WEB-INF/views/index.jsp"), req, resp);
         logger.info("Log in page opened");
     }
 
@@ -51,13 +58,23 @@ public class LoginServlet extends HttpServlet {
             return;
         }
 
+        String attemptKey = String.valueOf(req.getRemoteAddr()) + ":" + login.toLowerCase(Locale.ROOT);
+        if (loginAttemptLimiter.isBlocked(attemptKey)) {
+            resp.setStatus(429);
+            forwardWithError(req, resp, login, mybundle.getString("validation.input.username.notfound"));
+            return;
+        }
+
         User user = userService.findByLoginAndPassword(login, password);
 
         if (user == null) {
+            loginAttemptLimiter.recordFailure(attemptKey);
             forwardWithError(req, resp, login, mybundle.getString("validation.input.username.notfound"));
         } else if (user.getStatusId() == 2) {
+            loginAttemptLimiter.recordSuccess(attemptKey);
             forwardWithError(req, resp, login, mybundle.getString("validation.user.blocked"));
         } else {
+            loginAttemptLimiter.recordSuccess(attemptKey);
             HttpSession oldSession = req.getSession(false);
             if (oldSession != null) {
                 oldSession.invalidate();
@@ -69,20 +86,18 @@ public class LoginServlet extends HttpServlet {
             newSession.setAttribute("user", user);
             newSession.setAttribute("lang", lang);
 
-            Cookie userLogin = new Cookie("user", login);
             req.setAttribute("user", user);
-            resp.addCookie(userLogin);
             user.setLoginDateTime(new Date());
             userService.updateUserLoginDate(user);
-            resp.sendRedirect("quizzes");
+            ServletResponseHandler.redirect(resp, "quizzes");
             logger.info(user.getLogin() + " logged in");
         }
     }
 
     private void forwardWithError(HttpServletRequest request, HttpServletResponse response,
-                                  String login, String message) throws ServletException, IOException {
+                                  String login, String message) {
         request.setAttribute("loginMessage", message);
         request.setAttribute("username", login);
-        request.getRequestDispatcher("/").forward(request, response);
+        ServletResponseHandler.forward(request.getRequestDispatcher("/"), request, response);
     }
 }

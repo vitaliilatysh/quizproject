@@ -10,25 +10,31 @@
     <title>Questions</title>
     <jsp:include page="header.jsp"/>
     <script>
-        function startTimer(duration, display) {
-            var timer = duration, minutes, seconds;
-            setInterval(function () {
-                minutes = parseInt(timer / 60, 10);
-                seconds = parseInt(timer % 60, 10);
+        function startTimer(expiresAt, display) {
+            function render() {
+                var timer = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+                var minutes = parseInt(timer / 60, 10);
+                var seconds = parseInt(timer % 60, 10);
 
                 minutes = minutes < 10 ? "0" + minutes : minutes;
                 seconds = seconds < 10 ? "0" + seconds : seconds;
 
                 display.textContent = minutes + " " + ":" + " " + seconds;
 
-                window.localStorage.setItem("seconds", seconds);
-                window.localStorage.setItem("minutes", minutes);
-
-                if (--timer < 0) {
-                    localStorage.clear();
+                if (timer <= 0) {
                     document.getElementById("submitQuiz").click();
+                    return false;
                 }
-            }, 1000);
+                return true;
+            }
+
+            if (render()) {
+                var timerId = setInterval(function () {
+                    if (!render()) {
+                        clearInterval(timerId);
+                    }
+                }, 1000);
+            }
         }
 
         window.onhashchange = function() {
@@ -36,16 +42,9 @@
         };
 
         window.onload = function () {
-            var sec = parseInt(window.localStorage.getItem("seconds"));
-            var min = parseInt(window.localStorage.getItem("minutes"));
-
-            if (parseInt(min * sec) || parseInt(min * sec) === 0) {
-                var fiveMinutes = (parseInt(min * 60) + sec);
-            } else {
-                fiveMinutes = ${sessionScope.quizTime};
-            }
-            display = document.querySelector('#timer');
-            startTimer(fiveMinutes, display);
+            var expiresAt = Number("${sessionScope.quizExpiresAt}");
+            var display = document.querySelector('#timer');
+            startTimer(expiresAt, display);
         };
     </script>
 </head>
@@ -56,21 +55,22 @@
 </nav>
 <div class="container" style="padding-top: 90px; padding-bottom: 100px">
     <form action="results" method="post">
+        <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
         <c:set var="count" value="0" scope="page"/>
         <c:forEach var="entry" items="${answersPerQuestion}">
             <div class="form-group">
                 <c:set var="count" value="${count + 1}" scope="page"/>
-                <label>${count}. ${entry.key.question}</label>
+                <label>${count}. <c:out value="${entry.key.question}"/></label>
                 <c:forEach var="answer" items="${entry.value}">
                     <div class="form-check">
                         <input class="form-check-input" name="answerId" type="checkbox" value="${answer.id}"
                                id="defaultCheck">
-                        <label class="form-check-label" for="defaultCheck">${answer.answer}</label>
+                        <label class="form-check-label" for="defaultCheck"><c:out value="${answer.answer}"/></label>
                     </div>
                 </c:forEach>
             </div>
         </c:forEach>
-        <button id="submitQuiz" type="submit" onclick="localStorage.clear()" class="btn btn-success"><fmt:message
+        <button id="submitQuiz" type="submit" class="btn btn-success"><fmt:message
                 key="button.finish"/></button>
     </form>
 </div>

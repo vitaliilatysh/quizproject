@@ -132,23 +132,15 @@ public class UserRepositoryImpl implements UserRepository {
         return users;
     }
 
-    public User findByLoginAndPassword(String login, String password) {
-        User user = new User();
-        try (Connection connection = dbConnector.getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("select * from users where login=? AND password=?");
-            statement.setString(1, login);
-            statement.setString(2, password);
-            ResultSet resultSet = statement.executeQuery();
-
-            if (resultSet.next()) {
-                user = extractUser(resultSet);
-            } else {
-                user = null;
-            }
+    public void updatePassword(User user) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement("UPDATE users SET password=? WHERE id=?")) {
+            statement.setString(1, user.getPassword());
+            statement.setInt(2, user.getId());
+            statement.executeUpdate();
         } catch (SQLException e) {
             logger.error(e);
         }
-        return user;
     }
 
     @Override

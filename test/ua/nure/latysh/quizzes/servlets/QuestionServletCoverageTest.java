@@ -101,19 +101,25 @@ public class QuestionServletCoverageTest {
         User persistedUser = user(8, "alice");
         Question first = question(1, 12, "First");
         Question second = question(2, 12, "Second");
+        ua.nure.latysh.quizzes.entities.Attempt attempt = new ua.nure.latysh.quizzes.entities.Attempt();
+        attempt.setId(44);
+        attempt.setExpiresAt(new java.util.Date(1_700_000_000_000L));
         when(dependencies.quizService.findQuizById(12)).thenReturn(quiz);
-        when(dependencies.userService.findUserByLogin("user")).thenReturn(persistedUser);
+        when(dependencies.attemptService.startAttempt(persistedUser, quiz)).thenReturn(attempt);
         when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(first, second));
         when(dependencies.answerService.findAnswersByQuestionId(1)).thenReturn(List.of(answer(1, false)));
         when(dependencies.answerService.findAnswersByQuestionId(2)).thenReturn(List.of());
 
         WebContext run = action("run");
         when(run.request.getParameter("quiz")).thenReturn("12");
+        when(run.session.getAttribute("user")).thenReturn(persistedUser);
         servlet.doPost(run.request, run.response);
 
-        verify(dependencies.attemptService).saveAttempt(any());
+        verify(dependencies.attemptService).startAttempt(persistedUser, quiz);
         verify(run.session).setAttribute("quizTime", 180);
         verify(run.session).setAttribute("quizId", 12);
+        verify(run.session).setAttribute("attemptId", 44);
+        verify(run.session).setAttribute("quizExpiresAt", 1_700_000_000_000L);
         verify(run.session).setAttribute("questions", List.of(first, second));
         verify(run.session).setAttribute(org.mockito.ArgumentMatchers.eq("answersPerQuestion"), any());
         verify(run.response).sendRedirect("questions");
@@ -142,8 +148,8 @@ public class QuestionServletCoverageTest {
 
         verify(dependencies.questionService, org.mockito.Mockito.times(2)).addQuestion("New question", 12);
         verify(dependencies.answerService, org.mockito.Mockito.times(8)).saveAnswer(any());
-        verify(firstPattern.dispatcher, org.mockito.Mockito.times(2)).forward(firstPattern.request, firstPattern.response);
-        verify(secondPattern.request).setAttribute("action", "create");
+        verify(firstPattern.dispatcher).forward(firstPattern.request, firstPattern.response);
+        verify(secondPattern.dispatcher).forward(secondPattern.request, secondPattern.response);
     }
 
     @Test
@@ -253,10 +259,8 @@ public class QuestionServletCoverageTest {
         private final QuestionService questionService = mock(QuestionService.class);
         private final AnswerService answerService = mock(AnswerService.class);
         private final AttemptService attemptService = mock(AttemptService.class);
-        private final UserService userService = mock(UserService.class);
-
         private QuestionServlet servlet() {
-            return new QuestionServlet(quizService, questionService, answerService, attemptService, userService);
+            return new QuestionServlet(quizService, questionService, answerService, attemptService);
         }
     }
 

@@ -31,7 +31,7 @@ public class SubjectServlet extends HttpServlet {
 
         request.setAttribute("subjects", subjects);
 
-        request.getRequestDispatcher("subjects.jsp").forward(request, response);
+        request.getRequestDispatcher("/WEB-INF/views/subjects.jsp").forward(request, response);
     }
 
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
@@ -52,7 +52,7 @@ public class SubjectServlet extends HttpServlet {
             }
             response.sendRedirect("subjects");
         } else if(request.getParameter("edit") != null){
-            String forward = "edit_subject.jsp";
+            String forward = "/WEB-INF/views/edit_subject.jsp";
 
             String subjectId = request.getParameter("subjectId");
             Subject editSubject = subjectService.findSubjectById(Integer.parseInt(subjectId));

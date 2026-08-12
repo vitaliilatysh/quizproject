@@ -4,6 +4,7 @@ import ua.nure.latysh.quizzes.entities.Attempt;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 
 public interface AttemptRepository extends CrudRepository<Attempt> {
     List<Attempt> findAllByUserId(int userId);
@@ -11,4 +12,8 @@ public interface AttemptRepository extends CrudRepository<Attempt> {
     Attempt findLastByUserId(int userId);
 
     List<Attempt> findAllBetweenFinishDates(String startRange, String endRange);
+
+    Attempt create(Attempt attempt);
+
+    Attempt complete(int attemptId, int userId, Set<Integer> answerIds, Date completedAt);
 }

@@ -19,6 +19,16 @@
     (function() {
         'use strict';
         window.addEventListener('load', function() {
+            var csrfToken = '${sessionScope.csrfToken}';
+            document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(form) {
+                if (!form.querySelector('input[name="_csrf"]')) {
+                    var csrfInput = document.createElement('input');
+                    csrfInput.type = 'hidden';
+                    csrfInput.name = '_csrf';
+                    csrfInput.value = csrfToken;
+                    form.appendChild(csrfInput);
+                }
+            });
             var forms = document.getElementsByClassName('needs-validation');
             var validation = Array.prototype.filter.call(forms, function(form) {
                 form.addEventListener('submit', function(event) {

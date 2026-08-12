@@ -3,6 +3,7 @@ out
 /.svn
 *.iml
 /.gradle
+/.gradle-user-home
 /build
 /.m2
 /target

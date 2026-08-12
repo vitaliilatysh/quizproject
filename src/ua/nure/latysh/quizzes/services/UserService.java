@@ -10,6 +10,7 @@ import ua.nure.latysh.quizzes.repositories.UserRepository;
 import ua.nure.latysh.quizzes.repositories.impl.RoleRepositoryImpl;
 import ua.nure.latysh.quizzes.repositories.impl.StatusRepositoryImpl;
 import ua.nure.latysh.quizzes.repositories.impl.UserRepositoryImpl;
+import ua.nure.latysh.quizzes.security.PasswordHasher;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -20,21 +21,48 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final StatusRepository statusRepository;
     private final UserRepository userRepository;
+    private final PasswordHasher passwordHasher;
 
     public UserService() {
-        this(new UserRepositoryImpl(), new RoleRepositoryImpl(), new StatusRepositoryImpl());
+        this(new UserRepositoryImpl(), new RoleRepositoryImpl(), new StatusRepositoryImpl(), new PasswordHasher());
     }
 
     public UserService(UserRepository userRepository,
                        RoleRepository roleRepository,
                        StatusRepository statusRepository) {
+        this(userRepository, roleRepository, statusRepository, new PasswordHasher());
+    }
+
+    public UserService(UserRepository userRepository,
+                       RoleRepository roleRepository,
+                       StatusRepository statusRepository,
+                       PasswordHasher passwordHasher) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.statusRepository = statusRepository;
+        this.passwordHasher = passwordHasher;
     }
 
     public User findByLoginAndPassword(String login, String password) {
-        return userRepository.findByLoginAndPassword(login, password);
+        User user = userRepository.findByLogin(login);
+        if (user == null) {
+            return null;
+        }
+
+        String storedPassword = user.getPassword();
+        boolean matches = passwordHasher.isEncoded(storedPassword)
+                ? passwordHasher.matches(password, storedPassword)
+                : passwordHasher.matchesLegacy(password, storedPassword);
+        if (!matches) {
+            return null;
+        }
+
+        if (!passwordHasher.isEncoded(storedPassword)) {
+            user.setPassword(passwordHasher.hash(password));
+            userRepository.updatePassword(user);
+        }
+        user.setPassword(null);
+        return user;
     }
 
     public User findUserByLogin(String login) {
@@ -89,6 +117,9 @@ public class UserService {
     }
 
     public void save(User user) {
+        if (!passwordHasher.isEncoded(user.getPassword())) {
+            user.setPassword(passwordHasher.hash(user.getPassword()));
+        }
         userRepository.save(user);
     }
 

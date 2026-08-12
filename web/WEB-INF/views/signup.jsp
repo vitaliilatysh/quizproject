@@ -17,6 +17,7 @@
     <section class="row justify-content-center">
         <section class="col-lg-3 col-md-6 col-sm-6 col-xs-12">
             <form class="form-container needs-validation" method="post" action="signup" novalidate>
+                <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
                 <h4 class="text-center font-weight-bold"><fmt:message key="signup.title"/></h4>
                 <div class="form-group">
                     <input autofocus class="form-control" id="username" name="username" value="${username}" placeholder=<fmt:message key="input.username.placeholder"/> required minlength="5" maxlength="15" pattern="[a-zA-zА-Яа-я0-9]{5,15}"
@@ -34,11 +35,13 @@
                            type="text">
                 </div>
                 <div class="form-group">
-                    <input class="form-control" id="password" name="password" placeholder="<fmt:message key="input.password.placeholder"/>" required minlength="5" maxlength="15" pattern="[^\s]{5,15}"
+                    <label class="sr-only" for="password"><fmt:message key="input.password.placeholder"/></label>
+                    <input class="form-control" id="password" name="password" placeholder="<fmt:message key="input.password.placeholder"/>" required minlength="8" maxlength="128" pattern="[^\s]{8,128}"
                            type="password">
                 </div>
                 <div class="form-group">
-                    <input class="form-control" id="confirmPassword" name="confirmPassword" placeholder="${placeholder}" required minlength="5" maxlength="15" pattern="[^\s]{5,15}"
+                    <label class="sr-only" for="confirmPassword">${placeholder}</label>
+                    <input class="form-control" id="confirmPassword" name="confirmPassword" placeholder="${placeholder}" required minlength="8" maxlength="128" pattern="[^\s]{8,128}"
                            type="password">
                     <div class="invalidMessage">
                         ${confirmPwMessage}

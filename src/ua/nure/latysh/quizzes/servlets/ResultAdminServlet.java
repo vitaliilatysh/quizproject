@@ -39,7 +39,7 @@ public class ResultAdminServlet extends HttpServlet {
         request.setAttribute("userResults", results);
         request.setAttribute("startRange", startRange);
         request.setAttribute("endRange", endRange);
-        request.getRequestDispatcher("resultsAdmin.jsp").forward(request, response);
+        request.getRequestDispatcher("/WEB-INF/views/resultsAdmin.jsp").forward(request, response);
     }
 
     @Override
@@ -48,7 +48,7 @@ public class ResultAdminServlet extends HttpServlet {
         User user = (User) httpSession.getAttribute("user");
         List<ResultDto> results = resultService.getAllResults();
         req.setAttribute("userResults", results);
-        req.getRequestDispatcher("resultsAdmin.jsp").forward(req, resp);
+        req.getRequestDispatcher("/WEB-INF/views/resultsAdmin.jsp").forward(req, resp);
         logger.info(user.getLogin() + "opened quiz results");
     }
 }

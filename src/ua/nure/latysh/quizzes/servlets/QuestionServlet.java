@@ -21,23 +21,20 @@ public class QuestionServlet extends HttpServlet {
     private final QuestionService questionService;
     private final AnswerService answerService;
     private final AttemptService attemptService;
-    private final UserService userService;
 
     public QuestionServlet() {
         this(new QuizService(), new QuestionService(), new AnswerService(),
-                new AttemptService(), new UserService());
+                new AttemptService());
     }
 
     QuestionServlet(QuizService quizService,
                     QuestionService questionService,
                     AnswerService answerService,
-                    AttemptService attemptService,
-                    UserService userService) {
+                    AttemptService attemptService) {
         this.quizService = quizService;
         this.questionService = questionService;
         this.answerService = answerService;
         this.attemptService = attemptService;
-        this.userService = userService;
     }
 
     @Override
@@ -50,7 +47,7 @@ public class QuestionServlet extends HttpServlet {
         session.getAttribute("quizId");
         session.getAttribute("questions");
         session.getAttribute("answersPerQuestion");
-        request.getRequestDispatcher("questions.jsp").forward(request, response);
+        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/questions.jsp"), request, response);
     }
 
     @Override
@@ -63,7 +60,8 @@ public class QuestionServlet extends HttpServlet {
                 String quizId = request.getParameter("quiz");
                 request.setAttribute("quiz", quizId);
                 request.setAttribute("action", "create");
-                request.getRequestDispatcher("addQuestion.jsp").forward(request, response);
+                ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/addQuestion.jsp"),
+                        request, response);
 
                 logger.info(user.getLogin() + " opened add question page");
                 break;
@@ -128,7 +126,8 @@ public class QuestionServlet extends HttpServlet {
             request.setAttribute("answerC", answers.get(2).getAnswer());
             request.setAttribute("answerD", answers.get(3).getAnswer());
             request.setAttribute("checkboxAnswersMessage", mybundle.getString("validation.add.question.correct"));
-            request.getRequestDispatcher("editQuestion.jsp").forward(request, response);
+            ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/editQuestion.jsp"),
+                    request, response);
         } else {
 
             if (correctAnswerA != null && correctAnswerA.equalsIgnoreCase("A")) {
@@ -166,7 +165,8 @@ public class QuestionServlet extends HttpServlet {
 
             request.setAttribute("questions", questions);
             request.setAttribute("quiz", quizId);
-            request.getRequestDispatcher("listQuestions.jsp").forward(request, response);
+            ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/listQuestions.jsp"),
+                    request, response);
         }
     }
 
@@ -178,7 +178,8 @@ public class QuestionServlet extends HttpServlet {
 
         List<Question> questions = questionService.findQuestionsByQuizId(quizId);
         request.setAttribute("questions", questions);
-        request.getRequestDispatcher("listQuestions.jsp").forward(request, response);
+        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/listQuestions.jsp"),
+                request, response);
     }
 
     private void editQuestion(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
@@ -199,7 +200,8 @@ public class QuestionServlet extends HttpServlet {
         request.setAttribute("quiz", question.getQuizId());
         request.setAttribute("questionId", questionId);
         request.setAttribute("question", question.getQuestion());
-        request.getRequestDispatcher("editQuestion.jsp").forward(request, response);
+        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/editQuestion.jsp"),
+                request, response);
     }
 
     private void viewQuesions(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
@@ -208,7 +210,8 @@ public class QuestionServlet extends HttpServlet {
 
         request.setAttribute("questions", questions);
         request.setAttribute("quiz", quizId);
-        request.getRequestDispatcher("listQuestions.jsp").forward(request, response);
+        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/listQuestions.jsp"),
+                request, response);
     }
 
     private void runQuestions(HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -224,14 +227,8 @@ public class QuestionServlet extends HttpServlet {
 ////                userLogin = cookie1.getValue();
 ////            }
 ////        }
-        User sessionUser = (User) request.getSession().getAttribute("user");
-        User user = userService.findUserByLogin(sessionUser.getLogin());
-
-        Attempt attempt = new Attempt();
-        attempt.setUserId(user.getId());
-        attempt.setScore(0);
-        attempt.setQuizId(quizId);
-        attemptService.saveAttempt(attempt);
+        User user = (User) request.getSession().getAttribute("user");
+        Attempt attempt = attemptService.startAttempt(user, quiz);
 
         Map<Question, List<Answer>> answersPerQuestion = new LinkedHashMap<>();
 
@@ -249,10 +246,12 @@ public class QuestionServlet extends HttpServlet {
         HttpSession currentSession = request.getSession(true);
         currentSession.setAttribute("quizTime", minutesForQuiz);
         currentSession.setAttribute("quizId", quizId);
+        currentSession.setAttribute("attemptId", attempt.getId());
+        currentSession.setAttribute("quizExpiresAt", attempt.getExpiresAt().getTime());
         currentSession.setAttribute("questions", questions);
         currentSession.setAttribute("answersPerQuestion", answersPerQuestion);
 
-        response.sendRedirect("questions");
+        ServletResponseHandler.redirect(response, "questions");
     }
 
     private void addQuestions(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
@@ -308,7 +307,8 @@ public class QuestionServlet extends HttpServlet {
             request.setAttribute("answerC", answers.get(2));
             request.setAttribute("answerD", answers.get(3));
             request.setAttribute("checkboxAnswersMessage", mybundle.getString("validation.add.question.correct"));
-            request.getRequestDispatcher("addQuestion.jsp").forward(request, response);
+            ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/addQuestion.jsp"),
+                    request, response);
         } else {
             if (correctAnswerA != null && correctAnswerA.equalsIgnoreCase("A")) {
                 answerList.get(0).setCorrect(true);
@@ -342,13 +342,8 @@ public class QuestionServlet extends HttpServlet {
             List<Question> questions = questionService.findQuestionsByQuizId(quizId);
             request.setAttribute("questions", questions);
             request.setAttribute("quiz", quizId);
-            request.getRequestDispatcher("listQuestions.jsp").forward(request, response);
-
-            request.setAttribute("quiz", quizId);
-            request.setAttribute("question", question);
-            request.setAttribute("checkboxAnswersMessage", mybundle.getString("validation.add.question.correct"));
-            request.setAttribute("action", "create");
-            request.getRequestDispatcher("addQuestion.jsp").forward(request, response);
+            ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/listQuestions.jsp"),
+                    request, response);
         }
     }
 
