@@ -78,7 +78,7 @@ public class QuizServletCoverageTest {
         when(invalidDelete.request.getParameter("action")).thenReturn("delete");
         when(invalidDelete.request.getParameter("quiz")).thenReturn("invalid");
         servlet.doPost(invalidDelete.request, invalidDelete.response);
-        verify(invalidDelete.response).sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid identifier");
+        verify(invalidDelete.response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
 
         WebContext edit = context();
         when(edit.request.getParameter("action")).thenReturn("edit");

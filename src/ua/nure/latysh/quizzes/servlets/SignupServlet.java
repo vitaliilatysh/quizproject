@@ -76,7 +76,7 @@ public class SignupServlet extends HttpServlet {
             userService.save(newUser);
             Optional<User> reloadedUser = userService.findUserByLogin(newUser.getLogin());
             if (reloadedUser.isEmpty()) {
-                resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Saved user could not be reloaded");
+                resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
                 return;
             }
             User savedUser = reloadedUser.get();

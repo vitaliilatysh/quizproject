@@ -66,8 +66,6 @@ public class SignupServletTest {
 
         servlet.doPost(request, response);
 
-        verify(response).sendError(
-                HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-                "Saved user could not be reloaded");
+        verify(response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 }

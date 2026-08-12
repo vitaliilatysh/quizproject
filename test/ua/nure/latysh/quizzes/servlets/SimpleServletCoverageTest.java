@@ -267,13 +267,13 @@ public class SimpleServletCoverageTest {
         when(missing.request.getParameter("subjectUpdatedName")).thenReturn("Missing");
         when(service.findSubjectById(404)).thenReturn(Optional.empty());
         servlet.doPost(missing.request, missing.response);
-        verify(missing.response).sendError(HttpServletResponse.SC_NOT_FOUND, "Subject not found");
+        verify(missing.response).setStatus(HttpServletResponse.SC_NOT_FOUND);
 
         WebContext invalidDelete = context();
         when(invalidDelete.request.getParameter("delete")).thenReturn("yes");
         when(invalidDelete.request.getParameter("subjectId")).thenReturn("invalid");
         servlet.doPost(invalidDelete.request, invalidDelete.response);
-        verify(invalidDelete.response).sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid identifier");
+        verify(invalidDelete.response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
     }
 
     @Test

@@ -80,19 +80,19 @@ public class QuizServlet extends HttpServlet {
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String quizId = req.getParameter("quiz");
-        Integer parsedQuizId = parseId(quizId, resp);
+        Integer parsedQuizId = parseId(quizId);
         if (parsedQuizId == null) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
         quizService.findQuizById(parsedQuizId).ifPresent(quizService::deleteQuiz);
         resp.sendRedirect("quizzes");
     }
 
-    private Integer parseId(String value, HttpServletResponse response) throws IOException {
+    private Integer parseId(String value) {
         try {
             return Integer.valueOf(value);
-        } catch (NumberFormatException exception) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid identifier");
+        } catch (NumberFormatException _) {
             return null;
         }
     }
@@ -166,11 +166,7 @@ public class QuizServlet extends HttpServlet {
         List<Level> complexities = levelService.findAllLevels();
 
 
-        if (!quizName.isEmpty() && quiz.isPresent() && quiz.get().getId() == Integer.parseInt(quizId)) {
-            quizDto.setName(quizName);
-            quizService.updateQuiz(quizDto);
-            response.sendRedirect("quizzes");
-        } else if (!quizName.isEmpty() && quiz.isPresent()) {
+        if (!quizName.isEmpty() && quiz.isPresent() && quiz.get().getId() != Integer.parseInt(quizId)) {
             request.setAttribute("complexities", complexities);
             request.setAttribute("quizComplexity", quizComplexity);
             request.setAttribute("subjects", subjects);

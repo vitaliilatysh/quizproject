@@ -46,8 +46,9 @@ public class SubjectServlet extends HttpServlet {
         } else if(request.getParameter("delete") != null) {
 
             String subjectId = request.getParameter("subjectId");
-            Integer parsedSubjectId = parseId(subjectId, response);
+            Integer parsedSubjectId = parseId(subjectId);
             if (parsedSubjectId == null) {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
             subjectService.findSubjectById(parsedSubjectId).ifPresent(subjectService::deleteSubject);
@@ -56,8 +57,9 @@ public class SubjectServlet extends HttpServlet {
             String forward = "/WEB-INF/views/edit_subject.jsp";
 
             String subjectId = request.getParameter("subjectId");
-            Integer parsedSubjectId = parseId(subjectId, response);
+            Integer parsedSubjectId = parseId(subjectId);
             if (parsedSubjectId == null) {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
             request.setAttribute("subject", subjectService.findSubjectById(parsedSubjectId).orElse(null));
@@ -68,13 +70,14 @@ public class SubjectServlet extends HttpServlet {
 
             String subjectId = request.getParameter("subjectId");
             String subjectName = request.getParameter("subjectUpdatedName");
-            Integer parsedSubjectId = parseId(subjectId, response);
+            Integer parsedSubjectId = parseId(subjectId);
             if (parsedSubjectId == null) {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
             Optional<Subject> subject = subjectService.findSubjectById(parsedSubjectId);
             if (subject.isEmpty()) {
-                response.sendError(HttpServletResponse.SC_NOT_FOUND, "Subject not found");
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 return;
             }
             Subject foundSubject = subject.get();
@@ -86,11 +89,10 @@ public class SubjectServlet extends HttpServlet {
         }
     }
 
-    private Integer parseId(String value, HttpServletResponse response) throws IOException {
+    private Integer parseId(String value) {
         try {
             return Integer.valueOf(value);
-        } catch (NumberFormatException exception) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid identifier");
+        } catch (NumberFormatException _) {
             return null;
         }
     }
