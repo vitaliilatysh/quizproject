@@ -22,6 +22,38 @@ jobs:
         shell: pwsh
         run: |
           Expand-Archive -LiteralPath .p2-payload.zip -DestinationPath . -Force
+          Remove-Item -LiteralPath .p2-payload.zip -Force
+          Remove-Item -LiteralPath sync-p2-branch.ps1 -Force
+          Remove-Item -LiteralPath .github/workflows/apply-p2.yml -Force
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Refactor P2 data reliability"
+          git push origin HEAD:vitaliilatysh-patch-1
+name: Apply P2 payload
+
+on:
+  push:
+    branches:
+      - vitaliilatysh-patch-1
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor == 'vitaliilatysh'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out publishing branch
+        uses: actions/checkout@v4
+        with:
+          ref: vitaliilatysh-patch-1
+
+      - name: Apply P2 changes
+        shell: pwsh
+        run: |
+          Expand-Archive -LiteralPath .p2-payload.zip -DestinationPath . -Force
           Remove-Item -LiteralPath .p2-payload.zip
           Remove-Item -LiteralPath sync-p2-branch.ps1
           Remove-Item -LiteralPath .github/workflows/apply-p2.yml
