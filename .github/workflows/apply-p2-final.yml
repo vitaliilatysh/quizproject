@@ -1,0 +1,27 @@
+name: Apply final P2 fixes
+
+on:
+  push:
+    branches: [vitaliilatysh-patch-1]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor == 'vitaliilatysh'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: vitaliilatysh-patch-1
+      - name: Apply payload
+        shell: pwsh
+        run: |
+          Expand-Archive .p2-final.zip -DestinationPath . -Force
+          Remove-Item .p2-final.zip -Force
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Finish P2 quality gate hardening"
+          git push
