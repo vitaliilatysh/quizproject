@@ -24,7 +24,7 @@ jobs:
           Expand-Archive -LiteralPath .p2-payload.zip -DestinationPath . -Force
           Remove-Item -LiteralPath .p2-payload.zip -Force
           Remove-Item -LiteralPath sync-p2-branch.ps1 -Force
-          Remove-Item -LiteralPath .github/workflows/apply-p2.yml -Force
+          git checkout -- .github/workflows/ci.yml .github/workflows/sonarqube.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all
