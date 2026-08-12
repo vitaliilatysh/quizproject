@@ -137,6 +137,20 @@ public class AttemptRepositorySecurityTest {
         }
     }
 
+    @Test
+    public void deleteHandlesJdbcFailuresWithoutEscapingTheRepositoryBoundary() throws Exception {
+        DbConnector dbConnector = mock(DbConnector.class);
+        Connection connection = mock(Connection.class);
+        when(dbConnector.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(anyString())).thenThrow(new SQLException("failed"));
+        Attempt attempt = new Attempt();
+        attempt.setId(5);
+
+        new AttemptRepositoryImpl(dbConnector).delete(attempt);
+
+        verify(connection).prepareStatement("DELETE FROM attempts WHERE id=?");
+    }
+
     private void expectReason(CompletionFixture fixture, Set<Integer> answers,
                               QuizSubmissionException.Reason reason) {
         try {
