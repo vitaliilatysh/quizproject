@@ -131,11 +131,13 @@ public class FilterCoverageTest {
         assertAuthorized(filter, "/results", "GET", null, 2, true);
         assertAuthorized(filter, "/results", "GET", null, 1, false);
         assertAuthorized(filter, "/quizzes", "GET", null, 2, true);
+        assertAuthorized(filter, "/quizzes", "GET", null, 1, true);
         assertAuthorized(filter, "/quizzes", "POST", "search", 2, true);
         assertAuthorized(filter, "/quizzes", "POST", "update", 1, true);
         assertAuthorized(filter, "/quizzes", "POST", "update", 2, false);
         assertAuthorized(filter, "/quizzes", "POST", "unknown", 1, false);
         assertAuthorized(filter, "/questions", "GET", null, 1, true);
+        assertAuthorized(filter, "/questions", "GET", null, 2, true);
         assertAuthorized(filter, "/questions", "POST", "run", 2, true);
         assertAuthorized(filter, "/questions", "POST", "run", 1, false);
         assertAuthorized(filter, "/questions", "POST", "editQuestion", 1, true);
