@@ -28,7 +28,7 @@ public class SignupServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        req.getRequestDispatcher("signup.jsp").forward(req, resp);
+        req.getRequestDispatcher("/WEB-INF/views/signup.jsp").forward(req, resp);
         logger.info("Signup page was opened");
     }
 
@@ -50,10 +50,12 @@ public class SignupServlet extends HttpServlet {
         ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
 
         if (login == null || login.isEmpty() || password == null || password.isBlank()
-                || confirmPassword == null || confirmPassword.isBlank()) {
+                || confirmPassword == null || confirmPassword.isBlank()
+                || password.length() < 8 || password.length() > 128
+                || password.chars().anyMatch(Character::isWhitespace)) {
             populateSignupForm(req, login, firstName, lastName);
             req.setAttribute("confirmPwMessage", mybundle.getString("validation.input.required"));
-            req.getRequestDispatcher("signup.jsp").forward(req, resp);
+            req.getRequestDispatcher("/WEB-INF/views/signup.jsp").forward(req, resp);
             return;
         }
 
@@ -72,6 +74,7 @@ public class SignupServlet extends HttpServlet {
         if (user == null && passwordsMatch) {
             userService.save(newUser);
             User savedUser = userService.findUserByLogin(newUser.getLogin());
+            savedUser.setPassword(null);
             HttpSession oldSession = req.getSession(false);
             if (oldSession != null) {
                 oldSession.invalidate();
@@ -82,8 +85,6 @@ public class SignupServlet extends HttpServlet {
             newSession.setAttribute("user", savedUser);
             newSession.setAttribute("lang", lang);
 
-            Cookie userLogin = new Cookie("user", savedUser.getLogin());
-            resp.addCookie(userLogin);
             savedUser.setLoginDateTime(new Date());
             userService.updateUserLoginDate(savedUser);
 
@@ -98,7 +99,7 @@ public class SignupServlet extends HttpServlet {
             if (!passwordsMatch) {
                 req.setAttribute("confirmPwMessage", mybundle.getString("validation.password"));
             }
-            req.getRequestDispatcher("signup.jsp").forward(req, resp);
+            req.getRequestDispatcher("/WEB-INF/views/signup.jsp").forward(req, resp);
         }
     }
 

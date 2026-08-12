@@ -26,7 +26,7 @@ public class QuizServletTest {
         RequestDispatcher dispatcher = mock(RequestDispatcher.class);
 
         when(request.getParameter("action")).thenReturn(null);
-        when(request.getRequestDispatcher("quizzes.jsp")).thenReturn(dispatcher);
+        when(request.getRequestDispatcher("/WEB-INF/views/quizzes.jsp")).thenReturn(dispatcher);
         when(quizService.getAllQuizzes()).thenReturn(Collections.emptyList());
 
         servlet.doPost(request, response);

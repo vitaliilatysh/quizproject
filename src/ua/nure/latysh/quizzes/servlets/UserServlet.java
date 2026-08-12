@@ -28,7 +28,7 @@ public class UserServlet extends HttpServlet {
         List<UserDto> userList = userService.findAllUsers();
 
         req.setAttribute("users", userList);
-        req.getRequestDispatcher("users.jsp").forward(req, resp);
+        req.getRequestDispatcher("/WEB-INF/views/users.jsp").forward(req, resp);
     }
 
     @Override

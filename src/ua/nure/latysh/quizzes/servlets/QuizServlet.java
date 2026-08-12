@@ -40,7 +40,7 @@ public class QuizServlet extends HttpServlet {
                          HttpServletResponse response) throws ServletException, IOException {
         List<QuizDto> quizzes = quizService.getAllQuizzes();
         request.setAttribute("quizzes", quizzes);
-        request.getRequestDispatcher("quizzes.jsp").forward(request, response);
+        request.getRequestDispatcher("/WEB-INF/views/quizzes.jsp").forward(request, response);
     }
 
     @Override
@@ -91,7 +91,7 @@ public class QuizServlet extends HttpServlet {
 
         req.setAttribute("complexities", complexities);
         req.setAttribute("subjects", subjects);
-        req.getRequestDispatcher("addQuiz.jsp").forward(req, resp);
+        req.getRequestDispatcher("/WEB-INF/views/addQuiz.jsp").forward(req, resp);
     }
 
     void create(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
@@ -126,7 +126,7 @@ public class QuizServlet extends HttpServlet {
             request.setAttribute("quizTime", quizTime);
             request.setAttribute("quizName", quizName);
             request.setAttribute("quizNameMessage", mybundle.getString("validation.input.username.exist"));
-            request.getRequestDispatcher("addQuiz.jsp").forward(request, response);
+            request.getRequestDispatcher("/WEB-INF/views/addQuiz.jsp").forward(request, response);
         }
     }
 
@@ -165,7 +165,7 @@ public class QuizServlet extends HttpServlet {
             request.setAttribute("quizName", quizName);
             request.setAttribute("quiz", quizId);
             request.setAttribute("quizNameMessage", mybundle.getString("validation.input.username.exist"));
-            request.getRequestDispatcher("editQuiz.jsp").forward(request, response);
+            request.getRequestDispatcher("/WEB-INF/views/editQuiz.jsp").forward(request, response);
         } else if (!quizName.isEmpty() && !quizName.equalsIgnoreCase(quiz.getName())) {
             quizDto.setName(quizName);
             quizService.updateQuiz(quizDto);
@@ -190,7 +190,7 @@ public class QuizServlet extends HttpServlet {
         request.setAttribute("quizTime", Integer.parseInt(quizTime));
         request.setAttribute("complexities", complexities);
         request.setAttribute("subjects", subjects);
-        request.getRequestDispatcher("editQuiz.jsp").forward(request, response);
+        request.getRequestDispatcher("/WEB-INF/views/editQuiz.jsp").forward(request, response);
     }
 
     void search(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
@@ -200,7 +200,7 @@ public class QuizServlet extends HttpServlet {
 
             request.setAttribute("quizzes", foundQuizzes);
             request.setAttribute("subjectName", subjectName);
-            request.getRequestDispatcher("quizzes.jsp").forward(request, response);
+            request.getRequestDispatcher("/WEB-INF/views/quizzes.jsp").forward(request, response);
         }
     }
 }

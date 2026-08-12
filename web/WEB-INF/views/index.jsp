@@ -19,6 +19,7 @@
     <section class="row justify-content-center">
         <section class="col-lg-3 col-md-6 col-sm-6 col-xs-12">
             <form class="form-container needs-validation" method="post" action="login" novalidate>
+                <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
                 <h4 class="text-center font-weight-bold"><fmt:message key="login.header"/></h4>
                 <div class="form-group">
                     <input autofocus class="form-control" id="username" name="username" placeholder=
@@ -32,8 +33,8 @@
                 <div class="form-group">
                     <input class="form-control" id="password" name="password" placeholder=
                     <fmt:message key="input.password.placeholder"/>
-                            onkeyup="this.classList.remove('is-invalid')" required minlength="5" maxlength="15"
-                           pattern="[^\s]{5,15}"
+                            onkeyup="this.classList.remove('is-invalid')" required maxlength="128"
+                           pattern="[^\s]{1,128}"
                            type="password">
                     <div class="invalidMessage">
                         ${passwordMessage}

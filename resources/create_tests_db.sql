@@ -15,25 +15,6 @@ VALUES (1, 'admin');
 INSERT INTO roles
 VALUES (2, 'student');
 
-
-CREATE TABLE users
-(
-  id            INTEGER     NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  login         VARCHAR(15) NOT NULL UNIQUE,
-  password      VARCHAR(15) NOT NULL,
-  first_name    VARCHAR(20) NOT NULL,
-  last_name     VARCHAR(20) NOT NULL,
-  register_date DATETIME    NOT NULL,
-  login_date    DATETIME,
-  status_id     INTEGER     NOT NULL REFERENCES statuses (id),
-  role_id       INTEGER     NOT NULL REFERENCES roles (id)
-);
-
-INSERT INTO users
-VALUES (1, 'admin', 'admin', 'Ivan', 'Ivanov', '2018-02-01 22:22:22', '2018-02-01 22:22:22', 1, 1);
-INSERT INTO users
-VALUES (2, 'student', 'student', 'Petr', 'Petrov', '2018-02-01 22:22:22', '2018-02-01 22:22:22', 1, 2);
-
 CREATE TABLE statuses
 (
   id   INTEGER     NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -44,6 +25,24 @@ INSERT INTO statuses
 VALUES (1, 'active');
 INSERT INTO statuses
 VALUES (2, 'blocked');
+
+CREATE TABLE users
+(
+  id            INTEGER     NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  login         VARCHAR(15) NOT NULL UNIQUE,
+  password      VARCHAR(255) NOT NULL,
+  first_name    VARCHAR(20) NOT NULL,
+  last_name     VARCHAR(20) NOT NULL,
+  register_date DATETIME    NOT NULL,
+  login_date    DATETIME,
+  status_id     INTEGER     NOT NULL,
+  role_id       INTEGER     NOT NULL,
+  FOREIGN KEY (status_id) REFERENCES statuses (id),
+  FOREIGN KEY (role_id) REFERENCES roles (id)
+);
+
+-- Register the first user through the application, then promote it explicitly:
+-- UPDATE users SET role_id = 1 WHERE login = '<initial-admin-login>';
 
 CREATE TABLE subjects
 (
@@ -178,11 +177,14 @@ VALUES ('no', false, 5);
 
 CREATE TABLE attempts
 (
-  id       INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  score    INTEGER NOT NULL,
-  end_time DATETIME,
-  quiz_id  INTEGER NOT NULL REFERENCES quizzes (id),
-  user_id  INTEGER NOT NULL REFERENCES users (id),
+  id         INTEGER  NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  score      INTEGER  NOT NULL DEFAULT 0,
+  start_time DATETIME NOT NULL,
+  expires_at DATETIME NOT NULL,
+  end_time   DATETIME,
+  completed  BOOLEAN  NOT NULL DEFAULT FALSE,
+  quiz_id    INTEGER  NOT NULL,
+  user_id    INTEGER  NOT NULL,
   FOREIGN KEY (user_id)
     REFERENCES users (id)
       ON DELETE CASCADE
@@ -196,8 +198,13 @@ CREATE TABLE attempts
 CREATE TABLE results
 (
   id         INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  answer_id  INTEGER NOT NULL REFERENCES answers (id),
-  attempt_id INTEGER NOT NULL REFERENCES attempts (id),
+  answer_id  INTEGER NOT NULL,
+  attempt_id INTEGER NOT NULL,
+  CONSTRAINT uq_results_attempt_answer UNIQUE (attempt_id, answer_id),
+  FOREIGN KEY (answer_id)
+    REFERENCES answers (id)
+      ON DELETE CASCADE
+      ON UPDATE RESTRICT,
   FOREIGN KEY (attempt_id)
     REFERENCES attempts (id)
       ON DELETE CASCADE

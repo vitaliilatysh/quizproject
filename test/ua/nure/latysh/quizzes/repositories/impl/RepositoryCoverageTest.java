@@ -26,6 +26,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
@@ -290,12 +291,9 @@ public class RepositoryCoverageTest {
         assertTrue(repository.save(user));
         repository.update(user);
         repository.updateLoginDate(user);
+        repository.updatePassword(user);
         ok.oneRow();
         assertEquals(1, repository.findAll().size());
-        ok.oneRow();
-        assertNotNull(repository.findByLoginAndPassword("user", "secret"));
-        ok.empty();
-        assertEquals(null, repository.findByLoginAndPassword("missing", "secret"));
         ok.oneRow();
         assertNotNull(repository.findByLogin("user"));
         ok.empty();
@@ -308,7 +306,7 @@ public class RepositoryCoverageTest {
         assertFalse(failing.save(user));
         failing.update(user);
         failing.updateLoginDate(user);
-        assertNotNull(failing.findByLoginAndPassword("user", "secret"));
+        failing.updatePassword(user);
         assertNotNull(failing.findByLogin("user"));
         failed.failStatements();
         assertTrue(failing.findAll().isEmpty());
@@ -327,6 +325,8 @@ public class RepositoryCoverageTest {
         Attempt attempt = new Attempt();
         attempt.setId(1);
         attempt.setScore(80);
+        attempt.setStartTime(new Date());
+        attempt.setExpiresAt(new Date(System.currentTimeMillis() + 60_000));
         attempt.setEndTime(new Date());
         attempt.setQuizId(2);
         attempt.setUserId(3);
@@ -407,14 +407,19 @@ public class RepositoryCoverageTest {
         private final PreparedStatement preparedStatement = mock(PreparedStatement.class);
         private final Statement statement = mock(Statement.class);
         private final ResultSet resultSet = mock(ResultSet.class);
+        private final ResultSet generatedKeys = mock(ResultSet.class);
 
         private Fixture() throws SQLException {
             when(dbConnector.getConnection()).thenReturn(connection);
             when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+            when(connection.prepareStatement(anyString(), anyInt())).thenReturn(preparedStatement);
             when(connection.createStatement()).thenReturn(statement);
             when(preparedStatement.executeQuery()).thenReturn(resultSet);
+            when(preparedStatement.getGeneratedKeys()).thenReturn(generatedKeys);
             when(statement.executeQuery(anyString())).thenReturn(resultSet);
             when(resultSet.getTimestamp(anyString())).thenReturn(new Timestamp(1_700_000_000_000L));
+            when(generatedKeys.next()).thenReturn(true);
+            when(generatedKeys.getInt(1)).thenReturn(42);
         }
 
         private void oneRow() throws SQLException {
@@ -430,6 +435,7 @@ public class RepositoryCoverageTest {
 
         private void failPreparedStatements() throws SQLException {
             when(connection.prepareStatement(anyString())).thenThrow(new SQLException("failed"));
+            when(connection.prepareStatement(anyString(), anyInt())).thenThrow(new SQLException("failed"));
         }
 
         private void failStatements() throws SQLException {

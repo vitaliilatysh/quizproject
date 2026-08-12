@@ -6,8 +6,11 @@ public class Attempt {
     private int id;
     private int score;
     private Date endTime;
+    private Date startTime;
+    private Date expiresAt;
     private int quizId;
     private int userId;
+    private boolean completed;
 
     public int getId() {
         return id;
@@ -47,5 +50,29 @@ public class Attempt {
 
     public void setEndTime(Date endTime) {
         this.endTime = endTime;
+    }
+
+    public Date getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(Date startTime) {
+        this.startTime = startTime;
+    }
+
+    public Date getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(Date expiresAt) {
+        this.expiresAt = expiresAt;
+    }
+
+    public boolean isCompleted() {
+        return completed;
+    }
+
+    public void setCompleted(boolean completed) {
+        this.completed = completed;
     }
 }

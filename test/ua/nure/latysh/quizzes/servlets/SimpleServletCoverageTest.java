@@ -91,7 +91,6 @@ public class SimpleServletCoverageTest {
         servlet.doPost(success.request, success.response);
         verify(oldSession).invalidate();
         verify(newSession).setMaxInactiveInterval(300);
-        verify(success.response).addCookie(any());
         verify(userService).updateUserLoginDate(activeUser);
         verify(success.response).sendRedirect("quizzes");
     }
@@ -113,7 +112,7 @@ public class SimpleServletCoverageTest {
         User existingUser = user(4, "existing", 1);
         when(userService.findUserByLogin("existing")).thenReturn(existingUser);
         WebContext existing = context();
-        stubSignup(existing, "existing", "First", "Last", "one", "two", Locale.ENGLISH);
+        stubSignup(existing, "existing", "First", "Last", "password-one", "password-two", Locale.ENGLISH);
         servlet.doPost(existing.request, existing.response);
         verify(existing.request).setAttribute("usernameMessage",
                 java.util.ResourceBundle.getBundle("messages", Locale.ENGLISH)
@@ -127,14 +126,13 @@ public class SimpleServletCoverageTest {
         WebContext success = context();
         HttpSession oldSession = mock(HttpSession.class);
         HttpSession newSession = mock(HttpSession.class);
-        stubSignup(success, " new-user ", "First", "Last", "secret", "secret", null);
+        stubSignup(success, " new-user ", "First", "Last", "strong-password", "strong-password", null);
         when(success.request.getSession(false)).thenReturn(oldSession);
         when(success.request.getSession(true)).thenReturn(newSession);
         servlet.doPost(success.request, success.response);
         verify(userService).save(any(User.class));
         verify(oldSession).invalidate();
         verify(newSession).setAttribute("user", savedUser);
-        verify(success.response).addCookie(any());
         verify(userService).updateUserLoginDate(savedUser);
         verify(success.response).sendRedirect("quizzes");
     }
@@ -165,30 +163,24 @@ public class SimpleServletCoverageTest {
     @Test
     public void resultServletCoversSubmissionAndUserHistory() throws Exception {
         ResultService resultService = mock(ResultService.class);
-        UserService userService = mock(UserService.class);
         AttemptService attemptService = mock(AttemptService.class);
-        ResultServlet servlet = new ResultServlet(resultService, userService, attemptService);
+        ResultServlet servlet = new ResultServlet(resultService, attemptService);
         User sessionUser = user(8, "alice", 1);
-        User persistedUser = user(8, "alice", 1);
-        Attempt attempt = new Attempt();
-        attempt.setId(9);
-        when(userService.findUserByLogin("alice")).thenReturn(persistedUser);
-        when(attemptService.findTheLatestForUser(persistedUser)).thenReturn(attempt);
-        when(resultService.getResultForQuizByAttemptId(9)).thenReturn(75.9f);
 
         WebContext submit = context();
         when(submit.request.getParameterValues("answerId")).thenReturn(new String[]{"11", "12"});
+        when(submit.request.getSession(false)).thenReturn(submit.session);
         when(submit.session.getAttribute("user")).thenReturn(sessionUser);
+        when(submit.session.getAttribute("attemptId")).thenReturn(9);
         servlet.doPost(submit.request, submit.response);
-        verify(resultService, org.mockito.Mockito.times(2)).saveResult(any());
-        verify(attemptService).updateAttemptByScore(attempt);
-        verify(submit.response).addCookie(any());
-        verify(submit.dispatcher).forward(submit.request, submit.response);
+        verify(attemptService).completeAttempt(9, 8, java.util.Set.of(11, 12));
+        verify(submit.session).removeAttribute("attemptId");
+        verify(submit.response).sendRedirect("quizzes");
 
         ResultDto resultDto = new ResultDto();
         when(resultService.getAllResultsByUserId(8)).thenReturn(List.of(resultDto));
         WebContext history = context();
-        when(history.request.getSession(true)).thenReturn(history.session);
+        when(history.request.getSession(false)).thenReturn(history.session);
         when(history.session.getAttribute("user")).thenReturn(sessionUser);
         servlet.doGet(history.request, history.response);
         verify(history.request).setAttribute("userResults", List.of(resultDto));

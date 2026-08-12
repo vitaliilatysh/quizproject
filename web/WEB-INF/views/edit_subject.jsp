@@ -7,6 +7,7 @@
 <body>
 <table>
     <form action="subjects?subjectId=${subject.id}" method="post">
+        <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
         <input type="text" name="subjectUpdatedName" value=${subject.name}>
         <button class="btn btn-primary btn-block" type="submit">Save</button>
     </form>

@@ -24,9 +24,14 @@ import ua.nure.latysh.quizzes.repositories.RoleRepository;
 import ua.nure.latysh.quizzes.repositories.StatusRepository;
 import ua.nure.latysh.quizzes.repositories.SubjectRepository;
 import ua.nure.latysh.quizzes.repositories.UserRepository;
+import ua.nure.latysh.quizzes.security.PasswordHasher;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -92,6 +97,28 @@ public class ServiceCoverageTest {
         service.updateAttemptByScore(attempt);
 
         verify(repository).update(attempt);
+    }
+
+    @Test
+    public void attemptServiceStartsAndCompletesUsingTheServerClock() {
+        AttemptRepository repository = mock(AttemptRepository.class);
+        Instant now = Instant.parse("2026-08-12T08:00:00Z");
+        AttemptService service = new AttemptService(repository, Clock.fixed(now, ZoneOffset.UTC));
+        User user = user(5, "alice");
+        Quiz quiz = quiz(7, "Security", 1, 1, 3);
+        when(repository.create(org.mockito.ArgumentMatchers.any(Attempt.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Attempt started = service.startAttempt(user, quiz);
+        assertEquals(5, started.getUserId());
+        assertEquals(7, started.getQuizId());
+        assertEquals(Date.from(now), started.getStartTime());
+        assertEquals(Date.from(now.plusSeconds(180)), started.getExpiresAt());
+        assertFalse(started.isCompleted());
+
+        Set<Integer> answers = Set.of(10, 20);
+        service.completeAttempt(9, 5, answers);
+        verify(repository).complete(9, 5, answers, Date.from(now));
     }
 
     @Test
@@ -196,20 +223,23 @@ public class ServiceCoverageTest {
         UserRepository userRepository = mock(UserRepository.class);
         RoleRepository roleRepository = mock(RoleRepository.class);
         StatusRepository statusRepository = mock(StatusRepository.class);
-        UserService service = new UserService(userRepository, roleRepository, statusRepository);
+        PasswordHasher passwordHasher = mock(PasswordHasher.class);
+        UserService service = new UserService(userRepository, roleRepository, statusRepository, passwordHasher);
         User user = user(6, "alice");
         Role role = new Role();
         role.setRole("user");
         Status status = new Status();
         status.setStatus("active");
-        when(userRepository.findByLoginAndPassword("alice", "secret")).thenReturn(user);
         when(userRepository.findByLogin("alice")).thenReturn(user);
+        when(passwordHasher.matchesLegacy("secret", user.getPassword())).thenReturn(true);
+        when(passwordHasher.hash("secret")).thenReturn("encoded");
         when(userRepository.findAll()).thenReturn(List.of(user));
         when(userRepository.findById(6)).thenReturn(user);
         when(roleRepository.findById(2)).thenReturn(role);
         when(statusRepository.findById(1)).thenReturn(status);
 
         assertEquals(user, service.findByLoginAndPassword("alice", "secret"));
+        verify(userRepository).updatePassword(user);
         assertEquals(user, service.findUserByLogin("alice"));
         List<UserDto> users = service.findAllUsers();
         assertEquals(1, users.size());
@@ -227,6 +257,41 @@ public class ServiceCoverageTest {
         service.updateUserLoginDate(user);
         verify(userRepository).save(user);
         verify(userRepository).updateLoginDate(user);
+    }
+
+    @Test
+    public void userServiceCoversEncodedPasswordsFailuresAndAlreadyHashedSaves() {
+        UserRepository userRepository = mock(UserRepository.class);
+        RoleRepository roleRepository = mock(RoleRepository.class);
+        StatusRepository statusRepository = mock(StatusRepository.class);
+        assertNotNull(new UserService(userRepository, roleRepository, statusRepository));
+
+        PasswordHasher passwordHasher = mock(PasswordHasher.class);
+        UserService service = new UserService(userRepository, roleRepository, statusRepository, passwordHasher);
+        User encodedUser = user(7, "encoded");
+        encodedUser.setPassword("pbkdf2-value");
+        when(userRepository.findByLogin("encoded")).thenReturn(encodedUser);
+        when(passwordHasher.isEncoded("pbkdf2-value")).thenReturn(true);
+        when(passwordHasher.matches("secret", "pbkdf2-value")).thenReturn(true);
+
+        assertEquals(encodedUser, service.findByLoginAndPassword("encoded", "secret"));
+        assertEquals(null, encodedUser.getPassword());
+        verify(userRepository, org.mockito.Mockito.never()).updatePassword(encodedUser);
+
+        User invalidUser = user(8, "invalid");
+        invalidUser.setPassword("hash");
+        when(userRepository.findByLogin("invalid")).thenReturn(invalidUser);
+        when(passwordHasher.isEncoded("hash")).thenReturn(true);
+        when(passwordHasher.matches("wrong", "hash")).thenReturn(false);
+        assertEquals(null, service.findByLoginAndPassword("invalid", "wrong"));
+        assertEquals(null, service.findByLoginAndPassword("missing", "password"));
+
+        User alreadyEncoded = user(9, "saved");
+        alreadyEncoded.setPassword("encoded-save");
+        when(passwordHasher.isEncoded("encoded-save")).thenReturn(true);
+        service.save(alreadyEncoded);
+        verify(passwordHasher, org.mockito.Mockito.never()).hash("encoded-save");
+        verify(userRepository).save(alreadyEncoded);
     }
 
     @Test

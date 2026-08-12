@@ -13,6 +13,7 @@
     <div class="page-header">
         <h1>Subjects</h1>
         <form action="logout" method="post">
+            <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
             <input type="submit" value="Logout">
         </form>
     </div>
@@ -22,17 +23,20 @@
                 <td><a href="quizzes?subject=${subject.id}">${subject.name}</a></td>
                 <td>
                     <form action="subjects?subjectId=${subject.id}" method="post">
+                        <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
                         <button type="submit" class="btn btn-danger" name="delete">Delete</button>
                     </form>
                 </td>
                 <td>
                     <form action="subjects?subjectId=${subject.id}" method="post">
+                        <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
                         <button type="submit" class="btn btn-success" name="edit">Edit</button>
                     </form>
                 </td>
             </tr>
         </c:forEach>
         <form action="subjects" method="post">
+            <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
             <input type="text" name="subjectNewName" value=${subjectNewName}>
             <button class="btn btn-info" type="submit">Add</button>
         </form>
