@@ -28,7 +28,7 @@ public class SignupServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        req.getRequestDispatcher("/WEB-INF/views/signup.jsp").forward(req, resp);
+        ServletResponseHandler.forward(req.getRequestDispatcher("/WEB-INF/views/signup.jsp"), req, resp);
         logger.info("Signup page was opened");
     }
 
@@ -55,7 +55,7 @@ public class SignupServlet extends HttpServlet {
                 || password.chars().anyMatch(Character::isWhitespace)) {
             populateSignupForm(req, login, firstName, lastName);
             req.setAttribute("confirmPwMessage", mybundle.getString("validation.input.required"));
-            req.getRequestDispatcher("/WEB-INF/views/signup.jsp").forward(req, resp);
+            ServletResponseHandler.forward(req.getRequestDispatcher("/WEB-INF/views/signup.jsp"), req, resp);
             return;
         }
 
@@ -89,7 +89,7 @@ public class SignupServlet extends HttpServlet {
             userService.updateUserLoginDate(savedUser);
 
             req.setAttribute("user", savedUser);
-            resp.sendRedirect("quizzes");
+            ServletResponseHandler.redirect(resp, "quizzes");
             logger.info(newUser.getLogin() + "logged in");
         } else {
             populateSignupForm(req, login, firstName, lastName);
@@ -99,7 +99,7 @@ public class SignupServlet extends HttpServlet {
             if (!passwordsMatch) {
                 req.setAttribute("confirmPwMessage", mybundle.getString("validation.password"));
             }
-            req.getRequestDispatcher("/WEB-INF/views/signup.jsp").forward(req, resp);
+            ServletResponseHandler.forward(req.getRequestDispatcher("/WEB-INF/views/signup.jsp"), req, resp);
         }
     }
 
