@@ -9,6 +9,7 @@ import ua.nure.latysh.quizzes.services.ResultService;
 import ua.nure.latysh.quizzes.services.UserService;
 
 import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -16,6 +17,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -120,6 +122,28 @@ public class SecurityServletCoverageTest {
         verify(session).removeAttribute("questions");
         verify(session).removeAttribute("answersPerQuestion");
         verify(response).sendRedirect("quizzes");
+    }
+
+    @Test
+    public void responseHandlerConvertsContainerIoFailuresIntoInternalServerErrors() throws Exception {
+        assertNotNull(new ServletResponseHandler());
+        HttpServletRequest request = mock(HttpServletRequest.class);
+
+        HttpServletResponse forwardResponse = mock(HttpServletResponse.class);
+        RequestDispatcher dispatcher = mock(RequestDispatcher.class);
+        doThrow(new ServletException("failed")).when(dispatcher).forward(request, forwardResponse);
+        ServletResponseHandler.forward(dispatcher, request, forwardResponse);
+        verify(forwardResponse).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
+        HttpServletResponse errorResponse = mock(HttpServletResponse.class);
+        doThrow(new java.io.IOException("failed")).when(errorResponse).sendError(400, "failed");
+        ServletResponseHandler.sendError(errorResponse, 400, "failed");
+        verify(errorResponse).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
+        HttpServletResponse redirectResponse = mock(HttpServletResponse.class);
+        doThrow(new java.io.IOException("failed")).when(redirectResponse).sendRedirect("target");
+        ServletResponseHandler.redirect(redirectResponse, "target");
+        verify(redirectResponse).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 
     private static HttpServletRequest requestWithSession(HttpSession session) {
