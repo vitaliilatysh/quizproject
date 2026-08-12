@@ -43,3 +43,16 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: ./gradlew clean check jacocoTestReport sonar --no-daemon
+
+      - name: Report uncovered lines
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('build/reports/jacoco/test/jacocoTestReport.xml').getroot()
+          for package in root.findall('package'):
+              for source in package.findall('sourcefile'):
+                  for line in source.findall('line'):
+                      if int(line.get('mi', '0')) > 0:
+                          print(f"{package.get('name')}/{source.get('name')}:{line.get('nr')} missed={line.get('mi')} covered={line.get('ci')}")
+          PY
