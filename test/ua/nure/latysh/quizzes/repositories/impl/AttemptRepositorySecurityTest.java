@@ -106,6 +106,28 @@ public class AttemptRepositorySecurityTest {
         verify(fixture.dbConnector).rollback(fixture.connection);
         verify(fixture.connection).close();
 
+        CompletionFixture rollbackFailure = new CompletionFixture(true, false, FUTURE,
+                new int[0], new int[0], new boolean[0], 1);
+        when(rollbackFailure.connection.prepareStatement(anyString())).thenThrow(new SQLException("failed"));
+        org.mockito.Mockito.doThrow(new RepositoryException("rollback failed", null))
+                .when(rollbackFailure.dbConnector).rollback(rollbackFailure.connection);
+        try {
+            new AttemptRepositoryImpl(rollbackFailure.dbConnector).complete(5, 7, Set.of(), COMPLETED_AT);
+            fail("Expected JDBC failure with suppressed rollback failure");
+        } catch (RepositoryException expected) {
+            assertEquals(1, expected.getSuppressed().length);
+        }
+
+        CompletionFixture closeFailure = new CompletionFixture(true, false, FUTURE,
+                new int[0], new int[0], new boolean[0], 1);
+        org.mockito.Mockito.doThrow(new SQLException("close failed")).when(closeFailure.connection).close();
+        try {
+            new AttemptRepositoryImpl(closeFailure.dbConnector).complete(5, 7, Set.of(), COMPLETED_AT);
+            fail("Expected transaction close failure");
+        } catch (RepositoryException expected) {
+            assertTrue(expected.getMessage().contains("close attempt transaction"));
+        }
+
         DbConnector unavailable = mock(DbConnector.class);
         when(unavailable.getConnection()).thenThrow(new RepositoryException("unavailable", null));
         try {

@@ -149,6 +149,12 @@ public class SimpleServletCoverageTest {
         verify(logout.session).invalidate();
         verify(logout.response).sendRedirect("/quiz/");
 
+        WebContext anonymousLogout = context();
+        when(anonymousLogout.request.getSession(false)).thenReturn(anonymousLogout.session);
+        when(anonymousLogout.request.getContextPath()).thenReturn("/quiz");
+        new LogoutServlet().doPost(anonymousLogout.request, anonymousLogout.response);
+        verify(anonymousLogout.session).invalidate();
+
         UserService userService = mock(UserService.class);
         UserDto dto = new UserDto();
         when(userService.convertUserToUserDto(user)).thenReturn(dto);
@@ -255,6 +261,13 @@ public class SimpleServletCoverageTest {
         servlet.doPost(update.request, update.response);
         verify(service).updateSubject(subject);
         verify(update.response).sendRedirect("subjects");
+
+        WebContext missing = context();
+        when(missing.request.getParameter("subjectId")).thenReturn("404");
+        when(missing.request.getParameter("subjectUpdatedName")).thenReturn("Missing");
+        when(service.findSubjectById(404)).thenReturn(Optional.empty());
+        org.junit.Assert.assertThrows(IllegalArgumentException.class,
+                () -> servlet.doPost(missing.request, missing.response));
     }
 
     @Test

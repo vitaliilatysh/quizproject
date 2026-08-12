@@ -23,6 +23,7 @@ import java.util.Locale;
 import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -181,6 +182,30 @@ public class QuestionServletCoverageTest {
         verify(dependencies.answerService, org.mockito.Mockito.times(8)).updateAnswer(any());
         verify(firstPattern.request).setAttribute("quiz", 12);
         verify(secondPattern.dispatcher).forward(secondPattern.request, secondPattern.response);
+    }
+
+    @Test
+    public void missingRequiredEntitiesFailFast() {
+        Dependencies dependencies = new Dependencies();
+        QuestionServlet servlet = dependencies.servlet();
+
+        WebContext edit = action("edit");
+        when(edit.request.getParameter("question")).thenReturn("404");
+        when(dependencies.questionService.findQuestionById(404)).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(edit.request, edit.response));
+
+        WebContext delete = action("delete");
+        when(delete.request.getParameter("question")).thenReturn("404");
+        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(delete.request, delete.response));
+
+        WebContext run = action("run");
+        when(run.request.getParameter("quiz")).thenReturn("404");
+        when(dependencies.quizService.findQuizById(404)).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(run.request, run.response));
+
+        WebContext save = editForm();
+        when(save.request.getParameter("questionId")).thenReturn("404");
+        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(save.request, save.response));
     }
 
     private static WebContext questionForm(String action) {

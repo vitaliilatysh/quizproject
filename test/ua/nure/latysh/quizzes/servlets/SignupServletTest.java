@@ -17,6 +17,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.Assert.assertThrows;
 
 public class SignupServletTest {
 
@@ -45,5 +46,25 @@ public class SignupServletTest {
         verify(request, never()).setAttribute(eq("password"), any());
         verify(request, never()).setAttribute(eq("confirmPassword"), any());
         verify(dispatcher).forward(request, response);
+    }
+
+    @Test
+    public void savedUserMustBeReloadable() {
+        UserService userService = mock(UserService.class);
+        SignupServlet servlet = new SignupServlet(userService);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        HttpSession session = mock(HttpSession.class);
+
+        when(request.getParameter("username")).thenReturn("student");
+        when(request.getParameter("firstName")).thenReturn("Test");
+        when(request.getParameter("lastName")).thenReturn("User");
+        when(request.getParameter("password")).thenReturn("Secret12");
+        when(request.getParameter("confirmPassword")).thenReturn("Secret12");
+        when(request.getSession()).thenReturn(session);
+        when(session.getAttribute("lang")).thenReturn(Locale.ENGLISH);
+        when(userService.findUserByLogin("student")).thenReturn(Optional.empty());
+
+        assertThrows(IllegalStateException.class, () -> servlet.doPost(request, response));
     }
 }

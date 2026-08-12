@@ -43,6 +43,8 @@ public class RepositoryCoverageTest {
         Answer answer = answer();
         ok.oneRow();
         assertTrue(repository.findById(1).isPresent());
+        ok.empty();
+        assertTrue(repository.findById(404).isEmpty());
         repository.delete(answer);
         assertTrue(repository.save(answer));
         repository.update(answer);
@@ -70,6 +72,8 @@ public class RepositoryCoverageTest {
         Attempt attempt = attempt();
         ok.oneRow();
         assertTrue(repository.findById(1).isPresent());
+        ok.empty();
+        assertTrue(repository.findById(404).isEmpty());
         repository.delete(attempt);
         assertTrue(repository.save(attempt));
         repository.update(attempt);
@@ -79,6 +83,8 @@ public class RepositoryCoverageTest {
         assertEquals(1, repository.findAllByUserId(3).size());
         ok.oneRow();
         assertTrue(repository.findLastByUserId(3).isPresent());
+        ok.empty();
+        assertTrue(repository.findLastByUserId(404).isEmpty());
         ok.oneRow();
         assertEquals(1, repository.findAllBetweenFinishDates("from", "to").size());
 
@@ -102,8 +108,12 @@ public class RepositoryCoverageTest {
         Level level = level();
         ok.oneRow();
         assertTrue(repository.findById(1).isPresent());
+        ok.empty();
+        assertTrue(repository.findById(404).isEmpty());
         ok.oneRow();
         assertTrue(repository.findByName("hard").isPresent());
+        ok.empty();
+        assertTrue(repository.findByName("missing").isEmpty());
         repository.delete(level);
         assertTrue(repository.save(level));
         repository.update(level);
@@ -129,6 +139,8 @@ public class RepositoryCoverageTest {
         Question question = question();
         ok.oneRow();
         assertTrue(repository.findById(1).isPresent());
+        ok.empty();
+        assertTrue(repository.findById(404).isEmpty());
         ok.oneRow();
         repository.delete(question);
         ok.oneRow();
@@ -141,6 +153,8 @@ public class RepositoryCoverageTest {
         assertEquals(1, repository.findAllByQuizId(2).size());
         ok.oneRow();
         assertTrue(repository.findByName("Question").isPresent());
+        ok.empty();
+        assertTrue(repository.findByName("missing").isEmpty());
 
         Fixture failed = new Fixture();
         QuestionRepositoryImpl failing = new QuestionRepositoryImpl(failed.dbConnector);
@@ -239,6 +253,8 @@ public class RepositoryCoverageTest {
         Role role = role();
         roleOk.oneRow();
         assertTrue(roles.findById(1).isPresent());
+        roleOk.empty();
+        assertTrue(roles.findById(404).isEmpty());
         roles.delete(role);
         assertTrue(roles.save(role));
         roles.update(role);
@@ -260,6 +276,8 @@ public class RepositoryCoverageTest {
         Status status = status();
         statusOk.oneRow();
         assertTrue(statuses.findById(1).isPresent());
+        statusOk.empty();
+        assertTrue(statuses.findById(404).isEmpty());
         statuses.delete(status);
         assertTrue(statuses.save(status));
         statuses.update(status);
@@ -284,8 +302,12 @@ public class RepositoryCoverageTest {
         Subject subject = subject();
         ok.oneRow();
         assertTrue(repository.findByName("Java").isPresent());
+        ok.empty();
+        assertTrue(repository.findByName("missing").isEmpty());
         ok.oneRow();
         assertTrue(repository.findById(1).isPresent());
+        ok.empty();
+        assertTrue(repository.findById(404).isEmpty());
         ok.oneRow();
         repository.delete(subject);
         assertTrue(repository.save(subject));
