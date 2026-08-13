@@ -6,18 +6,20 @@
 
 - Java 25
 - Java Servlet API 4.0 (`javax.servlet`) і JSP
+- Spring Boot 4.1 REST API
 - Gradle 9.6.1
 - MySQL 8
-- JUnit 4 та Mockito
+- JUnit 4/6 та Mockito
 - Flyway і Testcontainers
 
 ## Збірка і тестування
 
 ```bash
-./gradlew clean test war
+./gradlew clean test war :api:check :api:bootJar
 ```
 
-У Windows використовуйте `gradlew.bat`. Готовий WAR-файл буде створено в каталозі `build/libs`.
+У Windows використовуйте `gradlew.bat`. Готовий WAR-файл буде створено в каталозі `build/libs`,
+а виконуваний API JAR — у `api/build/libs`.
 
 ## Запуск
 
@@ -28,7 +30,29 @@
    `UPDATE users SET role_id = 1 WHERE login = '<initial-admin-login>';`. Схема навмисно не містить стандартних паролів.
 4. Розгорніть WAR-файл у контейнері сервлетів, сумісному із Servlet API 4.0, наприклад Apache Tomcat 9.
 
-Для кожного pull request і push у `master` GitHub Actions автоматично запускає збірку, тести та створення WAR-файлу.
+Для кожного pull request і push у `master` GitHub Actions автоматично запускає збірку, тести та створення WAR-файлу й API JAR.
+
+## REST API (Spring Boot)
+
+Модуль `api` — окремий Spring Boot 4.1 застосунок на Java 25. Він працює з тією самою MySQL-схемою,
+але запускається незалежно від Servlet/JSP WAR:
+
+```bash
+DB_URL=jdbc:mysql://localhost:3306/tests_db DB_USERNAME=root DB_PASSWORD=secret \
+  ./gradlew :api:bootRun
+```
+
+У Windows передайте ці значення як змінні середовища та виконайте `gradlew.bat :api:bootRun`.
+Типовий API-порт — `8081`; його можна змінити через `API_PORT`.
+
+- `GET /api/v1/quizzes` — список тестів;
+- `GET /api/v1/quizzes/{id}` — один тест;
+- `GET /api/v1/results/me` — результати поточного користувача через HTTP Basic;
+- `GET /actuator/health` — перевірка стану;
+- `/swagger-ui.html` — інтерактивна OpenAPI-документація.
+
+На етапі P6 API доступний тільки для читання. HTTP Basic використовує наявні облікові записи й сумісний
+як із PBKDF2-хешами, так і з legacy-паролями; token-based автентифікація запланована окремо.
 
 ## Міграції бази даних
 

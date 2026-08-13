@@ -36,7 +36,7 @@ jobs:
           validate-wrappers: true
 
       - name: Refresh dependency lock state
-        run: ./gradlew dependencies --write-locks --no-daemon && cat gradle.lockfile
+        run: ./gradlew dependencies :api:dependencies --write-locks --no-daemon && cat gradle.lockfile && cat api/gradle.lockfile
 
       - name: Build, test, and package
-        run: ./gradlew clean test integrationTest war --no-daemon
+        run: ./gradlew clean test integrationTest war :api:check :api:bootJar --no-daemon
