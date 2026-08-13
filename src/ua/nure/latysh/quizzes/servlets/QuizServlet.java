@@ -22,6 +22,10 @@ import java.util.ResourceBundle;
 @WebServlet("/quizzes")
 public class QuizServlet extends HttpServlet {
 
+    private static final String QUIZZES_LOCATION = "quizzes";
+    private static final String ADD_VIEW = "/WEB-INF/views/addQuiz.jsp";
+    private static final String EDIT_VIEW = "/WEB-INF/views/editQuiz.jsp";
+
     private final QuizService quizService;
     private final SubjectService subjectService;
     private final LevelService levelService;
@@ -45,171 +49,164 @@ public class QuizServlet extends HttpServlet {
     }
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-
+    protected void doPost(HttpServletRequest request,
+                          HttpServletResponse response) throws ServletException, IOException {
         String action = request.getParameter("action");
-
         if (action == null) {
             doGet(request, response);
             return;
         }
-        switch (action) {
-            case "add":
-                doPut(request, response);
-                break;
-            case "delete":
-                doDelete(request, response);
-                break;
-            case "edit":
-                edit(request, response);
-                break;
-            case "create":
-                create(request, response);
-                break;
-            case "update":
-                update(request, response);
-                break;
-            case "search":
-                search(request, response);
-                break;
-            default:
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unknown action: " + action);
+
+        try {
+            switch (action) {
+                case "add" -> doPut(request, response);
+                case "delete" -> delete(request, response);
+                case "edit" -> edit(request, response);
+                case "create" -> create(request, response);
+                case "update" -> update(request, response);
+                case "search" -> search(request, response);
+                default -> throw new BadRequestException("Unknown action: " + action);
+            }
+        } catch (BadRequestException exception) {
+            ServletResponseHandler.sendError(
+                    response, HttpServletResponse.SC_BAD_REQUEST, exception.getMessage());
         }
     }
 
     @Override
-    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        String quizId = req.getParameter("quiz");
-        Integer parsedQuizId = parseId(quizId);
-        if (parsedQuizId == null) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+    protected void doDelete(HttpServletRequest request,
+                            HttpServletResponse response) throws ServletException, IOException {
+        try {
+            delete(request, response);
+        } catch (BadRequestException exception) {
+            ServletResponseHandler.sendError(
+                    response, HttpServletResponse.SC_BAD_REQUEST, exception.getMessage());
+        }
+    }
+
+    private void delete(HttpServletRequest request,
+                        HttpServletResponse response) throws BadRequestException {
+        int quizId = RequestParameters.positiveInt(request, "quiz");
+        Optional<Quiz> quiz = quizService.findQuizById(quizId);
+        if (quiz.isEmpty()) {
+            ServletResponseHandler.sendError(
+                    response, HttpServletResponse.SC_NOT_FOUND, "Quiz not found: " + quizId);
             return;
         }
-        quizService.findQuizById(parsedQuizId).ifPresent(quizService::deleteQuiz);
-        resp.sendRedirect("quizzes");
-    }
-
-    private Integer parseId(String value) {
-        try {
-            return Integer.valueOf(value);
-        } catch (NumberFormatException _) {
-            return null;
-        }
+        quizService.deleteQuiz(quiz.get());
+        ServletResponseHandler.redirect(response, QUIZZES_LOCATION);
     }
 
     @Override
-    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        List<Subject> subjects = subjectService.getAllSubjects();
-        List<Level> complexities = levelService.findAllLevels();
-
-        req.setAttribute("complexities", complexities);
-        req.setAttribute("subjects", subjects);
-        req.getRequestDispatcher("/WEB-INF/views/addQuiz.jsp").forward(req, resp);
+    protected void doPut(HttpServletRequest request,
+                         HttpServletResponse response) throws ServletException, IOException {
+        setFormOptions(request);
+        request.getRequestDispatcher(ADD_VIEW).forward(request, response);
     }
 
-    void create(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-        String quizId = request.getParameter("quiz");
-        String quizName = request.getParameter("quizName").trim();
-        String quizSubject = request.getParameter("subjectName");
-        String quizComplexity = request.getParameter("complexity");
-        String quizTime = request.getParameter("time");
-
-        Locale lang = (Locale) request.getSession().getAttribute("lang");
-        ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
-
-        Optional<Quiz> quiz = quizService.findQuizByName(quizName);
-
-        QuizDto quizDto = new QuizDto();
-        quizDto.setTimeToPass(Integer.parseInt(quizTime));
-        quizDto.setName(quizName);
-        quizDto.setComplexity(quizComplexity);
-        quizDto.setSubjectName(quizSubject);
-
-        List<Subject> subjects = subjectService.getAllSubjects();
-        List<Level> complexities = levelService.findAllLevels();
-
-        if (!quizName.isEmpty() && quiz.isEmpty()){
-            quizService.addQuiz(quizDto);
-            response.sendRedirect("quizzes");
-        } else if(!quizName.isEmpty()){
-            request.setAttribute("complexities", complexities);
-            request.setAttribute("quizComplexity", quizComplexity);
-            request.setAttribute("quizSubject", quizSubject);
-            request.setAttribute("subjects", subjects);
-            request.setAttribute("quizTime", quizTime);
-            request.setAttribute("quizName", quizName);
-            request.setAttribute("quizNameMessage", mybundle.getString("validation.input.username.exist"));
-            request.getRequestDispatcher("/WEB-INF/views/addQuiz.jsp").forward(request, response);
+    void create(HttpServletRequest request,
+                HttpServletResponse response) throws BadRequestException, ServletException, IOException {
+        QuizForm form = QuizForm.forCreate(request);
+        QuizService.SaveResult result = quizService.saveNewQuiz(form.toDto());
+        if (result == QuizService.SaveResult.SAVED) {
+            response.sendRedirect(QUIZZES_LOCATION);
+            return;
         }
+        showDuplicateName(request, response, form, ADD_VIEW);
     }
 
-    void update(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-        String quizId = request.getParameter("quiz");
-        String quizName = request.getParameter("quizName").trim();
-        String quizSubject = request.getParameter("subjectName");
-        String quizComplexity = request.getParameter("complexity");
-        String quizTime = request.getParameter("time");
-
-        Locale lang = (Locale) request.getSession().getAttribute("lang");
-        ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
-
-        Optional<Quiz> quiz = quizService.findQuizByName(quizName);
-
-        QuizDto quizDto = new QuizDto();
-        quizDto.setId(Integer.parseInt(quizId));
-        quizDto.setTimeToPass(Integer.parseInt(quizTime));
-        quizDto.setName(quizName);
-        quizDto.setComplexity(quizComplexity);
-        quizDto.setSubjectName(quizSubject);
-
-        List<Subject> subjects = subjectService.getAllSubjects();
-        List<Level> complexities = levelService.findAllLevels();
-
-
-        if (!quizName.isEmpty() && quiz.isPresent() && quiz.get().getId() != Integer.parseInt(quizId)) {
-            request.setAttribute("complexities", complexities);
-            request.setAttribute("quizComplexity", quizComplexity);
-            request.setAttribute("subjects", subjects);
-            request.setAttribute("quizTime", quizTime);
-            request.setAttribute("quizName", quizName);
-            request.setAttribute("quiz", quizId);
-            request.setAttribute("quizNameMessage", mybundle.getString("validation.input.username.exist"));
-            request.getRequestDispatcher("/WEB-INF/views/editQuiz.jsp").forward(request, response);
-        } else if (!quizName.isEmpty()) {
-            quizDto.setName(quizName);
-            quizService.updateQuiz(quizDto);
-            response.sendRedirect("quizzes");
+    void update(HttpServletRequest request,
+                HttpServletResponse response) throws BadRequestException, ServletException, IOException {
+        QuizForm form = QuizForm.forUpdate(request);
+        QuizService.SaveResult result = quizService.saveQuizChanges(form.toDto());
+        if (result == QuizService.SaveResult.SAVED) {
+            response.sendRedirect(QUIZZES_LOCATION);
+            return;
         }
+        showDuplicateName(request, response, form, EDIT_VIEW);
     }
 
-    void edit(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        String quizId = request.getParameter("quiz");
-        String quizName = request.getParameter("quizName").trim();
-        String quizSubject = request.getParameter("quizSubject");
-        String quizComplexity = request.getParameter("quizComplexity");
-        String quizTime = request.getParameter("quizTime");
-
-        List<Subject> subjects = subjectService.getAllSubjects();
-        List<Level> complexities = levelService.findAllLevels();
+    void edit(HttpServletRequest request,
+              HttpServletResponse response) throws BadRequestException, ServletException, IOException {
+        int quizId = RequestParameters.positiveInt(request, "quiz");
+        String quizName = RequestParameters.requiredText(request, "quizName");
+        String quizSubject = RequestParameters.requiredText(request, "quizSubject");
+        String quizComplexity = RequestParameters.requiredText(request, "quizComplexity");
+        int quizTime = RequestParameters.positiveInt(request, "quizTime");
 
         request.setAttribute("quiz", quizId);
         request.setAttribute("quizName", quizName);
         request.setAttribute("quizComplexity", quizComplexity);
         request.setAttribute("quizSubject", quizSubject);
-        request.setAttribute("quizTime", Integer.parseInt(quizTime));
-        request.setAttribute("complexities", complexities);
-        request.setAttribute("subjects", subjects);
-        request.getRequestDispatcher("/WEB-INF/views/editQuiz.jsp").forward(request, response);
+        request.setAttribute("quizTime", quizTime);
+        setFormOptions(request);
+        request.getRequestDispatcher(EDIT_VIEW).forward(request, response);
     }
 
-    void search(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-        String subjectName = request.getParameter("subject");
-        if (subjectName != null) {
-            List<QuizDto> foundQuizzes = quizService.findQuizBySubjectName(subjectName);
+    void search(HttpServletRequest request,
+                HttpServletResponse response) throws BadRequestException, ServletException, IOException {
+        String subjectName = RequestParameters.requiredText(request, "subject");
+        List<QuizDto> foundQuizzes = quizService.findQuizBySubjectName(subjectName);
+        request.setAttribute("quizzes", foundQuizzes);
+        request.setAttribute("subjectName", subjectName);
+        request.getRequestDispatcher("/WEB-INF/views/quizzes.jsp").forward(request, response);
+    }
 
-            request.setAttribute("quizzes", foundQuizzes);
-            request.setAttribute("subjectName", subjectName);
-            request.getRequestDispatcher("/WEB-INF/views/quizzes.jsp").forward(request, response);
+    private void showDuplicateName(HttpServletRequest request,
+                                   HttpServletResponse response,
+                                   QuizForm form,
+                                   String view) throws ServletException, IOException {
+        setFormOptions(request);
+        request.setAttribute("quiz", form.id());
+        request.setAttribute("quizName", form.name());
+        request.setAttribute("quizSubject", form.subject());
+        request.setAttribute("quizComplexity", form.complexity());
+        request.setAttribute("quizTime", form.time());
+        request.setAttribute("quizNameMessage", duplicateNameMessage(request));
+        request.getRequestDispatcher(view).forward(request, response);
+    }
+
+    private void setFormOptions(HttpServletRequest request) {
+        List<Subject> subjects = subjectService.getAllSubjects();
+        List<Level> complexities = levelService.findAllLevels();
+        request.setAttribute("subjects", subjects);
+        request.setAttribute("complexities", complexities);
+    }
+
+    private String duplicateNameMessage(HttpServletRequest request) {
+        Locale locale = (Locale) request.getSession().getAttribute("lang");
+        Locale effectiveLocale = locale == null ? Locale.getDefault() : locale;
+        return ResourceBundle.getBundle("messages", effectiveLocale)
+                .getString("validation.input.username.exist");
+    }
+
+    record QuizForm(int id, String name, String subject, String complexity, int time) {
+
+        static QuizForm forCreate(HttpServletRequest request) throws BadRequestException {
+            return from(request, 0);
+        }
+
+        static QuizForm forUpdate(HttpServletRequest request) throws BadRequestException {
+            return from(request, RequestParameters.positiveInt(request, "quiz"));
+        }
+
+        private static QuizForm from(HttpServletRequest request, int id) throws BadRequestException {
+            return new QuizForm(
+                    id,
+                    RequestParameters.requiredText(request, "quizName"),
+                    RequestParameters.requiredText(request, "subjectName"),
+                    RequestParameters.requiredText(request, "complexity"),
+                    RequestParameters.positiveInt(request, "time"));
+        }
+
+        QuizDto toDto() {
+            QuizDto quiz = new QuizDto();
+            quiz.setId(id);
+            quiz.setName(name);
+            quiz.setSubjectName(subject);
+            quiz.setComplexity(complexity);
+            quiz.setTimeToPass(time);
+            return quiz;
         }
     }
 }
