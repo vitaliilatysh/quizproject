@@ -274,6 +274,17 @@ public class SimpleServletCoverageTest {
         when(invalidDelete.request.getParameter("subjectId")).thenReturn("invalid");
         servlet.doPost(invalidDelete.request, invalidDelete.response);
         verify(invalidDelete.response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
+
+        WebContext invalidEdit = context();
+        when(invalidEdit.request.getParameter("edit")).thenReturn("yes");
+        when(invalidEdit.request.getParameter("subjectId")).thenReturn("invalid");
+        servlet.doPost(invalidEdit.request, invalidEdit.response);
+        verify(invalidEdit.response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
+
+        WebContext invalidUpdate = context();
+        when(invalidUpdate.request.getParameter("subjectId")).thenReturn("invalid");
+        servlet.doPost(invalidUpdate.request, invalidUpdate.response);
+        verify(invalidUpdate.response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
     }
 
     @Test
