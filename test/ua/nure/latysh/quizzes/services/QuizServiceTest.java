@@ -100,6 +100,35 @@ public class QuizServiceTest {
         assertEquals(11, captor.getValue().getId());
     }
 
+    @Test
+    public void saveNewQuizRejectsDuplicateAndSavesAvailableName() {
+        QuizDto duplicate = dto(0, "Taken", "Easy", "Java", 10);
+        QuizDto available = dto(0, "Available", "Easy", "Java", 10);
+        when(quizRepository.findByName("Taken")).thenReturn(Optional.of(quiz(3, "Taken", 1, 1, 10)));
+        when(quizRepository.findByName("Available")).thenReturn(Optional.empty());
+        when(levelRepository.findByName("Easy")).thenReturn(Optional.of(level(1, "Easy")));
+        when(subjectRepository.findByName("Java")).thenReturn(Optional.of(subject(1, "Java")));
+        when(quizRepository.save(org.mockito.ArgumentMatchers.any(Quiz.class))).thenReturn(true);
+
+        assertEquals(QuizService.SaveResult.DUPLICATE_NAME, quizService.saveNewQuiz(duplicate));
+        assertEquals(QuizService.SaveResult.SAVED, quizService.saveNewQuiz(available));
+        verify(quizRepository).save(org.mockito.ArgumentMatchers.any(Quiz.class));
+    }
+
+    @Test
+    public void saveQuizChangesAllowsSameQuizAndRejectsAnotherQuizName() {
+        QuizDto unchanged = dto(7, "Same", "Easy", "Java", 10);
+        QuizDto duplicate = dto(7, "Taken", "Easy", "Java", 10);
+        when(quizRepository.findByName("Same")).thenReturn(Optional.of(quiz(7, "Same", 1, 1, 10)));
+        when(quizRepository.findByName("Taken")).thenReturn(Optional.of(quiz(9, "Taken", 1, 1, 10)));
+        when(levelRepository.findByName("Easy")).thenReturn(Optional.of(level(1, "Easy")));
+        when(subjectRepository.findByName("Java")).thenReturn(Optional.of(subject(1, "Java")));
+
+        assertEquals(QuizService.SaveResult.SAVED, quizService.saveQuizChanges(unchanged));
+        assertEquals(QuizService.SaveResult.DUPLICATE_NAME, quizService.saveQuizChanges(duplicate));
+        verify(quizRepository).update(org.mockito.ArgumentMatchers.any(Quiz.class));
+    }
+
     private Quiz quiz(int id, String name, int levelId, int subjectId, int timeToPass) {
         Quiz quiz = new Quiz();
         quiz.setId(id);

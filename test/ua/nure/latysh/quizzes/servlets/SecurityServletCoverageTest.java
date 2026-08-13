@@ -144,6 +144,10 @@ public class SecurityServletCoverageTest {
         doThrow(new java.io.IOException("failed")).when(redirectResponse).sendRedirect("target");
         ServletResponseHandler.redirect(redirectResponse, "target");
         verify(redirectResponse).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
+        HttpServletResponse internalResponse = mock(HttpServletResponse.class);
+        ServletResponseHandler.internalError(internalResponse, new ServletException("failed"));
+        verify(internalResponse).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 
     private static HttpServletRequest requestWithSession(HttpSession session) {

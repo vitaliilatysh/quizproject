@@ -20,6 +20,11 @@ import java.util.Optional;
 
 public class QuizService {
 
+    public enum SaveResult {
+        SAVED,
+        DUPLICATE_NAME
+    }
+
     private final QuizRepository quizRepository;
     private final SubjectRepository subjectRepository;
     private final LevelRepository levelRepository;
@@ -48,6 +53,14 @@ public class QuizService {
         return quizRepository.save(toEntity(quizDto));
     }
 
+    public SaveResult saveNewQuiz(QuizDto quizDto) {
+        if (quizRepository.findByName(quizDto.getName()).isPresent()) {
+            return SaveResult.DUPLICATE_NAME;
+        }
+        addQuiz(quizDto);
+        return SaveResult.SAVED;
+    }
+
     public void deleteQuiz(Quiz quiz) {
         quizRepository.delete(quiz);
     }
@@ -62,6 +75,15 @@ public class QuizService {
 
     public void updateQuiz(QuizDto quizDto) {
         quizRepository.update(toEntity(quizDto));
+    }
+
+    public SaveResult saveQuizChanges(QuizDto quizDto) {
+        Optional<Quiz> quizWithSameName = quizRepository.findByName(quizDto.getName());
+        if (quizWithSameName.isPresent() && quizWithSameName.get().getId() != quizDto.getId()) {
+            return SaveResult.DUPLICATE_NAME;
+        }
+        updateQuiz(quizDto);
+        return SaveResult.SAVED;
     }
 
     public List<Quiz> findQuizzesBySubjectId(int subjectId) {

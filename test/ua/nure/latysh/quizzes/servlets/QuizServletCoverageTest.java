@@ -12,6 +12,7 @@ import ua.nure.latysh.quizzes.services.QuizService;
 import ua.nure.latysh.quizzes.services.SubjectService;
 
 import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -22,6 +23,7 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,40 +62,32 @@ public class QuizServletCoverageTest {
         verify(get.request).setAttribute("quizzes", List.of(dto));
         verify(get.dispatcher).forward(get.request, get.response);
 
-        WebContext add = context();
-        when(add.request.getParameter("action")).thenReturn("add");
+        WebContext add = action("add");
         servlet.doPost(add.request, add.response);
         verify(add.request).setAttribute("complexities", List.of(level));
         verify(add.request).setAttribute("subjects", List.of(subject));
         verify(add.dispatcher).forward(add.request, add.response);
 
-        WebContext delete = context();
-        when(delete.request.getParameter("action")).thenReturn("delete");
+        WebContext delete = action("delete");
         when(delete.request.getParameter("quiz")).thenReturn("4");
         servlet.doPost(delete.request, delete.response);
         verify(quizService).deleteQuiz(quiz);
         verify(delete.response).sendRedirect("quizzes");
 
-        WebContext invalidDelete = context();
-        when(invalidDelete.request.getParameter("action")).thenReturn("delete");
-        when(invalidDelete.request.getParameter("quiz")).thenReturn("invalid");
-        servlet.doPost(invalidDelete.request, invalidDelete.response);
-        verify(invalidDelete.response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
-
-        WebContext edit = context();
-        when(edit.request.getParameter("action")).thenReturn("edit");
+        WebContext edit = action("edit");
         when(edit.request.getParameter("quiz")).thenReturn("4");
         when(edit.request.getParameter("quizName")).thenReturn(" Quiz ");
         when(edit.request.getParameter("quizSubject")).thenReturn("Java");
         when(edit.request.getParameter("quizComplexity")).thenReturn("easy");
         when(edit.request.getParameter("quizTime")).thenReturn("10");
         servlet.doPost(edit.request, edit.response);
+        verify(edit.request).setAttribute("quiz", 4);
+        verify(edit.request).setAttribute("quizName", "Quiz");
         verify(edit.request).setAttribute("quizTime", 10);
         verify(edit.dispatcher).forward(edit.request, edit.response);
 
-        WebContext search = context();
-        when(search.request.getParameter("action")).thenReturn("search");
-        when(search.request.getParameter("subject")).thenReturn("Java");
+        WebContext search = action("search");
+        when(search.request.getParameter("subject")).thenReturn(" Java ");
         servlet.doPost(search.request, search.response);
         verify(search.request).setAttribute("quizzes", List.of(dto));
         verify(search.request).setAttribute("subjectName", "Java");
@@ -101,53 +95,98 @@ public class QuizServletCoverageTest {
     }
 
     @Test
-    public void createCoversNewAndDuplicateQuizNames() throws Exception {
+    public void createAndUpdateDelegateSaveRulesToService() throws Exception {
         QuizService quizService = mock(QuizService.class);
         SubjectService subjectService = mock(SubjectService.class);
         LevelService levelService = mock(LevelService.class);
         QuizServlet servlet = new QuizServlet(quizService, subjectService, levelService);
         when(subjectService.getAllSubjects()).thenReturn(List.of(new Subject()));
         when(levelService.findAllLevels()).thenReturn(List.of(new Level()));
-        when(quizService.findQuizByName("New quiz")).thenReturn(Optional.empty());
-        when(quizService.findQuizByName("Duplicate")).thenReturn(Optional.of(quiz(2, "Duplicate")));
 
-        WebContext created = quizForm("create", "1", "New quiz");
+        WebContext created = quizForm("create", null, " New quiz ");
+        when(quizService.saveNewQuiz(any(QuizDto.class))).thenReturn(QuizService.SaveResult.SAVED);
         servlet.doPost(created.request, created.response);
-        verify(quizService).addQuiz(any(QuizDto.class));
+        verify(quizService).saveNewQuiz(any(QuizDto.class));
         verify(created.response).sendRedirect("quizzes");
 
-        WebContext duplicate = quizForm("create", "2", "Duplicate");
-        servlet.doPost(duplicate.request, duplicate.response);
-        verify(duplicate.request).setAttribute("quizName", "Duplicate");
-        verify(duplicate.request).setAttribute(org.mockito.ArgumentMatchers.eq("quizNameMessage"), any());
-        verify(duplicate.dispatcher).forward(duplicate.request, duplicate.response);
+        WebContext duplicateCreate = quizForm("create", null, "Duplicate");
+        when(duplicateCreate.session.getAttribute("lang")).thenReturn(Locale.ENGLISH);
+        when(quizService.saveNewQuiz(any(QuizDto.class)))
+                .thenReturn(QuizService.SaveResult.DUPLICATE_NAME);
+        servlet.doPost(duplicateCreate.request, duplicateCreate.response);
+        verify(duplicateCreate.request).setAttribute("quiz", 0);
+        verify(duplicateCreate.request).setAttribute("quizName", "Duplicate");
+        verify(duplicateCreate.request).setAttribute("quizSubject", "Java");
+        verify(duplicateCreate.request).setAttribute("quizComplexity", "easy");
+        verify(duplicateCreate.request).setAttribute("quizTime", 10);
+        verify(duplicateCreate.request).setAttribute(
+                org.mockito.ArgumentMatchers.eq("quizNameMessage"), any());
+        verify(duplicateCreate.dispatcher).forward(
+                duplicateCreate.request, duplicateCreate.response);
+
+        WebContext updated = quizForm("update", "7", "Renamed");
+        when(quizService.saveQuizChanges(any(QuizDto.class))).thenReturn(QuizService.SaveResult.SAVED);
+        servlet.doPost(updated.request, updated.response);
+        verify(quizService).saveQuizChanges(any(QuizDto.class));
+        verify(updated.response).sendRedirect("quizzes");
+
+        WebContext duplicateUpdate = quizForm("update", "7", "Taken");
+        when(quizService.saveQuizChanges(any(QuizDto.class)))
+                .thenReturn(QuizService.SaveResult.DUPLICATE_NAME);
+        servlet.doPost(duplicateUpdate.request, duplicateUpdate.response);
+        verify(duplicateUpdate.request).setAttribute("quiz", 7);
+        verify(duplicateUpdate.dispatcher).forward(
+                duplicateUpdate.request, duplicateUpdate.response);
     }
 
     @Test
-    public void updateCoversUnchangedDuplicateAndRenamedQuiz() throws Exception {
+    public void invalidAndMissingResourcesReturnStableErrors() throws Exception {
         QuizService quizService = mock(QuizService.class);
-        SubjectService subjectService = mock(SubjectService.class);
-        LevelService levelService = mock(LevelService.class);
-        QuizServlet servlet = new QuizServlet(quizService, subjectService, levelService);
-        when(subjectService.getAllSubjects()).thenReturn(List.of(new Subject()));
-        when(levelService.findAllLevels()).thenReturn(List.of(new Level()));
-        when(quizService.findQuizByName("Same")).thenReturn(Optional.of(quiz(1, "Same")));
-        when(quizService.findQuizByName("Taken")).thenReturn(Optional.of(quiz(9, "Taken")));
-        when(quizService.findQuizByName("Renamed")).thenReturn(Optional.empty());
+        QuizServlet servlet = new QuizServlet(
+                quizService, mock(SubjectService.class), mock(LevelService.class));
 
-        WebContext same = quizForm("update", "1", "Same");
-        servlet.doPost(same.request, same.response);
-        verify(quizService).updateQuiz(any(QuizDto.class));
-        verify(same.response).sendRedirect("quizzes");
+        WebContext successfulDelete = context();
+        Quiz quiz = quiz(5, "Direct delete");
+        when(successfulDelete.request.getParameter("quiz")).thenReturn("5");
+        when(quizService.findQuizById(5)).thenReturn(Optional.of(quiz));
+        servlet.doDelete(successfulDelete.request, successfulDelete.response);
+        verify(quizService).deleteQuiz(quiz);
+        verify(successfulDelete.response).sendRedirect("quizzes");
 
-        WebContext duplicate = quizForm("update", "1", "Taken");
-        servlet.doPost(duplicate.request, duplicate.response);
-        verify(duplicate.request).setAttribute("quiz", "1");
-        verify(duplicate.dispatcher).forward(duplicate.request, duplicate.response);
+        WebContext invalidDelete = action("delete");
+        when(invalidDelete.request.getParameter("quiz")).thenReturn("invalid");
+        servlet.doPost(invalidDelete.request, invalidDelete.response);
+        verify(invalidDelete.response).sendError(
+                HttpServletResponse.SC_BAD_REQUEST, "Parameter must be an integer: quiz");
 
-        WebContext renamed = quizForm("update", "1", "Renamed");
-        servlet.doPost(renamed.request, renamed.response);
-        verify(renamed.response).sendRedirect("quizzes");
+        WebContext nonPositiveDelete = context();
+        when(nonPositiveDelete.request.getParameter("quiz")).thenReturn("0");
+        servlet.doDelete(nonPositiveDelete.request, nonPositiveDelete.response);
+        verify(nonPositiveDelete.response).sendError(
+                HttpServletResponse.SC_BAD_REQUEST, "Parameter must be positive: quiz");
+
+        WebContext missingDelete = action("delete");
+        when(missingDelete.request.getParameter("quiz")).thenReturn("99");
+        when(quizService.findQuizById(99)).thenReturn(Optional.empty());
+        servlet.doPost(missingDelete.request, missingDelete.response);
+        verify(missingDelete.response).sendError(
+                HttpServletResponse.SC_NOT_FOUND, "Quiz not found: 99");
+
+        WebContext missingName = quizForm("create", null, null);
+        servlet.doPost(missingName.request, missingName.response);
+        verify(missingName.response).sendError(
+                HttpServletResponse.SC_BAD_REQUEST, "Missing or blank parameter: quizName");
+
+        WebContext failedEdit = action("edit");
+        when(failedEdit.request.getParameter("quiz")).thenReturn("5");
+        when(failedEdit.request.getParameter("quizName")).thenReturn("Quiz");
+        when(failedEdit.request.getParameter("quizSubject")).thenReturn("Java");
+        when(failedEdit.request.getParameter("quizComplexity")).thenReturn("easy");
+        when(failedEdit.request.getParameter("quizTime")).thenReturn("10");
+        doThrow(new ServletException("forward failed"))
+                .when(failedEdit.dispatcher).forward(failedEdit.request, failedEdit.response);
+        servlet.doPost(failedEdit.request, failedEdit.response);
+        verify(failedEdit.response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 
     private static Quiz quiz(int id, String name) {
@@ -157,15 +196,19 @@ public class QuizServletCoverageTest {
         return quiz;
     }
 
-    private static WebContext quizForm(String action, String id, String name) {
+    private static WebContext action(String action) {
         WebContext context = context();
         when(context.request.getParameter("action")).thenReturn(action);
+        return context;
+    }
+
+    private static WebContext quizForm(String action, String id, String name) {
+        WebContext context = action(action);
         when(context.request.getParameter("quiz")).thenReturn(id);
         when(context.request.getParameter("quizName")).thenReturn(name);
         when(context.request.getParameter("subjectName")).thenReturn("Java");
         when(context.request.getParameter("complexity")).thenReturn("easy");
         when(context.request.getParameter("time")).thenReturn("10");
-        when(context.session.getAttribute("lang")).thenReturn(Locale.ENGLISH);
         return context;
     }
 
