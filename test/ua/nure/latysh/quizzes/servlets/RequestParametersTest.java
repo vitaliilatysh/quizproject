@@ -1,6 +1,7 @@
 package ua.nure.latysh.quizzes.servlets;
 
 import org.junit.Test;
+import org.junit.function.ThrowingRunnable;
 import ua.nure.latysh.quizzes.dto.QuizDto;
 
 import javax.servlet.http.HttpServletRequest;
@@ -8,7 +9,7 @@ import java.lang.reflect.Constructor;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -66,15 +67,10 @@ public class RequestParametersTest {
                                          String name,
                                          boolean integer,
                                          String expectedMessage) throws Exception {
-        try {
-            if (integer) {
-                RequestParameters.positiveInt(request, name);
-            } else {
-                RequestParameters.requiredText(request, name);
-            }
-            fail("Expected BadRequestException");
-        } catch (BadRequestException exception) {
-            assertEquals(expectedMessage, exception.getMessage());
-        }
+        ThrowingRunnable action = integer
+                ? () -> RequestParameters.positiveInt(request, name)
+                : () -> RequestParameters.requiredText(request, name);
+        BadRequestException exception = assertThrows(BadRequestException.class, action);
+        assertEquals(expectedMessage, exception.getMessage());
     }
 }

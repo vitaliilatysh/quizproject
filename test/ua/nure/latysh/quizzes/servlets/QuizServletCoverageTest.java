@@ -12,6 +12,7 @@ import ua.nure.latysh.quizzes.services.QuizService;
 import ua.nure.latysh.quizzes.services.SubjectService;
 
 import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -22,6 +23,7 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -174,6 +176,12 @@ public class QuizServletCoverageTest {
         servlet.doPost(missingName.request, missingName.response);
         verify(missingName.response).sendError(
                 HttpServletResponse.SC_BAD_REQUEST, "Missing or blank parameter: quizName");
+
+        WebContext failedAdd = action("add");
+        doThrow(new ServletException("forward failed"))
+                .when(failedAdd.dispatcher).forward(failedAdd.request, failedAdd.response);
+        servlet.doPost(failedAdd.request, failedAdd.response);
+        verify(failedAdd.response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 
     private static Quiz quiz(int id, String name) {
