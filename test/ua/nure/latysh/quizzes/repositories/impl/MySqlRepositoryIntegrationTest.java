@@ -7,12 +7,15 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.testcontainers.mysql.MySQLContainer;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
+import ua.nure.latysh.quizzes.entities.Answer;
+import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.entities.Subject;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Optional;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -68,4 +71,41 @@ public class MySqlRepositoryIntegrationTest {
         repository.delete(saved.get());
         assertTrue(repository.findByName("Integration Testing").isEmpty());
     }
+
+    @Test
+    public void questionAggregateCreateAndUpdateAreAtomic() {
+        QuestionRepositoryImpl repository = new QuestionRepositoryImpl(new DbConnector(dataSource));
+        Question question = new Question();
+        question.setQuestion("Atomic question");
+        question.setQuizId(1);
+
+        Question saved = repository.createWithAnswers(question, answers("Initial"));
+
+        List<Answer> savedAnswers = new AnswerRepositoryImpl(new DbConnector(dataSource))
+                .findAllByQuestionId(saved.getId());
+        assertEquals(4, savedAnswers.size());
+        saved.setQuestion("Updated question");
+        for (int index = 0; index < savedAnswers.size(); index++) {
+            savedAnswers.get(index).setAnswer("Updated " + index);
+            savedAnswers.get(index).setCorrect(index == 1);
+        }
+        repository.updateWithAnswers(saved, savedAnswers);
+
+        assertEquals("Updated question", repository.findById(saved.getId()).orElseThrow().getQuestion());
+        List<Answer> updatedAnswers = new AnswerRepositoryImpl(new DbConnector(dataSource))
+                .findAllByQuestionId(saved.getId());
+        assertEquals("Updated 0", updatedAnswers.get(0).getAnswer());
+        assertTrue(updatedAnswers.get(1).isCorrect());
+        repository.delete(saved);
+    }
+
+    private static List<Answer> answers(String prefix) {
+        return java.util.stream.IntStream.range(0, 4).mapToObj(index -> {
+            Answer answer = new Answer();
+            answer.setAnswer(prefix + " " + index);
+            answer.setCorrect(index == 0);
+            return answer;
+        }).toList();
+    }
 }
+

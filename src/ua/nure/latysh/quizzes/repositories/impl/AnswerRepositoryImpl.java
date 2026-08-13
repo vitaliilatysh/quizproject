@@ -98,7 +98,7 @@ public class AnswerRepositoryImpl implements AnswerRepository {
         List<Answer> answers = new ArrayList<>();
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "SELECT * FROM answers WHERE question_id = ?")) {
+                     "SELECT * FROM answers WHERE question_id = ? ORDER BY id")) {
             statement.setInt(1, questionId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
@@ -124,3 +124,4 @@ public class AnswerRepositoryImpl implements AnswerRepository {
         return new RepositoryException("Could not " + operation, exception);
     }
 }
+

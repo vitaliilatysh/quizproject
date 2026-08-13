@@ -15,6 +15,15 @@ final class RequestParameters {
         return value.trim();
     }
 
+    static String boundedText(HttpServletRequest request, String name, int maxLength)
+            throws BadRequestException {
+        String value = requiredText(request, name);
+        if (value.length() > maxLength) {
+            throw new BadRequestException("Parameter is too long: " + name);
+        }
+        return value;
+    }
+
     static int positiveInt(HttpServletRequest request, String name) throws BadRequestException {
         String value = requiredText(request, name);
         try {
@@ -28,3 +37,4 @@ final class RequestParameters {
         }
     }
 }
+
