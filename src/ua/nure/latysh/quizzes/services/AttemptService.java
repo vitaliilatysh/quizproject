@@ -7,6 +7,7 @@ import ua.nure.latysh.quizzes.repositories.AttemptRepository;
 import ua.nure.latysh.quizzes.repositories.impl.AttemptRepositoryImpl;
 
 import java.time.Clock;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
@@ -34,7 +35,7 @@ public class AttemptService {
         return attemptRepository.findAll();
     }
 
-    public List<Attempt> getAllAttemptsBetweenFinishDates(String startRange, String endRange) {
+    public List<Attempt> getAllAttemptsBetweenFinishDates(LocalDateTime startRange, LocalDateTime endRange) {
         return attemptRepository.findAllBetweenFinishDates(startRange, endRange);
     }
 

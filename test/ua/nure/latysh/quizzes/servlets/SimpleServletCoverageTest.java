@@ -20,6 +20,7 @@ import javax.servlet.http.HttpSession;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
@@ -192,33 +193,63 @@ public class SimpleServletCoverageTest {
         servlet.doGet(history.request, history.response);
         verify(history.request).setAttribute("userResults", List.of(resultDto));
         verify(history.dispatcher).forward(history.request, history.response);
+
+        WebContext anonymous = context();
+        when(anonymous.request.getSession(false)).thenReturn(null);
+        servlet.doGet(anonymous.request, anonymous.response);
+        verify(anonymous.response).sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication required");
     }
 
     @Test
     public void resultAdminServletCoversDateFilterAndListing() throws Exception {
         ResultService resultService = mock(ResultService.class);
-        UserService userService = mock(UserService.class);
-        ResultAdminServlet servlet = new ResultAdminServlet(resultService, userService);
-        User user = user(10, "admin", 1);
+        ResultAdminServlet servlet = new ResultAdminServlet(resultService);
         ResultDto dto = new ResultDto();
-        when(userService.findUserByLogin("admin")).thenReturn(Optional.of(user));
-        when(resultService.getAllResultsBetweenFinishDates("from", "to")).thenReturn(List.of(dto));
+        LocalDateTime from = LocalDateTime.parse("2026-08-01T10:00");
+        LocalDateTime to = LocalDateTime.parse("2026-08-02T10:00");
+        when(resultService.getAllResultsBetweenFinishDates(from, to)).thenReturn(List.of(dto));
 
         WebContext filtered = context();
-        when(filtered.request.getParameter("startRange")).thenReturn("from");
-        when(filtered.request.getParameter("endRange")).thenReturn("to");
-        when(filtered.session.getAttribute("user")).thenReturn(user);
+        when(filtered.request.getParameter("startRange")).thenReturn("2026-08-01T10:00");
+        when(filtered.request.getParameter("endRange")).thenReturn("2026-08-02T10:00");
         servlet.doPost(filtered.request, filtered.response);
         verify(filtered.request).setAttribute("userResults", List.of(dto));
         verify(filtered.dispatcher).forward(filtered.request, filtered.response);
 
+        WebContext invalid = context();
+        when(invalid.request.getParameter("startRange")).thenReturn("invalid");
+        when(invalid.request.getParameter("endRange")).thenReturn("2026-08-02T10:00");
+        servlet.doPost(invalid.request, invalid.response);
+        verify(invalid.response).sendError(HttpServletResponse.SC_BAD_REQUEST,
+                "Parameter must be a date-time: startRange");
+
+        WebContext reversed = context();
+        when(reversed.request.getParameter("startRange")).thenReturn("2026-08-02T10:00");
+        when(reversed.request.getParameter("endRange")).thenReturn("2026-08-01T10:00");
+        when(resultService.getAllResultsBetweenFinishDates(to, from))
+                .thenThrow(new IllegalArgumentException("Start date must not be after end date"));
+        servlet.doPost(reversed.request, reversed.response);
+        verify(reversed.response).sendError(HttpServletResponse.SC_BAD_REQUEST,
+                "Start date must not be after end date");
+
+        WebContext postFailure = context();
+        when(postFailure.request.getParameter("startRange")).thenReturn("2026-08-01T10:00");
+        when(postFailure.request.getParameter("endRange")).thenReturn("2026-08-02T10:00");
+        when(resultService.getAllResultsBetweenFinishDates(from, to))
+                .thenThrow(new IllegalStateException("failed"));
+        servlet.doPost(postFailure.request, postFailure.response);
+        verify(postFailure.response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
         when(resultService.getAllResults()).thenReturn(List.of(dto));
         WebContext all = context();
-        when(all.request.getSession(true)).thenReturn(all.session);
-        when(all.session.getAttribute("user")).thenReturn(user);
         servlet.doGet(all.request, all.response);
         verify(all.request).setAttribute("userResults", List.of(dto));
         verify(all.dispatcher).forward(all.request, all.response);
+
+        when(resultService.getAllResults()).thenThrow(new IllegalStateException("failed"));
+        WebContext failure = context();
+        servlet.doGet(failure.request, failure.response);
+        verify(failure.response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 
     @Test

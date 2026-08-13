@@ -12,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -118,12 +119,13 @@ public class AttemptRepositoryImpl implements AttemptRepository {
 
     @Override
     public List<Attempt> findAll() {
-        return findMany("SELECT * FROM attempts", null, null);
+        return findMany("SELECT * FROM attempts WHERE completed=TRUE ORDER BY end_time DESC", null);
     }
 
     @Override
     public List<Attempt> findAllByUserId(int userId) {
-        return findMany("SELECT * FROM attempts WHERE user_id=?", userId, null);
+        return findMany("SELECT * FROM attempts WHERE user_id=? AND completed=TRUE ORDER BY end_time DESC",
+                statement -> statement.setInt(1, userId));
     }
 
     @Override
@@ -144,8 +146,12 @@ public class AttemptRepositoryImpl implements AttemptRepository {
     }
 
     @Override
-    public List<Attempt> findAllBetweenFinishDates(String startRange, String endRange) {
-        return findMany("SELECT * FROM attempts WHERE end_time BETWEEN ? AND ?", startRange, endRange);
+    public List<Attempt> findAllBetweenFinishDates(LocalDateTime startRange, LocalDateTime endRange) {
+        return findMany("SELECT * FROM attempts WHERE completed=TRUE AND end_time BETWEEN ? AND ? "
+                        + "ORDER BY end_time DESC", statement -> {
+                    statement.setTimestamp(1, Timestamp.valueOf(startRange));
+                    statement.setTimestamp(2, Timestamp.valueOf(endRange));
+                });
     }
 
     @Override
@@ -282,15 +288,12 @@ public class AttemptRepositoryImpl implements AttemptRepository {
         }
     }
 
-    private List<Attempt> findMany(String sql, Object firstParameter, Object secondParameter) {
+    private List<Attempt> findMany(String sql, StatementConfigurer configurer) {
         List<Attempt> attempts = new ArrayList<>();
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            if (firstParameter instanceof Integer integer) {
-                statement.setInt(1, integer);
-            } else if (firstParameter instanceof String string) {
-                statement.setString(1, string);
-                statement.setString(2, (String) secondParameter);
+            if (configurer != null) {
+                configurer.configure(statement);
             }
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
@@ -331,5 +334,10 @@ public class AttemptRepositoryImpl implements AttemptRepository {
     private static final class QuizAnswerData {
         private final Map<Integer, Set<Integer>> correctAnswers = new HashMap<>();
         private final Map<Integer, Integer> answerToQuestion = new HashMap<>();
+    }
+
+    @FunctionalInterface
+    private interface StatementConfigurer {
+        void configure(PreparedStatement statement) throws SQLException;
     }
 }

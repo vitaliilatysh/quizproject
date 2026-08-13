@@ -1,6 +1,8 @@
 package ua.nure.latysh.quizzes.servlets;
 
 import javax.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 
 final class RequestParameters {
 
@@ -36,5 +38,13 @@ final class RequestParameters {
             throw new BadRequestException("Parameter must be an integer: " + name);
         }
     }
-}
 
+    static LocalDateTime localDateTime(HttpServletRequest request, String name) throws BadRequestException {
+        String value = requiredText(request, name);
+        try {
+            return LocalDateTime.parse(value);
+        } catch (DateTimeParseException exception) {
+            throw new BadRequestException("Parameter must be a date-time: " + name);
+        }
+    }
+}

@@ -27,10 +27,10 @@
     </thead>
     <c:forEach var="result" items="${userResults}">
         <tr>
-            <td>${result.attemptId}</td>
-            <td>${result.quizName}</td>
+            <td><c:out value="${result.attemptId}"/></td>
+            <td><c:out value="${result.quizName}"/></td>
             <td>${result.quizScore}%</td>
-            <td>${result.endTime}</td>
+            <td><c:out value="${result.endTime}"/></td>
             <td>
                 <c:if test="${result.quizScore >= 75}">
                     <h4><span class="badge badge-success badge-secondary"><fmt:message key="badge.passed"/></span></h4>

@@ -26,6 +26,7 @@
         </ul>
         <ul class="navbar-nav ml-auto">
             <form action="allresults" class="form-inline my-2 my-lg-0" method="post">
+                <input type="hidden" name="_csrf" value="${sessionScope.csrfToken}">
                 <input hidden name="action" value="search">
                 <input class="form-control mr-sm-2" type="datetime-local" name="startRange"
                        value="${startRange}" aria-label="Search">
@@ -91,10 +92,10 @@
     </thead>
     <c:forEach var="result" items="${userResults}">
         <tr>
-            <td>${result.username}</td>
-            <td>${result.quizName}</td>
+            <td><c:out value="${result.username}"/></td>
+            <td><c:out value="${result.quizName}"/></td>
             <td>${result.quizScore}%</td>
-            <td>${result.endTime}</td>
+            <td><c:out value="${result.endTime}"/></td>
             <td>
                 <c:if test="${result.quizScore >= 75}">
                     <h4><span class="badge badge-success badge-secondary"><fmt:message key="badge.passed"/></span></h4>

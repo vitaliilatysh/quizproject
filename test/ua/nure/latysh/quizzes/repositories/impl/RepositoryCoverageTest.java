@@ -20,6 +20,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.Date;
 
 import static org.junit.Assert.assertEquals;
@@ -86,7 +87,9 @@ public class RepositoryCoverageTest {
         ok.empty();
         assertTrue(repository.findLastByUserId(404).isEmpty());
         ok.oneRow();
-        assertEquals(1, repository.findAllBetweenFinishDates("from", "to").size());
+        LocalDateTime from = LocalDateTime.parse("2026-08-01T10:00");
+        LocalDateTime to = LocalDateTime.parse("2026-08-02T10:00");
+        assertEquals(1, repository.findAllBetweenFinishDates(from, to).size());
 
         Fixture failed = new Fixture();
         AttemptRepositoryImpl failing = new AttemptRepositoryImpl(failed.dbConnector);
@@ -96,7 +99,7 @@ public class RepositoryCoverageTest {
         assertThrows(RepositoryException.class, () -> failing.update(attempt));
         assertThrows(RepositoryException.class, () -> failing.findAllByUserId(3));
         assertThrows(RepositoryException.class, () -> failing.findLastByUserId(3));
-        assertThrows(RepositoryException.class, () -> failing.findAllBetweenFinishDates("from", "to"));
+        assertThrows(RepositoryException.class, () -> failing.findAllBetweenFinishDates(from, to));
         failed.failStatements();
         assertThrows(RepositoryException.class, failing::findAll);
     }
