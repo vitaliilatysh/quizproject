@@ -71,6 +71,11 @@ public class QuestionAggregateServiceTest {
                 () -> fixture.service.updateQuestion(9, "Question", answers(false, true)));
         assertThrows(IllegalArgumentException.class,
                 () -> fixture.service.getQuestionDetails(9));
+
+        List<Answer> blank = answers(true, true);
+        blank.get(0).setAnswer(" ");
+        assertThrows(IllegalArgumentException.class,
+                () -> fixture.service.updateQuestion(9, "Question", blank));
     }
 
     @Test
@@ -111,4 +116,3 @@ public class QuestionAggregateServiceTest {
                 new QuestionService(questionRepository, quizRepository, answerRepository);
     }
 }
-

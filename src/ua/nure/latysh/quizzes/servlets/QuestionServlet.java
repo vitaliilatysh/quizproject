@@ -230,8 +230,8 @@ public class QuestionServlet extends HttpServlet {
         }
     }
 
-    private record QuestionForm(int quizId, int questionId, String question,
-                                List<String> answers, List<Boolean> correct) {
+    record QuestionForm(int quizId, int questionId, String question,
+                        List<String> answers, List<Boolean> correct) {
 
         static QuestionForm from(HttpServletRequest request, boolean update) throws BadRequestException {
             int quizId = RequestParameters.positiveInt(request, "quiz");
@@ -280,4 +280,3 @@ public class QuestionServlet extends HttpServlet {
         }
     }
 }
-

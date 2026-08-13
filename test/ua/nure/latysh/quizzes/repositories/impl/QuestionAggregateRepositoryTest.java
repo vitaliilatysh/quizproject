@@ -61,6 +61,12 @@ public class QuestionAggregateRepositoryTest {
         doThrow(new SQLException("failed")).when(setupFailure.connection).setAutoCommit(false);
         assertThrows(RepositoryException.class,
                 () -> setupFailure.repository.createWithAnswers(question(0, 7), answers(false)));
+
+        Fixture updateSqlFailure = new Fixture();
+        doThrow(new SQLException("failed")).when(updateSqlFailure.questionStatement).executeUpdate();
+        assertThrows(RepositoryException.class,
+                () -> updateSqlFailure.repository.updateWithAnswers(question(9, 7), answers(true)));
+        verify(updateSqlFailure.dbConnector).rollback(updateSqlFailure.connection);
     }
 
     @Test
@@ -102,6 +108,11 @@ public class QuestionAggregateRepositoryTest {
         when(shortBatch.answerStatement.executeBatch()).thenReturn(new int[]{1});
         assertThrows(RepositoryException.class,
                 () -> shortBatch.repository.updateWithAnswers(question(9, 7), answers(true)));
+
+        Fixture updateSetupFailure = new Fixture();
+        doThrow(new SQLException("failed")).when(updateSetupFailure.connection).setAutoCommit(false);
+        assertThrows(RepositoryException.class,
+                () -> updateSetupFailure.repository.updateWithAnswers(question(9, 7), answers(true)));
     }
 
     private static Question question(int id, int quizId) {
@@ -143,4 +154,3 @@ public class QuestionAggregateRepositoryTest {
         }
     }
 }
-

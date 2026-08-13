@@ -278,4 +278,3 @@ public class QuestionRepositoryImpl implements QuestionRepository {
         void configure(PreparedStatement statement) throws SQLException;
     }
 }
-

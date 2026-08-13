@@ -23,6 +23,8 @@ import java.util.Locale;
 import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -120,6 +122,12 @@ public class QuestionServletCoverageTest {
         servlet.doPost(wrongQuiz.request, wrongQuiz.response);
         verify(wrongQuiz.response).sendError(HttpServletResponse.SC_BAD_REQUEST,
                 "Question does not belong to quiz: 13");
+
+        WebContext invalidUpdate = questionForm("editQuestion");
+        when(invalidUpdate.request.getParameter("questionId")).thenReturn("3");
+        servlet.doPost(invalidUpdate.request, invalidUpdate.response);
+        verify(invalidUpdate.request).setAttribute(
+                org.mockito.ArgumentMatchers.eq("checkboxAnswersMessage"), any());
     }
 
     @Test
@@ -197,6 +205,29 @@ public class QuestionServletCoverageTest {
                 .thenThrow(new IllegalStateException("failed"));
         servlet.doPost(failure.request, failure.response);
         verify(failure.response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
+        WebContext missingViewQuiz = action("view");
+        when(missingViewQuiz.request.getParameter("quiz")).thenReturn("404");
+        servlet.doPost(missingViewQuiz.request, missingViewQuiz.response);
+        verify(missingViewQuiz.response).sendError(HttpServletResponse.SC_NOT_FOUND, "Quiz not found: 404");
+
+        WebContext defaultLocale = questionForm("addQuestion");
+        when(defaultLocale.session.getAttribute("lang")).thenReturn(null);
+        servlet.doPost(defaultLocale.request, defaultLocale.response);
+        verify(defaultLocale.request).setAttribute(
+                org.mockito.ArgumentMatchers.eq("checkboxAnswersMessage"), any());
+    }
+
+    @Test
+    public void legacyConstructorAndMalformedAnswerIdsAreCovered() {
+        Dependencies dependencies = new Dependencies();
+        assertNotNull(new QuestionServlet(
+                dependencies.quizService, dependencies.questionService,
+                mock(ua.nure.latysh.quizzes.services.AnswerService.class), dependencies.attemptService));
+        QuestionServlet.QuestionForm form = new QuestionServlet.QuestionForm(
+                1, 2, "Question", List.of("A", "B", "C", "D"),
+                List.of(true, false, false, false));
+        assertThrows(IllegalArgumentException.class, () -> form.toAnswers(List.of(1)));
     }
 
     private static void assertBadRequest(QuestionServlet servlet, WebContext context, String message)
@@ -286,4 +317,3 @@ public class QuestionServletCoverageTest {
         }
     }
 }
-
