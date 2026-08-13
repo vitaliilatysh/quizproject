@@ -16,6 +16,17 @@ import static org.mockito.Mockito.when;
 public class RequestParametersTest {
 
     @Test
+    public void boundedTextRejectsOversizedValues() throws Exception {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getParameter("answer")).thenReturn("toolong");
+
+        assertThrows(BadRequestException.class,
+                () -> RequestParameters.boundedText(request, "answer", 3));
+        when(request.getParameter("answer")).thenReturn(" value ");
+        assertEquals("value", RequestParameters.boundedText(request, "answer", 5));
+    }
+
+    @Test
     public void utilityConstructorAndTypedValuesAreCovered() throws Exception {
         Constructor<RequestParameters> constructor = RequestParameters.class.getDeclaredConstructor();
         constructor.setAccessible(true);
@@ -74,3 +85,4 @@ public class RequestParametersTest {
         assertEquals(expectedMessage, exception.getMessage());
     }
 }
+

@@ -1,6 +1,7 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
+import ua.nure.latysh.quizzes.entities.Answer;
 import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.QuestionRepository;
@@ -15,6 +16,14 @@ import java.util.List;
 import java.util.Optional;
 
 public class QuestionRepositoryImpl implements QuestionRepository {
+    private static final String INSERT_QUESTION = "INSERT INTO questions (question, quiz_id) VALUES (?, ?)";
+    private static final String INSERT_ANSWER =
+            "INSERT INTO answers (answer, correct, question_id) VALUES (?, ?, ?)";
+    private static final String UPDATE_QUESTION =
+            "UPDATE questions SET question = ?, quiz_id = ? WHERE id = ?";
+    private static final String UPDATE_ANSWER =
+            "UPDATE answers SET answer = ?, correct = ? WHERE id = ? AND question_id = ?";
+
     private final DbConnector dbConnector;
 
     public QuestionRepositoryImpl() {
@@ -40,7 +49,7 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     public Question saveQuestion(Question question) {
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "INSERT INTO questions (question, quiz_id) VALUES (?, ?)", Statement.RETURN_GENERATED_KEYS)) {
+                     INSERT_QUESTION, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, question.getQuestion());
             statement.setInt(2, question.getQuizId());
             statement.executeUpdate();
@@ -60,6 +69,53 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     }
 
     @Override
+    public Question createWithAnswers(Question question, List<Answer> answers) {
+        try {
+            try (Connection connection = dbConnector.getConnection()) {
+                connection.setAutoCommit(false);
+                try {
+                    Question savedQuestion = insertQuestion(connection, question);
+                    insertAnswers(connection, savedQuestion.getId(), answers);
+                    connection.commit();
+                    return savedQuestion;
+                } catch (RepositoryException exception) {
+                    rollback(connection, exception);
+                    throw exception;
+                } catch (SQLException exception) {
+                    RepositoryException failure = failure("create question with answers", exception);
+                    rollback(connection, failure);
+                    throw failure;
+                }
+            }
+        } catch (SQLException exception) {
+            throw failure("close question transaction", exception);
+        }
+    }
+
+    @Override
+    public void updateWithAnswers(Question question, List<Answer> answers) {
+        try {
+            try (Connection connection = dbConnector.getConnection()) {
+                connection.setAutoCommit(false);
+                try {
+                    updateQuestion(connection, question);
+                    updateAnswers(connection, question.getId(), answers);
+                    connection.commit();
+                } catch (RepositoryException exception) {
+                    rollback(connection, exception);
+                    throw exception;
+                } catch (SQLException exception) {
+                    RepositoryException failure = failure("update question with answers", exception);
+                    rollback(connection, failure);
+                    throw failure;
+                }
+            }
+        } catch (SQLException exception) {
+            throw failure("close question transaction", exception);
+        }
+    }
+
+    @Override
     public boolean save(Question question) {
         saveQuestion(question);
         return true;
@@ -67,11 +123,81 @@ public class QuestionRepositoryImpl implements QuestionRepository {
 
     @Override
     public void update(Question question) {
-        execute("UPDATE questions SET question = ?, quiz_id = ? WHERE id = ?", statement -> {
+        execute(UPDATE_QUESTION, statement -> {
             statement.setString(1, question.getQuestion());
             statement.setInt(2, question.getQuizId());
             statement.setInt(3, question.getId());
         }, "update question");
+    }
+
+    private Question insertQuestion(Connection connection, Question question) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(INSERT_QUESTION, Statement.RETURN_GENERATED_KEYS)) {
+            statement.setString(1, question.getQuestion());
+            statement.setInt(2, question.getQuizId());
+            statement.executeUpdate();
+            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
+                if (!generatedKeys.next()) {
+                    throw new RepositoryException("Question insert returned no generated id", null);
+                }
+                Question savedQuestion = new Question();
+                savedQuestion.setId(generatedKeys.getInt(1));
+                savedQuestion.setQuestion(question.getQuestion());
+                savedQuestion.setQuizId(question.getQuizId());
+                return savedQuestion;
+            }
+        }
+    }
+
+    private void insertAnswers(Connection connection, int questionId, List<Answer> answers) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(INSERT_ANSWER)) {
+            for (Answer answer : answers) {
+                statement.setString(1, answer.getAnswer());
+                statement.setBoolean(2, answer.isCorrect());
+                statement.setInt(3, questionId);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private void updateQuestion(Connection connection, Question question) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(UPDATE_QUESTION)) {
+            statement.setString(1, question.getQuestion());
+            statement.setInt(2, question.getQuizId());
+            statement.setInt(3, question.getId());
+            if (statement.executeUpdate() != 1) {
+                throw new RepositoryException("Question not found: " + question.getId(), null);
+            }
+        }
+    }
+
+    private void updateAnswers(Connection connection, int questionId, List<Answer> answers) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(UPDATE_ANSWER)) {
+            for (Answer answer : answers) {
+                statement.setString(1, answer.getAnswer());
+                statement.setBoolean(2, answer.isCorrect());
+                statement.setInt(3, answer.getId());
+                statement.setInt(4, questionId);
+                statement.addBatch();
+            }
+            int[] updatedRows = statement.executeBatch();
+            if (updatedRows.length != answers.size()) {
+                throw new RepositoryException("Could not update every answer for question " + questionId, null);
+            }
+            for (int updatedRow : updatedRows) {
+                if (updatedRow == 0 || updatedRow == Statement.EXECUTE_FAILED) {
+                    throw new RepositoryException("Answer does not belong to question " + questionId, null);
+                }
+            }
+        }
+    }
+
+    private void rollback(Connection connection, RuntimeException failure) {
+        try {
+            dbConnector.rollback(connection);
+        } catch (RepositoryException rollbackFailure) {
+            failure.addSuppressed(rollbackFailure);
+        }
     }
 
     @Override
@@ -152,3 +278,4 @@ public class QuestionRepositoryImpl implements QuestionRepository {
         void configure(PreparedStatement statement) throws SQLException;
     }
 }
+

@@ -1,356 +1,283 @@
 package ua.nure.latysh.quizzes.servlets;
 
 import org.apache.log4j.Logger;
-import ua.nure.latysh.quizzes.entities.*;
-import ua.nure.latysh.quizzes.services.*;
+import ua.nure.latysh.quizzes.entities.Answer;
+import ua.nure.latysh.quizzes.entities.Attempt;
+import ua.nure.latysh.quizzes.entities.Question;
+import ua.nure.latysh.quizzes.entities.Quiz;
+import ua.nure.latysh.quizzes.entities.User;
+import ua.nure.latysh.quizzes.services.AnswerService;
+import ua.nure.latysh.quizzes.services.AttemptService;
+import ua.nure.latysh.quizzes.services.QuestionService;
+import ua.nure.latysh.quizzes.services.QuizService;
 
-import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
-import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+import java.util.ResourceBundle;
 
 @WebServlet(urlPatterns = {"/questions", "/questions/edit", "/questions/add", "/questions/view"})
 public class QuestionServlet extends HttpServlet {
 
     private static final Logger logger = Logger.getLogger(QuestionServlet.class);
-    private static final String QUESTION_NOT_FOUND = "Question not found: ";
+    private static final String QUESTIONS_VIEW = "/WEB-INF/views/questions.jsp";
+    private static final String LIST_VIEW = "/WEB-INF/views/listQuestions.jsp";
+    private static final String ADD_VIEW = "/WEB-INF/views/addQuestion.jsp";
+    private static final String EDIT_VIEW = "/WEB-INF/views/editQuestion.jsp";
+    private static final String QUESTIONS_LOCATION = "questions";
+    private static final int QUESTION_MAX_LENGTH = 250;
+    private static final int ANSWER_MAX_LENGTH = 50;
+    private static final List<String> ANSWER_SUFFIXES = List.of("A", "B", "C", "D");
+
     private final QuizService quizService;
     private final QuestionService questionService;
-    private final AnswerService answerService;
     private final AttemptService attemptService;
 
     public QuestionServlet() {
-        this(new QuizService(), new QuestionService(), new AnswerService(),
-                new AttemptService());
+        this(new QuizService(), new QuestionService(), new AttemptService());
     }
 
-    QuestionServlet(QuizService quizService,
-                    QuestionService questionService,
-                    AnswerService answerService,
+    QuestionServlet(QuizService quizService, QuestionService questionService,
+                    AnswerService answerService, AttemptService attemptService) {
+        this(quizService, questionService, attemptService);
+    }
+
+    QuestionServlet(QuizService quizService, QuestionService questionService,
                     AttemptService attemptService) {
         this.quizService = quizService;
         this.questionService = questionService;
-        this.answerService = answerService;
         this.attemptService = attemptService;
     }
 
     @Override
-    protected void doGet(HttpServletRequest request,
-                         HttpServletResponse response) throws ServletException, IOException {
-
-        HttpSession session = request.getSession(true);
-
-        session.getAttribute("quizTime");
-        session.getAttribute("quizId");
-        session.getAttribute("questions");
-        session.getAttribute("answersPerQuestion");
-        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/questions.jsp"), request, response);
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) {
+        ServletResponseHandler.forward(request.getRequestDispatcher(QUESTIONS_VIEW), request, response);
     }
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) {
         String action = request.getParameter("action");
-        User user = (User) request.getSession().getAttribute("user");
-        switch (action) {
-            case "add":
-                String quizId = request.getParameter("quiz");
-                request.setAttribute("quiz", quizId);
-                request.setAttribute("action", "create");
-                ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/addQuestion.jsp"),
-                        request, response);
-
-                logger.info(user.getLogin() + " opened add question page");
-                break;
-            case "addQuestion":
-                addQuestions(request, response);
-                logger.info(user.getLogin() + " added new question");
-                break;
-            case "run":
-                runQuestions(request, response);
-                logger.info(user.getLogin() + " started quiz");
-                break;
-            case "view":
-                viewQuesions(request, response);
-                logger.info(user.getLogin() + " view the question list");
-                break;
-            case "edit":
-                editQuestion(request, response);
-                logger.info(user.getLogin() + " opened edit question page");
-                break;
-            case "editQuestion":
-                saveQuestion(request, response);
-                break;
-            case "delete":
-                deleteQuestion(request, response);
-                break;
+        try {
+            if (action == null) {
+                throw new BadRequestException("Missing parameter: action");
+            }
+            switch (action) {
+                case "add" -> showAddForm(request, response);
+                case "addQuestion" -> createQuestion(request, response);
+                case "run" -> runQuestions(request, response);
+                case "view" -> listQuestions(request, response);
+                case "edit" -> showEditForm(request, response);
+                case "editQuestion" -> updateQuestion(request, response);
+                case "delete" -> deleteQuestion(request, response);
+                default -> throw new BadRequestException("Unknown action: " + action);
+            }
+            logAction(request, action);
+        } catch (BadRequestException exception) {
+            ServletResponseHandler.sendError(response, HttpServletResponse.SC_BAD_REQUEST, exception.getMessage());
+        } catch (NoSuchElementException exception) {
+            ServletResponseHandler.sendError(response, HttpServletResponse.SC_NOT_FOUND, exception.getMessage());
+        } catch (RuntimeException exception) {
+            ServletResponseHandler.internalError(response, exception);
         }
     }
 
-    private void saveQuestion(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-        int quizId = Integer.parseInt(request.getParameter("quiz"));
-        int questionId = Integer.parseInt(request.getParameter("questionId"));
-        String question = request.getParameter("question");
-        String answerA = request.getParameter("answerA");
-        String answerB = request.getParameter("answerB");
-        String answerC = request.getParameter("answerC");
-        String answerD = request.getParameter("answerD");
-
-        String correctAnswerA = request.getParameter("correctAnswerA");
-        String correctAnswerB = request.getParameter("correctAnswerB");
-        String correctAnswerC = request.getParameter("correctAnswerC");
-        String correctAnswerD = request.getParameter("correctAnswerD");
-
-        Locale lang = (Locale) request.getSession().getAttribute("lang");
-        ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
-
-        Question foundQuestion = questionService.findQuestionById(questionId)
-                .orElseThrow(() -> new IllegalArgumentException(QUESTION_NOT_FOUND + questionId));
-        foundQuestion.setQuestion(question);
-
-        List<Answer> answers = answerService.findAnswersByQuestionId(questionId);
-
-        answers.get(0).setAnswer(answerA);
-        answers.get(1).setAnswer(answerB);
-        answers.get(2).setAnswer(answerC);
-        answers.get(3).setAnswer(answerD);
-
-        if (correctAnswerA == null & correctAnswerB == null & correctAnswerC == null & correctAnswerD == null) {
-            request.setAttribute("quiz", quizId);
-            request.setAttribute("question", question);
-            request.setAttribute("questionId", questionId);
-            request.setAttribute("answerA", answers.get(0).getAnswer());
-            request.setAttribute("answerB", answers.get(1).getAnswer());
-            request.setAttribute("answerC", answers.get(2).getAnswer());
-            request.setAttribute("answerD", answers.get(3).getAnswer());
-            request.setAttribute("checkboxAnswersMessage", mybundle.getString("validation.add.question.correct"));
-            ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/editQuestion.jsp"),
-                    request, response);
-        } else {
-
-            if (correctAnswerA != null && correctAnswerA.equalsIgnoreCase("A")) {
-                answers.get(0).setCorrect(true);
-            } else {
-                answers.get(0).setCorrect(false);
-            }
-
-            if (correctAnswerB != null && correctAnswerB.equalsIgnoreCase("B")) {
-                answers.get(1).setCorrect(true);
-            } else {
-                answers.get(1).setCorrect(false);
-            }
-
-            if (correctAnswerC != null && correctAnswerC.equalsIgnoreCase("C")) {
-                answers.get(2).setCorrect(true);
-            } else {
-                answers.get(2).setCorrect(false);
-            }
-
-            if (correctAnswerD != null && correctAnswerD.equalsIgnoreCase("D")) {
-                answers.get(3).setCorrect(true);
-            } else {
-                answers.get(3).setCorrect(false);
-            }
-
-            questionService.updateQuestion(foundQuestion);
-            questionService.findQuestionById(foundQuestion.getId());
-
-            for (Answer answer : answers) {
-                answerService.updateAnswer(answer);
-            }
-
-            List<Question> questions = questionService.findQuestionsByQuizId(quizId);
-
-            request.setAttribute("questions", questions);
-            request.setAttribute("quiz", quizId);
-            ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/listQuestions.jsp"),
-                    request, response);
+    private void showAddForm(HttpServletRequest request, HttpServletResponse response)
+            throws BadRequestException {
+        int quizId = RequestParameters.positiveInt(request, "quiz");
+        if (quizService.findQuizById(quizId).isEmpty()) {
+            ServletResponseHandler.sendError(response, HttpServletResponse.SC_NOT_FOUND,
+                    "Quiz not found: " + quizId);
+            return;
         }
-    }
-
-    private void deleteQuestion(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-        int questionId = Integer.parseInt(request.getParameter("question"));
-        Question question = questionService.findQuestionById(questionId)
-                .orElseThrow(() -> new IllegalArgumentException(QUESTION_NOT_FOUND + questionId));
-        int quizId = question.getQuizId();
-        questionService.deleteQuestion(question);
-
-        List<Question> questions = questionService.findQuestionsByQuizId(quizId);
-        request.setAttribute("questions", questions);
-        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/listQuestions.jsp"),
-                request, response);
-    }
-
-    private void editQuestion(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        int questionId = Integer.parseInt(request.getParameter("question"));
-        Question question = questionService.findQuestionById(questionId)
-                .orElseThrow(() -> new IllegalArgumentException(QUESTION_NOT_FOUND + questionId));
-        List<Answer> answers = answerService.findAnswersByQuestionId(questionId);
-
-        request.setAttribute("answerA", answers.get(0).getAnswer());
-        request.setAttribute("answerB", answers.get(1).getAnswer());
-        request.setAttribute("answerC", answers.get(2).getAnswer());
-        request.setAttribute("answerD", answers.get(3).getAnswer());
-
-        request.setAttribute("correctAnswerA", answers.get(0).isCorrect());
-        request.setAttribute("correctAnswerB", answers.get(1).isCorrect());
-        request.setAttribute("correctAnswerC", answers.get(2).isCorrect());
-        request.setAttribute("correctAnswerD", answers.get(3).isCorrect());
-
-        request.setAttribute("quiz", question.getQuizId());
-        request.setAttribute("questionId", questionId);
-        request.setAttribute("question", question.getQuestion());
-        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/editQuestion.jsp"),
-                request, response);
-    }
-
-    private void viewQuesions(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        String quizId = request.getParameter("quiz");
-        List<Question> questions = questionService.findQuestionsByQuizId(Integer.parseInt(quizId));
-
-        request.setAttribute("questions", questions);
         request.setAttribute("quiz", quizId);
-        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/listQuestions.jsp"),
-                request, response);
+        request.setAttribute("action", "create");
+        ServletResponseHandler.forward(request.getRequestDispatcher(ADD_VIEW), request, response);
     }
 
-    private void runQuestions(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        int quizId = Integer.parseInt(request.getParameter("quiz"));
-        Quiz quiz = quizService.findQuizById(quizId)
-                .orElseThrow(() -> new IllegalArgumentException("Quiz not found: " + quizId));
-        int minutesForQuiz = quiz.getTimeToPass() * 60;
+    private void createQuestion(HttpServletRequest request, HttpServletResponse response)
+            throws BadRequestException {
+        QuestionForm form = QuestionForm.from(request, false);
+        if (!form.hasCorrectAnswer()) {
+            showInvalidForm(request, response, form, ADD_VIEW);
+            return;
+        }
+        questionService.createQuestion(form.question(), form.quizId(), form.toAnswers(List.of()));
+        showQuestionList(request, response, form.quizId());
+    }
 
-        List<Answer> answers;
-//        String userLogin = null;
-//        Cookie[] cookie = request.getCookies();
-////        for (Cookie cookie1 : cookie) {
-////            if (cookie1.getName().equalsIgnoreCase("user")) {
-////                userLogin = cookie1.getValue();
-////            }
-////        }
+    private void updateQuestion(HttpServletRequest request, HttpServletResponse response)
+            throws BadRequestException {
+        QuestionForm form = QuestionForm.from(request, true);
+        if (!form.hasCorrectAnswer()) {
+            showInvalidForm(request, response, form, EDIT_VIEW);
+            return;
+        }
+        QuestionService.QuestionDetails details = questionService.getQuestionDetails(form.questionId());
+        if (details.question().getQuizId() != form.quizId()) {
+            throw new BadRequestException("Question does not belong to quiz: " + form.quizId());
+        }
+        List<Integer> answerIds = details.answers().stream().map(Answer::getId).toList();
+        questionService.updateQuestion(form.questionId(), form.question(), form.toAnswers(answerIds));
+        showQuestionList(request, response, form.quizId());
+    }
+
+    private void deleteQuestion(HttpServletRequest request, HttpServletResponse response)
+            throws BadRequestException {
+        int questionId = RequestParameters.positiveInt(request, "question");
+        Optional<Question> question = questionService.findQuestionById(questionId);
+        if (question.isEmpty()) {
+            ServletResponseHandler.sendError(response, HttpServletResponse.SC_NOT_FOUND,
+                    "Question not found: " + questionId);
+            return;
+        }
+        questionService.deleteQuestion(question.get());
+        showQuestionList(request, response, question.get().getQuizId());
+    }
+
+    private void showEditForm(HttpServletRequest request, HttpServletResponse response)
+            throws BadRequestException {
+        int questionId = RequestParameters.positiveInt(request, "question");
+        QuestionService.QuestionDetails details = questionService.getQuestionDetails(questionId);
+        Question question = details.question();
+        request.setAttribute("quiz", question.getQuizId());
+        request.setAttribute("questionId", question.getId());
+        request.setAttribute("question", question.getQuestion());
+        setAnswerAttributes(request, details.answers());
+        ServletResponseHandler.forward(request.getRequestDispatcher(EDIT_VIEW), request, response);
+    }
+
+    private void listQuestions(HttpServletRequest request, HttpServletResponse response)
+            throws BadRequestException {
+        int quizId = RequestParameters.positiveInt(request, "quiz");
+        if (quizService.findQuizById(quizId).isEmpty()) {
+            ServletResponseHandler.sendError(response, HttpServletResponse.SC_NOT_FOUND,
+                    "Quiz not found: " + quizId);
+            return;
+        }
+        showQuestionList(request, response, quizId);
+    }
+
+    private void showQuestionList(HttpServletRequest request, HttpServletResponse response, int quizId) {
+        request.setAttribute("questions", questionService.findQuestionsByQuizId(quizId));
+        request.setAttribute("quiz", quizId);
+        ServletResponseHandler.forward(request.getRequestDispatcher(LIST_VIEW), request, response);
+    }
+
+    private void runQuestions(HttpServletRequest request, HttpServletResponse response)
+            throws BadRequestException {
+        int quizId = RequestParameters.positiveInt(request, "quiz");
+        Quiz quiz = quizService.findQuizById(quizId)
+                .orElseThrow(() -> new NoSuchElementException("Quiz not found: " + quizId));
+        List<Question> questions = questionService.findQuestionsByQuizId(quizId);
+        Map<Question, List<Answer>> answersPerQuestion = new LinkedHashMap<>();
+        for (Question question : questions) {
+            List<Answer> answers = questionService.getQuestionDetails(question.getId()).answers();
+            if (!answers.isEmpty()) {
+                answersPerQuestion.put(question, answers);
+            }
+        }
         User user = (User) request.getSession().getAttribute("user");
         Attempt attempt = attemptService.startAttempt(user, quiz);
 
-        Map<Question, List<Answer>> answersPerQuestion = new LinkedHashMap<>();
+        HttpSession session = request.getSession(true);
+        session.setAttribute("quizTime", quiz.getTimeToPass() * 60);
+        session.setAttribute("quizId", quizId);
+        session.setAttribute("attemptId", attempt.getId());
+        session.setAttribute("quizExpiresAt", attempt.getExpiresAt().getTime());
+        session.setAttribute("questions", questions);
+        session.setAttribute("answersPerQuestion", answersPerQuestion);
+        ServletResponseHandler.redirect(response, QUESTIONS_LOCATION);
+    }
 
-        List<Question> questions = questionService.findQuestionsByQuizId(quizId);
-        for (Question currentQuestion : questions) {
-            answers = answerService.findAnswersByQuestionId(currentQuestion.getId());
-            if (answers.size() != 0) {
-                if (!answersPerQuestion.containsKey(currentQuestion)) {
-                    answersPerQuestion.put(currentQuestion, new ArrayList<>());
-                    answersPerQuestion.get(currentQuestion).addAll(answers);
+    private void showInvalidForm(HttpServletRequest request, HttpServletResponse response,
+                                 QuestionForm form, String view) {
+        request.setAttribute("quiz", form.quizId());
+        request.setAttribute("questionId", form.questionId());
+        request.setAttribute("question", form.question());
+        setAnswerAttributes(request, form.toAnswers(List.of()));
+        request.setAttribute("checkboxAnswersMessage", validationMessage(request));
+        ServletResponseHandler.forward(request.getRequestDispatcher(view), request, response);
+    }
+
+    private void setAnswerAttributes(HttpServletRequest request, List<Answer> answers) {
+        for (int index = 0; index < ANSWER_SUFFIXES.size(); index++) {
+            String suffix = ANSWER_SUFFIXES.get(index);
+            Answer answer = answers.get(index);
+            request.setAttribute("answer" + suffix, answer.getAnswer());
+            request.setAttribute("correctAnswer" + suffix, answer.isCorrect());
+        }
+    }
+
+    private String validationMessage(HttpServletRequest request) {
+        Locale locale = (Locale) request.getSession().getAttribute("lang");
+        return ResourceBundle.getBundle("messages", locale == null ? Locale.getDefault() : locale)
+                .getString("validation.add.question.correct");
+    }
+
+    private void logAction(HttpServletRequest request, String action) {
+        User user = (User) request.getSession().getAttribute("user");
+        if (user != null) {
+            logger.info(user.getLogin() + " completed question action " + action);
+        }
+    }
+
+    private record QuestionForm(int quizId, int questionId, String question,
+                                List<String> answers, List<Boolean> correct) {
+
+        static QuestionForm from(HttpServletRequest request, boolean update) throws BadRequestException {
+            int quizId = RequestParameters.positiveInt(request, "quiz");
+            int questionId = update ? RequestParameters.positiveInt(request, "questionId") : 0;
+            String question = RequestParameters.boundedText(request, "question", QUESTION_MAX_LENGTH);
+            List<String> answers = new ArrayList<>(ANSWER_SUFFIXES.size());
+            List<Boolean> correct = new ArrayList<>(ANSWER_SUFFIXES.size());
+            for (String suffix : ANSWER_SUFFIXES) {
+                answers.add(RequestParameters.boundedText(request, "answer" + suffix, ANSWER_MAX_LENGTH));
+                correct.add(isSelected(request, "correctAnswer" + suffix, suffix));
+            }
+            return new QuestionForm(quizId, questionId, question, List.copyOf(answers), List.copyOf(correct));
+        }
+
+        private static boolean isSelected(HttpServletRequest request, String name, String expected)
+                throws BadRequestException {
+            String value = request.getParameter(name);
+            if (value == null) {
+                return false;
+            }
+            if (!expected.equalsIgnoreCase(value)) {
+                throw new BadRequestException("Invalid parameter: " + name);
+            }
+            return true;
+        }
+
+        boolean hasCorrectAnswer() {
+            return correct.stream().anyMatch(Boolean::booleanValue);
+        }
+
+        List<Answer> toAnswers(List<Integer> ids) {
+            if (!ids.isEmpty() && ids.size() != ANSWER_SUFFIXES.size()) {
+                throw new IllegalArgumentException("A question must have exactly four persisted answers");
+            }
+            List<Answer> result = new ArrayList<>(ANSWER_SUFFIXES.size());
+            for (int index = 0; index < ANSWER_SUFFIXES.size(); index++) {
+                Answer answer = new Answer();
+                if (!ids.isEmpty()) {
+                    answer.setId(ids.get(index));
                 }
+                answer.setAnswer(answers.get(index));
+                answer.setCorrect(correct.get(index));
+                result.add(answer);
             }
-        }
-
-        HttpSession currentSession = request.getSession(true);
-        currentSession.setAttribute("quizTime", minutesForQuiz);
-        currentSession.setAttribute("quizId", quizId);
-        currentSession.setAttribute("attemptId", attempt.getId());
-        currentSession.setAttribute("quizExpiresAt", attempt.getExpiresAt().getTime());
-        currentSession.setAttribute("questions", questions);
-        currentSession.setAttribute("answersPerQuestion", answersPerQuestion);
-
-        ServletResponseHandler.redirect(response, "questions");
-    }
-
-    private void addQuestions(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-        int quizId = Integer.parseInt(request.getParameter("quiz"));
-        String question = request.getParameter("question").trim();
-        List<String> answers = new ArrayList<>();
-        List<String> correctAnswers = new ArrayList<>();
-
-        String answerA = request.getParameter("answerA");
-        String answerB = request.getParameter("answerB");
-        String answerC = request.getParameter("answerC");
-        String answerD = request.getParameter("answerD");
-
-        answers.add(answerA);
-        answers.add(answerB);
-        answers.add(answerC);
-        answers.add(answerD);
-
-        String correctAnswerA = request.getParameter("correctAnswerA");
-        String correctAnswerB = request.getParameter("correctAnswerB");
-        String correctAnswerC = request.getParameter("correctAnswerC");
-        String correctAnswerD = request.getParameter("correctAnswerD");
-
-        if (correctAnswerA != null) {
-            correctAnswers.add(correctAnswerA);
-        }
-        if (correctAnswerB != null) {
-            correctAnswers.add(correctAnswerB);
-        }
-        if (correctAnswerC != null) {
-            correctAnswers.add(correctAnswerC);
-        }
-        if (correctAnswerD != null) {
-            correctAnswers.add(correctAnswerD);
-        }
-
-        Locale lang = (Locale) request.getSession().getAttribute("lang");
-        ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
-
-        List<Answer> answerList = new ArrayList<>();
-
-        for (String answer : answers) {
-            Answer newAnswer = new Answer();
-            newAnswer.setAnswer(answer.trim());
-            answerList.add(newAnswer);
-        }
-
-        if (correctAnswerA == null && correctAnswerB == null && correctAnswerC == null && correctAnswerD == null) {
-            request.setAttribute("quiz", quizId);
-            request.setAttribute("question", question);
-            request.setAttribute("answerA", answers.get(0));
-            request.setAttribute("answerB", answers.get(1));
-            request.setAttribute("answerC", answers.get(2));
-            request.setAttribute("answerD", answers.get(3));
-            request.setAttribute("checkboxAnswersMessage", mybundle.getString("validation.add.question.correct"));
-            ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/addQuestion.jsp"),
-                    request, response);
-        } else {
-            if (correctAnswerA != null && correctAnswerA.equalsIgnoreCase("A")) {
-                answerList.get(0).setCorrect(true);
-            } else {
-                answerList.get(0).setCorrect(false);
-            }
-            if (correctAnswerB != null && correctAnswerB.equalsIgnoreCase("B")) {
-                answerList.get(1).setCorrect(true);
-            } else {
-                answerList.get(1).setCorrect(false);
-            }
-            if (correctAnswerC != null && correctAnswerC.equalsIgnoreCase("C")) {
-                answerList.get(2).setCorrect(true);
-            } else {
-                answerList.get(2).setCorrect(false);
-            }
-            if (correctAnswerD != null && correctAnswerD.equalsIgnoreCase("D")) {
-                answerList.get(3).setCorrect(true);
-            } else {
-                answerList.get(3).setCorrect(false);
-            }
-
-
-            Question savedQuestion = questionService.addQuestion(question, quizId);
-
-            for (Answer answer : answerList) {
-                answer.setQuestionId(savedQuestion.getId());
-                answerService.saveAnswer(answer);
-            }
-
-            List<Question> questions = questionService.findQuestionsByQuizId(quizId);
-            request.setAttribute("questions", questions);
-            request.setAttribute("quiz", quizId);
-            ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/listQuestions.jsp"),
-                    request, response);
+            return result;
         }
     }
-
-
 }
+

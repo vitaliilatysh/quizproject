@@ -4,31 +4,29 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import ua.nure.latysh.quizzes.entities.Answer;
+import ua.nure.latysh.quizzes.entities.Attempt;
 import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.entities.Quiz;
 import ua.nure.latysh.quizzes.entities.User;
-import ua.nure.latysh.quizzes.services.AnswerService;
 import ua.nure.latysh.quizzes.services.AttemptService;
 import ua.nure.latysh.quizzes.services.QuestionService;
 import ua.nure.latysh.quizzes.services.QuizService;
-import ua.nure.latysh.quizzes.services.UserService;
 
 import javax.servlet.RequestDispatcher;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,28 +45,24 @@ public class QuestionServletCoverageTest {
     }
 
     @Test
-    public void getAddViewEditAndDeleteActionsAreCovered() throws Exception {
+    public void getAndReadActionsUseValidatedQuestionDetails() throws Exception {
         Dependencies dependencies = new Dependencies();
         QuestionServlet servlet = dependencies.servlet();
         Question question = question(3, 12, "Question");
         List<Answer> answers = answers();
+        QuestionService.QuestionDetails details = new QuestionService.QuestionDetails(question, answers);
+        when(dependencies.quizService.findQuizById(12)).thenReturn(Optional.of(quiz(12)));
         when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(question));
-        when(dependencies.questionService.findQuestionById(3)).thenReturn(Optional.of(question));
-        when(dependencies.answerService.findAnswersByQuestionId(3)).thenReturn(answers);
+        when(dependencies.questionService.getQuestionDetails(3)).thenReturn(details);
 
         WebContext get = context();
         servlet.doGet(get.request, get.response);
-        verify(get.session).getAttribute("quizTime");
-        verify(get.session).getAttribute("quizId");
-        verify(get.session).getAttribute("questions");
-        verify(get.session).getAttribute("answersPerQuestion");
         verify(get.dispatcher).forward(get.request, get.response);
 
         WebContext add = action("add");
         when(add.request.getParameter("quiz")).thenReturn("12");
         servlet.doPost(add.request, add.response);
-        verify(add.request).setAttribute("quiz", "12");
-        verify(add.request).setAttribute("action", "create");
+        verify(add.request).setAttribute("quiz", 12);
         verify(add.dispatcher).forward(add.request, add.response);
 
         WebContext view = action("view");
@@ -81,131 +75,134 @@ public class QuestionServletCoverageTest {
         when(edit.request.getParameter("question")).thenReturn("3");
         servlet.doPost(edit.request, edit.response);
         verify(edit.request).setAttribute("answerA", "answer-1");
-        verify(edit.request).setAttribute("correctAnswerA", false);
+        verify(edit.request).setAttribute("correctAnswerB", true);
         verify(edit.request).setAttribute("quiz", 12);
         verify(edit.dispatcher).forward(edit.request, edit.response);
-
-        WebContext delete = action("delete");
-        when(delete.request.getParameter("question")).thenReturn("3");
-        servlet.doPost(delete.request, delete.response);
-        verify(dependencies.questionService).deleteQuestion(question);
-        verify(delete.request).setAttribute("questions", List.of(question));
-        verify(delete.dispatcher).forward(delete.request, delete.response);
     }
 
     @Test
-    public void runActionCreatesAttemptAndSessionQuizState() throws Exception {
+    public void createAndUpdateDelegateCompleteAggregatesToService() throws Exception {
         Dependencies dependencies = new Dependencies();
         QuestionServlet servlet = dependencies.servlet();
-        Quiz quiz = new Quiz();
-        quiz.setId(12);
-        quiz.setTimeToPass(3);
-        User persistedUser = user(8, "alice");
-        Question first = question(1, 12, "First");
-        Question second = question(2, 12, "Second");
-        ua.nure.latysh.quizzes.entities.Attempt attempt = new ua.nure.latysh.quizzes.entities.Attempt();
-        attempt.setId(44);
-        attempt.setExpiresAt(new java.util.Date(1_700_000_000_000L));
-        when(dependencies.quizService.findQuizById(12)).thenReturn(Optional.of(quiz));
-        when(dependencies.attemptService.startAttempt(persistedUser, quiz)).thenReturn(attempt);
-        when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(first, second));
-        when(dependencies.answerService.findAnswersByQuestionId(1)).thenReturn(List.of(answer(1, false)));
-        when(dependencies.answerService.findAnswersByQuestionId(2)).thenReturn(List.of());
+        Question question = question(3, 12, "Original");
+        when(dependencies.quizService.findQuizById(12)).thenReturn(Optional.of(quiz(12)));
+        when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(question));
 
-        WebContext run = action("run");
-        when(run.request.getParameter("quiz")).thenReturn("12");
-        when(run.session.getAttribute("user")).thenReturn(persistedUser);
-        servlet.doPost(run.request, run.response);
-
-        verify(dependencies.attemptService).startAttempt(persistedUser, quiz);
-        verify(run.session).setAttribute("quizTime", 180);
-        verify(run.session).setAttribute("quizId", 12);
-        verify(run.session).setAttribute("attemptId", 44);
-        verify(run.session).setAttribute("quizExpiresAt", 1_700_000_000_000L);
-        verify(run.session).setAttribute("questions", List.of(first, second));
-        verify(run.session).setAttribute(org.mockito.ArgumentMatchers.eq("answersPerQuestion"), any());
-        verify(run.response).sendRedirect("questions");
-    }
-
-    @Test
-    public void addQuestionCoversValidationAndBothCorrectAnswerPatterns() throws Exception {
-        Dependencies dependencies = new Dependencies();
-        QuestionServlet servlet = dependencies.servlet();
-        Question saved = question(99, 12, "Saved");
-        when(dependencies.questionService.addQuestion(anyString(), anyInt())).thenReturn(saved);
-        when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(saved));
+        WebContext create = questionForm("addQuestion");
+        when(create.request.getParameter("correctAnswerA")).thenReturn("A");
+        when(create.request.getParameter("correctAnswerC")).thenReturn("C");
+        servlet.doPost(create.request, create.response);
+        verify(dependencies.questionService).createQuestion(
+                org.mockito.ArgumentMatchers.eq("New question"),
+                org.mockito.ArgumentMatchers.eq(12), any());
+        verify(create.dispatcher).forward(create.request, create.response);
 
         WebContext invalid = questionForm("addQuestion");
         servlet.doPost(invalid.request, invalid.response);
         verify(invalid.request).setAttribute(org.mockito.ArgumentMatchers.eq("checkboxAnswersMessage"), any());
         verify(invalid.dispatcher).forward(invalid.request, invalid.response);
 
-        WebContext firstPattern = questionForm("addQuestion");
-        stubCorrectAnswers(firstPattern, "A", "not-B", "C", "not-D");
-        servlet.doPost(firstPattern.request, firstPattern.response);
+        QuestionService.QuestionDetails details = new QuestionService.QuestionDetails(question, answers());
+        when(dependencies.questionService.getQuestionDetails(3)).thenReturn(details);
+        WebContext update = questionForm("editQuestion");
+        when(update.request.getParameter("questionId")).thenReturn("3");
+        when(update.request.getParameter("correctAnswerB")).thenReturn("B");
+        servlet.doPost(update.request, update.response);
+        verify(dependencies.questionService).updateQuestion(
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.eq("New question"), any());
+        verify(update.dispatcher).forward(update.request, update.response);
 
-        WebContext secondPattern = questionForm("addQuestion");
-        stubCorrectAnswers(secondPattern, "not-A", "B", "not-C", "D");
-        servlet.doPost(secondPattern.request, secondPattern.response);
-
-        verify(dependencies.questionService, org.mockito.Mockito.times(2)).addQuestion("New question", 12);
-        verify(dependencies.answerService, org.mockito.Mockito.times(8)).saveAnswer(any());
-        verify(firstPattern.dispatcher).forward(firstPattern.request, firstPattern.response);
-        verify(secondPattern.dispatcher).forward(secondPattern.request, secondPattern.response);
+        WebContext wrongQuiz = questionForm("editQuestion");
+        when(wrongQuiz.request.getParameter("questionId")).thenReturn("3");
+        when(wrongQuiz.request.getParameter("quiz")).thenReturn("13");
+        when(wrongQuiz.request.getParameter("correctAnswerA")).thenReturn("A");
+        servlet.doPost(wrongQuiz.request, wrongQuiz.response);
+        verify(wrongQuiz.response).sendError(HttpServletResponse.SC_BAD_REQUEST,
+                "Question does not belong to quiz: 13");
     }
 
     @Test
-    public void editQuestionCoversValidationAndBothCorrectAnswerPatterns() throws Exception {
+    public void deleteAndRunUseServerOwnedEntities() throws Exception {
         Dependencies dependencies = new Dependencies();
         QuestionServlet servlet = dependencies.servlet();
-        when(dependencies.questionService.findQuestionById(3))
-                .thenAnswer(invocation -> Optional.of(question(3, 12, "Original")));
-        when(dependencies.answerService.findAnswersByQuestionId(3))
-                .thenAnswer(invocation -> answers());
-        when(dependencies.questionService.findQuestionsByQuizId(12))
-                .thenReturn(List.of(question(3, 12, "Edited")));
-
-        WebContext invalid = editForm();
-        servlet.doPost(invalid.request, invalid.response);
-        verify(invalid.request).setAttribute(org.mockito.ArgumentMatchers.eq("checkboxAnswersMessage"), any());
-        verify(invalid.dispatcher).forward(invalid.request, invalid.response);
-
-        WebContext firstPattern = editForm();
-        stubCorrectAnswers(firstPattern, "A", "not-B", "C", "not-D");
-        servlet.doPost(firstPattern.request, firstPattern.response);
-
-        WebContext secondPattern = editForm();
-        stubCorrectAnswers(secondPattern, "not-A", "B", "not-C", "D");
-        servlet.doPost(secondPattern.request, secondPattern.response);
-
-        verify(dependencies.questionService, org.mockito.Mockito.times(2)).updateQuestion(any());
-        verify(dependencies.answerService, org.mockito.Mockito.times(8)).updateAnswer(any());
-        verify(firstPattern.request).setAttribute("quiz", 12);
-        verify(secondPattern.dispatcher).forward(secondPattern.request, secondPattern.response);
-    }
-
-    @Test
-    public void missingRequiredEntitiesFailFast() {
-        Dependencies dependencies = new Dependencies();
-        QuestionServlet servlet = dependencies.servlet();
-
-        WebContext edit = action("edit");
-        when(edit.request.getParameter("question")).thenReturn("404");
-        when(dependencies.questionService.findQuestionById(404)).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(edit.request, edit.response));
+        Question question = question(3, 12, "Question");
+        when(dependencies.questionService.findQuestionById(3)).thenReturn(Optional.of(question));
+        when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(question));
+        when(dependencies.quizService.findQuizById(12)).thenReturn(Optional.of(quiz(12)));
+        when(dependencies.questionService.getQuestionDetails(3))
+                .thenReturn(new QuestionService.QuestionDetails(question, answers()));
 
         WebContext delete = action("delete");
-        when(delete.request.getParameter("question")).thenReturn("404");
-        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(delete.request, delete.response));
+        when(delete.request.getParameter("question")).thenReturn("3");
+        servlet.doPost(delete.request, delete.response);
+        verify(dependencies.questionService).deleteQuestion(question);
+        verify(delete.request).setAttribute("quiz", 12);
 
+        Quiz quiz = quiz(12);
+        User user = user();
+        Attempt attempt = new Attempt();
+        attempt.setId(44);
+        attempt.setExpiresAt(new Date(1_700_000_000_000L));
+        when(dependencies.quizService.findQuizById(12)).thenReturn(Optional.of(quiz));
+        when(dependencies.attemptService.startAttempt(user, quiz)).thenReturn(attempt);
         WebContext run = action("run");
-        when(run.request.getParameter("quiz")).thenReturn("404");
-        when(dependencies.quizService.findQuizById(404)).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(run.request, run.response));
+        when(run.request.getParameter("quiz")).thenReturn("12");
+        when(run.session.getAttribute("user")).thenReturn(user);
+        servlet.doPost(run.request, run.response);
+        verify(run.session).setAttribute("quizTime", 180);
+        verify(run.session).setAttribute("attemptId", 44);
+        verify(run.session).setAttribute("quizExpiresAt", 1_700_000_000_000L);
+        verify(run.session).setAttribute(org.mockito.ArgumentMatchers.eq("answersPerQuestion"), any());
+        verify(run.response).sendRedirect("questions");
+    }
 
-        WebContext save = editForm();
-        when(save.request.getParameter("questionId")).thenReturn("404");
-        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(save.request, save.response));
+    @Test
+    public void malformedAndMissingResourcesReturnClientErrors() throws Exception {
+        Dependencies dependencies = new Dependencies();
+        QuestionServlet servlet = dependencies.servlet();
+
+        assertBadRequest(servlet, context(), "Missing parameter: action");
+        assertBadRequest(servlet, action("unknown"), "Unknown action: unknown");
+
+        WebContext invalidId = action("view");
+        when(invalidId.request.getParameter("quiz")).thenReturn("abc");
+        assertBadRequest(servlet, invalidId, "Parameter must be an integer: quiz");
+
+        WebContext invalidCheckbox = questionForm("addQuestion");
+        when(invalidCheckbox.request.getParameter("correctAnswerA")).thenReturn("yes");
+        assertBadRequest(servlet, invalidCheckbox, "Invalid parameter: correctAnswerA");
+
+        WebContext missingQuiz = action("add");
+        when(missingQuiz.request.getParameter("quiz")).thenReturn("404");
+        when(dependencies.quizService.findQuizById(404)).thenReturn(Optional.empty());
+        servlet.doPost(missingQuiz.request, missingQuiz.response);
+        verify(missingQuiz.response).sendError(HttpServletResponse.SC_NOT_FOUND, "Quiz not found: 404");
+
+        WebContext missingQuestion = action("delete");
+        when(missingQuestion.request.getParameter("question")).thenReturn("404");
+        when(dependencies.questionService.findQuestionById(404)).thenReturn(Optional.empty());
+        servlet.doPost(missingQuestion.request, missingQuestion.response);
+        verify(missingQuestion.response).sendError(HttpServletResponse.SC_NOT_FOUND, "Question not found: 404");
+
+        WebContext missingRunQuiz = action("run");
+        when(missingRunQuiz.request.getParameter("quiz")).thenReturn("404");
+        servlet.doPost(missingRunQuiz.request, missingRunQuiz.response);
+        verify(missingRunQuiz.response).sendError(HttpServletResponse.SC_NOT_FOUND, "Quiz not found: 404");
+
+        WebContext failure = action("view");
+        when(failure.request.getParameter("quiz")).thenReturn("12");
+        when(dependencies.quizService.findQuizById(12)).thenReturn(Optional.of(quiz(12)));
+        when(dependencies.questionService.findQuestionsByQuizId(12))
+                .thenThrow(new IllegalStateException("failed"));
+        servlet.doPost(failure.request, failure.response);
+        verify(failure.response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
+
+    private static void assertBadRequest(QuestionServlet servlet, WebContext context, String message)
+            throws Exception {
+        servlet.doPost(context.request, context.response);
+        verify(context.response).sendError(HttpServletResponse.SC_BAD_REQUEST, message);
     }
 
     private static WebContext questionForm(String action) {
@@ -219,25 +216,6 @@ public class QuestionServletCoverageTest {
         return context;
     }
 
-    private static WebContext editForm() {
-        WebContext context = action("editQuestion");
-        when(context.request.getParameter("quiz")).thenReturn("12");
-        when(context.request.getParameter("questionId")).thenReturn("3");
-        when(context.request.getParameter("question")).thenReturn("Edited");
-        when(context.request.getParameter("answerA")).thenReturn("answer-1");
-        when(context.request.getParameter("answerB")).thenReturn("answer-2");
-        when(context.request.getParameter("answerC")).thenReturn("answer-3");
-        when(context.request.getParameter("answerD")).thenReturn("answer-4");
-        return context;
-    }
-
-    private static void stubCorrectAnswers(WebContext context, String a, String b, String c, String d) {
-        when(context.request.getParameter("correctAnswerA")).thenReturn(a);
-        when(context.request.getParameter("correctAnswerB")).thenReturn(b);
-        when(context.request.getParameter("correctAnswerC")).thenReturn(c);
-        when(context.request.getParameter("correctAnswerD")).thenReturn(d);
-    }
-
     private static WebContext action(String action) {
         WebContext context = context();
         when(context.request.getParameter("action")).thenReturn(action);
@@ -246,19 +224,15 @@ public class QuestionServletCoverageTest {
 
     private static List<Answer> answers() {
         List<Answer> answers = new ArrayList<>();
-        answers.add(answer(1, false));
-        answers.add(answer(2, true));
-        answers.add(answer(3, false));
-        answers.add(answer(4, true));
+        for (int id = 1; id <= 4; id++) {
+            Answer answer = new Answer();
+            answer.setId(id);
+            answer.setQuestionId(3);
+            answer.setAnswer("answer-" + id);
+            answer.setCorrect(id == 2);
+            answers.add(answer);
+        }
         return answers;
-    }
-
-    private static Answer answer(int id, boolean correct) {
-        Answer answer = new Answer();
-        answer.setId(id);
-        answer.setAnswer("answer-" + id);
-        answer.setCorrect(correct);
-        return answer;
     }
 
     private static Question question(int id, int quizId, String text) {
@@ -269,10 +243,17 @@ public class QuestionServletCoverageTest {
         return question;
     }
 
-    private static User user(int id, String login) {
+    private static Quiz quiz(int id) {
+        Quiz quiz = new Quiz();
+        quiz.setId(id);
+        quiz.setTimeToPass(3);
+        return quiz;
+    }
+
+    private static User user() {
         User user = new User();
-        user.setId(id);
-        user.setLogin(login);
+        user.setId(8);
+        user.setLogin("alice");
         return user;
     }
 
@@ -283,10 +264,10 @@ public class QuestionServletCoverageTest {
     private static final class Dependencies {
         private final QuizService quizService = mock(QuizService.class);
         private final QuestionService questionService = mock(QuestionService.class);
-        private final AnswerService answerService = mock(AnswerService.class);
         private final AttemptService attemptService = mock(AttemptService.class);
+
         private QuestionServlet servlet() {
-            return new QuestionServlet(quizService, questionService, answerService, attemptService);
+            return new QuestionServlet(quizService, questionService, attemptService);
         }
     }
 
@@ -297,12 +278,12 @@ public class QuestionServletCoverageTest {
         private final RequestDispatcher dispatcher = mock(RequestDispatcher.class);
 
         private WebContext() {
-            User sessionUser = user(1, "user");
             when(request.getSession()).thenReturn(session);
             when(request.getSession(true)).thenReturn(session);
             when(request.getRequestDispatcher(anyString())).thenReturn(dispatcher);
-            when(session.getAttribute("user")).thenReturn(sessionUser);
+            when(session.getAttribute("user")).thenReturn(user());
             when(session.getAttribute("lang")).thenReturn(Locale.ENGLISH);
         }
     }
 }
+
