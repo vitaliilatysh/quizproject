@@ -75,6 +75,12 @@ public class SecurityServletCoverageTest {
         servlet.doPost(malformedRequest, malformedResponse);
         verify(malformedResponse).sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid answer id");
 
+        HttpServletRequest negativeRequest = requestWithSession(session);
+        HttpServletResponse negativeResponse = mock(HttpServletResponse.class);
+        when(negativeRequest.getParameterValues("answerId")).thenReturn(new String[]{"-1"});
+        servlet.doPost(negativeRequest, negativeResponse);
+        verify(negativeResponse).sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid answer id");
+
         QuizSubmissionException invalid = new QuizSubmissionException(
                 QuizSubmissionException.Reason.INVALID_ANSWER, "foreign answer");
         doThrow(invalid).when(attemptService).completeAttempt(9, 8, Set.of(11));
@@ -119,8 +125,6 @@ public class SecurityServletCoverageTest {
         verify(session).removeAttribute("quizId");
         verify(session).removeAttribute("quizTime");
         verify(session).removeAttribute("quizExpiresAt");
-        verify(session).removeAttribute("questions");
-        verify(session).removeAttribute("answersPerQuestion");
         verify(response).sendRedirect("quizzes");
     }
 

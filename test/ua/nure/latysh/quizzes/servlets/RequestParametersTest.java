@@ -6,6 +6,7 @@ import ua.nure.latysh.quizzes.dto.QuizDto;
 
 import javax.servlet.http.HttpServletRequest;
 import java.lang.reflect.Constructor;
+import java.time.LocalDateTime;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -35,14 +36,20 @@ public class RequestParametersTest {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getParameter("text")).thenReturn(" value ");
         when(request.getParameter("number")).thenReturn(" 12 ");
+        when(request.getParameter("date")).thenReturn("2026-08-13T12:30");
 
         assertEquals("value", RequestParameters.requiredText(request, "text"));
         assertEquals(12, RequestParameters.positiveInt(request, "number"));
+        assertEquals(LocalDateTime.parse("2026-08-13T12:30"),
+                RequestParameters.localDateTime(request, "date"));
     }
 
     @Test
     public void missingBlankAndMalformedValuesAreRejected() throws Exception {
         HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getParameter("date")).thenReturn("invalid");
+        assertThrows(BadRequestException.class,
+                () -> RequestParameters.localDateTime(request, "date"));
         when(request.getParameter("missing")).thenReturn(null);
         when(request.getParameter("blank")).thenReturn("   ");
         when(request.getParameter("zero")).thenReturn("0");
@@ -85,4 +92,3 @@ public class RequestParametersTest {
         assertEquals(expectedMessage, exception.getMessage());
     }
 }
-

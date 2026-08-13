@@ -9,7 +9,6 @@ import ua.nure.latysh.quizzes.entities.Attempt;
 import ua.nure.latysh.quizzes.entities.Level;
 import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.entities.Quiz;
-import ua.nure.latysh.quizzes.entities.Result;
 import ua.nure.latysh.quizzes.entities.Role;
 import ua.nure.latysh.quizzes.entities.Status;
 import ua.nure.latysh.quizzes.entities.Subject;
@@ -19,7 +18,6 @@ import ua.nure.latysh.quizzes.repositories.AttemptRepository;
 import ua.nure.latysh.quizzes.repositories.LevelRepository;
 import ua.nure.latysh.quizzes.repositories.QuestionRepository;
 import ua.nure.latysh.quizzes.repositories.QuizRepository;
-import ua.nure.latysh.quizzes.repositories.ResultRepository;
 import ua.nure.latysh.quizzes.repositories.RoleRepository;
 import ua.nure.latysh.quizzes.repositories.StatusRepository;
 import ua.nure.latysh.quizzes.repositories.SubjectRepository;
@@ -32,6 +30,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
 import static org.junit.Assert.assertEquals;
@@ -88,13 +87,15 @@ public class ServiceCoverageTest {
         user.setId(5);
         List<Attempt> attempts = List.of(attempt);
         when(repository.findAll()).thenReturn(attempts);
-        when(repository.findAllBetweenFinishDates("from", "to")).thenReturn(attempts);
+        LocalDateTime from = LocalDateTime.parse("2026-08-01T10:00");
+        LocalDateTime to = LocalDateTime.parse("2026-08-02T10:00");
+        when(repository.findAllBetweenFinishDates(from, to)).thenReturn(attempts);
         when(repository.findAllByUserId(5)).thenReturn(attempts);
         when(repository.save(attempt)).thenReturn(true);
         when(repository.findLastByUserId(5)).thenReturn(Optional.of(attempt));
 
         assertEquals(attempts, service.getAllAttempts());
-        assertEquals(attempts, service.getAllAttemptsBetweenFinishDates("from", "to"));
+        assertEquals(attempts, service.getAllAttemptsBetweenFinishDates(from, to));
         assertEquals(attempts, service.findAllAttemptsPerUser(5));
         assertTrue(service.saveAttempt(attempt));
         assertEquals(Optional.of(attempt), service.findTheLatestForUser(user));
@@ -301,53 +302,31 @@ public class ServiceCoverageTest {
     @Test
     public void resultServiceMapsResultsAndCalculatesScore() {
         QuizRepository quizRepository = mock(QuizRepository.class);
-        ResultRepository resultRepository = mock(ResultRepository.class);
-        AnswerRepository answerRepository = mock(AnswerRepository.class);
-        QuestionRepository questionRepository = mock(QuestionRepository.class);
         AttemptService attemptService = mock(AttemptService.class);
         UserService userService = mock(UserService.class);
-        ResultService service = new ResultService(quizRepository, resultRepository, answerRepository,
-                questionRepository, attemptService, userService);
+        ResultService service = new ResultService(quizRepository, attemptService, userService);
 
         Attempt attempt = attempt(30, 10, 6, 50);
         User user = user(6, "alice");
         Quiz quiz = quiz(10, "Java", 1, 1, 15);
-        when(attemptService.getAllAttempts()).thenReturn(List.of(attempt));
-        when(attemptService.getAllAttemptsBetweenFinishDates("from", "to")).thenReturn(List.of(attempt));
+        Attempt duplicate = attempt(31, 10, 6, 80);
+        LocalDateTime from = LocalDateTime.parse("2026-08-01T10:00");
+        LocalDateTime to = LocalDateTime.parse("2026-08-02T10:00");
+        when(attemptService.getAllAttempts()).thenReturn(List.of(attempt, duplicate));
+        when(attemptService.getAllAttemptsBetweenFinishDates(from, to)).thenReturn(List.of(attempt));
         when(attemptService.findAllAttemptsPerUser(6)).thenReturn(List.of(attempt));
         when(userService.findUserById(6)).thenReturn(Optional.of(user));
         when(quizRepository.findById(10)).thenReturn(Optional.of(quiz));
 
         List<ResultDto> all = service.getAllResults();
         assertEquals("alice", all.get(0).getUsername());
-        assertEquals("Java", service.getAllResultsBetweenFinishDates("from", "to").get(0).getQuizName());
+        assertEquals("Java", service.getAllResultsBetweenFinishDates(from, to).get(0).getQuizName());
         assertEquals(30, service.getAllResultsByUserId(6).get(0).getAttemptId());
-
-        Result first = result(1, 101, 30);
-        Result second = result(2, 202, 30);
-        Result unrelated = result(3, 303, 30);
-        when(resultRepository.save(first)).thenReturn(true);
-        when(resultRepository.findByAttemptId(30)).thenReturn(List.of(first, second, unrelated));
-        assertTrue(service.saveResult(first));
-        assertEquals(3, service.findAllByAttemptId(30).size());
-
-        Question firstQuestion = question(11, "Q1", 10);
-        Question secondQuestion = question(22, "Q2", 10);
-        Answer correct = answer(101, 11, true);
-        Answer wrong = answer(202, 22, false);
-        Answer other = answer(303, 99, true);
-        Answer expectedSecond = answer(204, 22, true);
-        when(answerRepository.findById(101)).thenReturn(Optional.of(correct));
-        when(answerRepository.findById(202)).thenReturn(Optional.of(wrong));
-        when(answerRepository.findById(303)).thenReturn(Optional.of(other));
-        when(questionRepository.findById(11)).thenReturn(Optional.of(firstQuestion));
-        when(questionRepository.findAllByQuizId(10)).thenReturn(List.of(firstQuestion, secondQuestion));
-        when(answerRepository.findAllByQuestionId(11)).thenReturn(List.of(correct, wrong));
-        when(answerRepository.findAllByQuestionId(22)).thenReturn(List.of(expectedSecond));
-
-        assertEquals(50.0f, service.getResultForQuizByAttemptId(30), 0.001f);
-        when(resultRepository.findByAttemptId(31)).thenReturn(List.of());
-        assertTrue(Float.isNaN(service.getResultForQuizByAttemptId(31)));
+        verify(quizRepository, org.mockito.Mockito.times(3)).findById(10);
+        verify(userService, org.mockito.Mockito.times(2)).findUserById(6);
+        assertThrows(IllegalArgumentException.class,
+                () -> service.getAllResultsBetweenFinishDates(to, from));
+        assertThrows(IllegalArgumentException.class, () -> service.getAllResultsByUserId(0));
     }
 
     private static Answer answer(int id, int questionId, boolean correct) {
@@ -391,14 +370,6 @@ public class ServiceCoverageTest {
         quiz.setSubjectId(subjectId);
         quiz.setTimeToPass(time);
         return quiz;
-    }
-
-    private static Result result(int id, int answerId, int attemptId) {
-        Result result = new Result();
-        result.setId(id);
-        result.setAnswerId(answerId);
-        result.setAttemptId(attemptId);
-        return result;
     }
 
     private static Subject subject(int id, String name) {

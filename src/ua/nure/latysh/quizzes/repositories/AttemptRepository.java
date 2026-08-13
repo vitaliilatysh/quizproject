@@ -2,6 +2,7 @@ package ua.nure.latysh.quizzes.repositories;
 
 import ua.nure.latysh.quizzes.entities.Attempt;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -12,7 +13,7 @@ public interface AttemptRepository extends CrudRepository<Attempt> {
 
     Optional<Attempt> findLastByUserId(int userId);
 
-    List<Attempt> findAllBetweenFinishDates(String startRange, String endRange);
+    List<Attempt> findAllBetweenFinishDates(LocalDateTime startRange, LocalDateTime endRange);
 
     Attempt create(Attempt attempt);
 

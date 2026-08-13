@@ -7,7 +7,6 @@ import ua.nure.latysh.quizzes.entities.Attempt;
 import ua.nure.latysh.quizzes.entities.Level;
 import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.entities.Quiz;
-import ua.nure.latysh.quizzes.entities.Result;
 import ua.nure.latysh.quizzes.entities.Role;
 import ua.nure.latysh.quizzes.entities.Status;
 import ua.nure.latysh.quizzes.entities.Subject;
@@ -20,6 +19,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.Date;
 
 import static org.junit.Assert.assertEquals;
@@ -86,7 +86,9 @@ public class RepositoryCoverageTest {
         ok.empty();
         assertTrue(repository.findLastByUserId(404).isEmpty());
         ok.oneRow();
-        assertEquals(1, repository.findAllBetweenFinishDates("from", "to").size());
+        LocalDateTime from = LocalDateTime.parse("2026-08-01T10:00");
+        LocalDateTime to = LocalDateTime.parse("2026-08-02T10:00");
+        assertEquals(1, repository.findAllBetweenFinishDates(from, to).size());
 
         Fixture failed = new Fixture();
         AttemptRepositoryImpl failing = new AttemptRepositoryImpl(failed.dbConnector);
@@ -96,7 +98,7 @@ public class RepositoryCoverageTest {
         assertThrows(RepositoryException.class, () -> failing.update(attempt));
         assertThrows(RepositoryException.class, () -> failing.findAllByUserId(3));
         assertThrows(RepositoryException.class, () -> failing.findLastByUserId(3));
-        assertThrows(RepositoryException.class, () -> failing.findAllBetweenFinishDates("from", "to"));
+        assertThrows(RepositoryException.class, () -> failing.findAllBetweenFinishDates(from, to));
         failed.failStatements();
         assertThrows(RepositoryException.class, failing::findAll);
     }
@@ -212,38 +214,6 @@ public class RepositoryCoverageTest {
         assertThrows(RepositoryException.class, () -> failing.delete(quiz));
         assertThrows(RepositoryException.class, () -> failing.save(quiz));
         assertThrows(RepositoryException.class, () -> failing.update(quiz));
-        failed.failStatements();
-        assertThrows(RepositoryException.class, failing::findAll);
-    }
-
-    @Test
-    public void resultRepositoryCoversSuccessfulAndFailedJdbcCalls() throws Exception {
-        Fixture ok = new Fixture();
-        ResultRepositoryImpl repository = new ResultRepositoryImpl(ok.dbConnector);
-        Result result = result();
-        ok.oneRow();
-        assertTrue(repository.findById(1).isPresent());
-        ok.empty();
-        assertTrue(repository.findById(404).isEmpty());
-        repository.delete(result);
-        assertTrue(repository.save(result));
-        repository.update(result);
-        ok.oneRow();
-        assertEquals(1, repository.findAll().size());
-        ok.oneRow();
-        assertEquals(1, repository.findByAttemptId(2).size());
-        ok.oneRow();
-        assertEquals(1, repository.findAllByUserId(3).size());
-
-        Fixture failed = new Fixture();
-        ResultRepositoryImpl failing = new ResultRepositoryImpl(failed.dbConnector);
-        failed.failPreparedStatements();
-        assertThrows(RepositoryException.class, () -> failing.findById(1));
-        assertThrows(RepositoryException.class, () -> failing.delete(result));
-        assertThrows(RepositoryException.class, () -> failing.save(result));
-        assertThrows(RepositoryException.class, () -> failing.update(result));
-        assertThrows(RepositoryException.class, () -> failing.findByAttemptId(2));
-        assertThrows(RepositoryException.class, () -> failing.findAllByUserId(3));
         failed.failStatements();
         assertThrows(RepositoryException.class, failing::findAll);
     }
@@ -406,14 +376,6 @@ public class RepositoryCoverageTest {
         quiz.setLevelId(1);
         quiz.setSubjectId(2);
         return quiz;
-    }
-
-    private static Result result() {
-        Result result = new Result();
-        result.setId(1);
-        result.setAnswerId(1);
-        result.setAttemptId(2);
-        return result;
     }
 
     private static Role role() {

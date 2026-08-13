@@ -1,165 +1,82 @@
 package ua.nure.latysh.quizzes.services;
 
 import ua.nure.latysh.quizzes.dto.ResultDto;
-import ua.nure.latysh.quizzes.entities.*;
-import ua.nure.latysh.quizzes.repositories.AnswerRepository;
-import ua.nure.latysh.quizzes.repositories.QuestionRepository;
+import ua.nure.latysh.quizzes.entities.Attempt;
+import ua.nure.latysh.quizzes.entities.Quiz;
+import ua.nure.latysh.quizzes.entities.User;
 import ua.nure.latysh.quizzes.repositories.QuizRepository;
-import ua.nure.latysh.quizzes.repositories.ResultRepository;
-import ua.nure.latysh.quizzes.repositories.impl.AnswerRepositoryImpl;
-import ua.nure.latysh.quizzes.repositories.impl.QuestionRepositoryImpl;
 import ua.nure.latysh.quizzes.repositories.impl.QuizRepositoryImpl;
-import ua.nure.latysh.quizzes.repositories.impl.ResultRepositoryImpl;
 
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public class ResultService {
+    private static final DateTimeFormatter FINISH_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH)
+                    .withZone(ZoneOffset.UTC);
+
     private final QuizRepository quizRepository;
-    private final ResultRepository resultRepository;
-    private final AnswerRepository answerRepository;
-    private final QuestionRepository questionRepository;
     private final AttemptService attemptService;
     private final UserService userService;
 
     public ResultService() {
-        this(new QuizRepositoryImpl(), new ResultRepositoryImpl(), new AnswerRepositoryImpl(),
-                new QuestionRepositoryImpl(), new AttemptService(), new UserService());
+        this(new QuizRepositoryImpl(), new AttemptService(), new UserService());
     }
 
     public ResultService(QuizRepository quizRepository,
-                         ResultRepository resultRepository,
-                         AnswerRepository answerRepository,
-                         QuestionRepository questionRepository,
                          AttemptService attemptService,
                          UserService userService) {
         this.quizRepository = quizRepository;
-        this.resultRepository = resultRepository;
-        this.answerRepository = answerRepository;
-        this.questionRepository = questionRepository;
         this.attemptService = attemptService;
         this.userService = userService;
     }
 
-    public List<ResultDto> getAllResults(){
-        List<ResultDto> resultDtos = new ArrayList<>();
-        List<Attempt> attempts = attemptService.getAllAttempts();
-
-        for (Attempt attempt : attempts) {
-            ResultDto resultDto = new ResultDto();
-            User user = RequiredEntity.get(userService.findUserById(attempt.getUserId()),
-                    "User " + attempt.getUserId());
-            resultDto.setUsername(user.getLogin());
-            resultDto.setQuizName(findQuiz(attempt.getQuizId()).getName());
-            resultDto.setQuizScore(attempt.getScore());
-            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
-            resultDto.setEndTime(simpleDateFormat.format(attempt.getEndTime()));
-            resultDtos.add(resultDto);
-        }
-        return resultDtos;
+    public List<ResultDto> getAllResults() {
+        return mapAttempts(attemptService.getAllAttempts(), true);
     }
 
-    public List<ResultDto> getAllResultsBetweenFinishDates(String startRange, String endRange){
-        List<ResultDto> resultDtos = new ArrayList<>();
-        List<Attempt> attempts = attemptService.getAllAttemptsBetweenFinishDates(startRange, endRange);
-
-        for (Attempt attempt : attempts) {
-            ResultDto resultDto = new ResultDto();
-            User user = RequiredEntity.get(userService.findUserById(attempt.getUserId()),
-                    "User " + attempt.getUserId());
-            resultDto.setUsername(user.getLogin());
-            resultDto.setQuizName(findQuiz(attempt.getQuizId()).getName());
-            resultDto.setQuizScore(attempt.getScore());
-            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
-            resultDto.setEndTime(simpleDateFormat.format(attempt.getEndTime()));
-            resultDtos.add(resultDto);
+    public List<ResultDto> getAllResultsBetweenFinishDates(LocalDateTime startRange, LocalDateTime endRange) {
+        if (startRange.isAfter(endRange)) {
+            throw new IllegalArgumentException("Start date must not be after end date");
         }
-        return resultDtos;
+        return mapAttempts(attemptService.getAllAttemptsBetweenFinishDates(startRange, endRange), true);
     }
 
     public List<ResultDto> getAllResultsByUserId(int userId) {
-        List<ResultDto> resultDtos = new ArrayList<>();
-        List<Attempt> attempts = attemptService.findAllAttemptsPerUser(userId);
-
-        for (Attempt attempt : attempts) {
-            ResultDto resultDto = new ResultDto();
-            resultDto.setAttemptId(attempt.getId());
-            resultDto.setQuizName(findQuiz(attempt.getQuizId()).getName());
-            resultDto.setQuizScore(attempt.getScore());
-            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
-            resultDto.setEndTime(simpleDateFormat.format(attempt.getEndTime()));
-            resultDtos.add(resultDto);
+        if (userId <= 0) {
+            throw new IllegalArgumentException("User id must be positive");
         }
-        return resultDtos;
+        return mapAttempts(attemptService.findAllAttemptsPerUser(userId), false);
     }
 
-    public boolean saveResult(Result result) {
-        return resultRepository.save(result);
-    }
-
-    public List<Result> findAllByAttemptId(int attemptId) {
-        return resultRepository.findByAttemptId(attemptId);
-    }
-
-    public float getResultForQuizByAttemptId(int attemptId) {
-        List<Result> results = resultRepository.findByAttemptId(attemptId);
-        int totalQuestions = 0;
-        int userCorrectQuestions = 0;
-
-        if (results.size() != 0) {
-            int questionId = findAnswer(results.get(0).getAnswerId()).getQuestionId();
-
-            Question question = RequiredEntity.get(questionRepository.findById(questionId),
-                    "Question " + questionId);
-            int quizId = question.getQuizId();
-            List<Question> questions = questionRepository.findAllByQuizId(quizId);
-            totalQuestions = questions.size();
-
-            for (Question q : questions) {
-                List<Answer> answersPerQuestion = answerRepository.findAllByQuestionId(q.getId());
-
-                List<Answer> correctAnswersPerQuestion = new ArrayList<>();
-                List<Answer> userAnswersPerQuestion = new ArrayList<>();
-                List<Answer> userCorrectAnswersList = new ArrayList<>();
-
-                for (Result result : results) {
-                    Answer answer = findAnswer(result.getAnswerId());
-                    if (answer.getQuestionId() == q.getId()) {
-                        userAnswersPerQuestion.add(answer);
-                    }
-                }
-                for (Answer answer : userAnswersPerQuestion) {
-                    if (answer.isCorrect()) {
-                        userCorrectAnswersList.add(answer);
-                    } else {
-                        userCorrectAnswersList.clear();
-                        break;
-                    }
-                }
-
-                for (Answer answer : answersPerQuestion) {
-                    if (answer.isCorrect()) {
-                        correctAnswersPerQuestion.add(answer);
-                    }
-                }
-
-                if (userCorrectAnswersList.size() == correctAnswersPerQuestion.size()) {
-                    ++userCorrectQuestions;
-                }
-
+    private List<ResultDto> mapAttempts(List<Attempt> attempts, boolean includeUsername) {
+        Map<Integer, String> quizNames = new HashMap<>();
+        Map<Integer, String> usernames = new HashMap<>();
+        return attempts.stream().map(attempt -> {
+            ResultDto dto = new ResultDto();
+            dto.setAttemptId(attempt.getId());
+            dto.setQuizName(quizNames.computeIfAbsent(attempt.getQuizId(), this::findQuizName));
+            dto.setQuizScore(attempt.getScore());
+            dto.setEndTime(FINISH_TIME_FORMAT.format(attempt.getEndTime().toInstant()));
+            if (includeUsername) {
+                dto.setUsername(usernames.computeIfAbsent(attempt.getUserId(), this::findUsername));
             }
-        }
-
-        return (userCorrectQuestions / (float) totalQuestions) * 100;
+            return dto;
+        }).toList();
     }
 
-    private Quiz findQuiz(int quizId) {
-        return RequiredEntity.get(quizRepository.findById(quizId), "Quiz " + quizId);
+    private String findQuizName(int quizId) {
+        Quiz quiz = RequiredEntity.get(quizRepository.findById(quizId), "Quiz " + quizId);
+        return quiz.getName();
     }
 
-    private Answer findAnswer(int answerId) {
-        return RequiredEntity.get(answerRepository.findById(answerId), "Answer " + answerId);
+    private String findUsername(int userId) {
+        User user = RequiredEntity.get(userService.findUserById(userId), "User " + userId);
+        return user.getLogin();
     }
 }

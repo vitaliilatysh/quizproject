@@ -1,6 +1,5 @@
 package ua.nure.latysh.quizzes.servlets;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.dto.ResultDto;
 import ua.nure.latysh.quizzes.entities.User;
 import ua.nure.latysh.quizzes.exceptions.QuizSubmissionException;
@@ -20,7 +19,7 @@ import java.util.Set;
 
 @WebServlet("/results")
 public class ResultServlet extends HttpServlet {
-    private static final Logger logger = Logger.getLogger(ResultServlet.class);
+    private static final String RESULTS_VIEW = "/WEB-INF/views/results.jsp";
 
     private final ResultService resultService;
     private final AttemptService attemptService;
@@ -47,7 +46,7 @@ public class ResultServlet extends HttpServlet {
         Set<Integer> answerIds;
         try {
             answerIds = parseAnswerIds(request.getParameterValues("answerId"));
-        } catch (NumberFormatException exception) {
+        } catch (BadRequestException exception) {
             ServletResponseHandler.sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid answer id");
             return;
         }
@@ -69,18 +68,28 @@ public class ResultServlet extends HttpServlet {
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         HttpSession session = request.getSession(false);
-        User user = (User) session.getAttribute("user");
+        if (session == null || !(session.getAttribute("user") instanceof User user)) {
+            ServletResponseHandler.sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Authentication required");
+            return;
+        }
         List<ResultDto> results = resultService.getAllResultsByUserId(user.getId());
         request.setAttribute("userResults", results);
-        ServletResponseHandler.forward(request.getRequestDispatcher("/WEB-INF/views/results.jsp"), request, response);
-        logger.info(user.getLogin() + " opened quiz results");
+        ServletResponseHandler.forward(request.getRequestDispatcher(RESULTS_VIEW), request, response);
     }
 
-    private Set<Integer> parseAnswerIds(String[] values) {
+    private Set<Integer> parseAnswerIds(String[] values) throws BadRequestException {
         Set<Integer> answerIds = new HashSet<>();
         if (values != null) {
             for (String value : values) {
-                answerIds.add(Integer.parseInt(value));
+                try {
+                    int answerId = Integer.parseInt(value);
+                    if (answerId <= 0) {
+                        throw new BadRequestException("Invalid answer id");
+                    }
+                    answerIds.add(answerId);
+                } catch (NumberFormatException exception) {
+                    throw new BadRequestException("Invalid answer id");
+                }
             }
         }
         return answerIds;
@@ -91,7 +100,5 @@ public class ResultServlet extends HttpServlet {
         session.removeAttribute("quizId");
         session.removeAttribute("quizTime");
         session.removeAttribute("quizExpiresAt");
-        session.removeAttribute("questions");
-        session.removeAttribute("answersPerQuestion");
     }
 }
