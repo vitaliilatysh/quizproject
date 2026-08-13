@@ -23,7 +23,7 @@ final class RequestParameters {
                 throw new BadRequestException("Parameter must be positive: " + name);
             }
             return parsed;
-        } catch (NumberFormatException exception) {
+        } catch (NumberFormatException _) {
             throw new BadRequestException("Parameter must be an integer: " + name);
         }
     }

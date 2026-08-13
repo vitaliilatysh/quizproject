@@ -39,6 +39,10 @@ final class ServletResponseHandler {
         }
     }
 
+    static void internalError(HttpServletResponse response, Exception exception) {
+        failSafely(response, exception);
+    }
+
     private static void failSafely(HttpServletResponse response, Exception exception) {
         logger.error("Could not write the servlet response", exception);
         response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);

@@ -25,6 +25,11 @@ public class QuizServlet extends HttpServlet {
     private static final String QUIZZES_LOCATION = "quizzes";
     private static final String ADD_VIEW = "/WEB-INF/views/addQuiz.jsp";
     private static final String EDIT_VIEW = "/WEB-INF/views/editQuiz.jsp";
+    private static final String QUIZ = "quiz";
+    private static final String QUIZ_NAME = "quizName";
+    private static final String QUIZ_SUBJECT = "quizSubject";
+    private static final String QUIZ_COMPLEXITY = "quizComplexity";
+    private static final String QUIZ_TIME = "quizTime";
 
     private final QuizService quizService;
     private final SubjectService subjectService;
@@ -70,6 +75,8 @@ public class QuizServlet extends HttpServlet {
         } catch (BadRequestException exception) {
             ServletResponseHandler.sendError(
                     response, HttpServletResponse.SC_BAD_REQUEST, exception.getMessage());
+        } catch (ServletException | IOException exception) {
+            ServletResponseHandler.internalError(response, exception);
         }
     }
 
@@ -86,7 +93,7 @@ public class QuizServlet extends HttpServlet {
 
     private void delete(HttpServletRequest request,
                         HttpServletResponse response) throws BadRequestException {
-        int quizId = RequestParameters.positiveInt(request, "quiz");
+        int quizId = RequestParameters.positiveInt(request, QUIZ);
         Optional<Quiz> quiz = quizService.findQuizById(quizId);
         if (quiz.isEmpty()) {
             ServletResponseHandler.sendError(
@@ -128,17 +135,17 @@ public class QuizServlet extends HttpServlet {
 
     void edit(HttpServletRequest request,
               HttpServletResponse response) throws BadRequestException, ServletException, IOException {
-        int quizId = RequestParameters.positiveInt(request, "quiz");
-        String quizName = RequestParameters.requiredText(request, "quizName");
-        String quizSubject = RequestParameters.requiredText(request, "quizSubject");
-        String quizComplexity = RequestParameters.requiredText(request, "quizComplexity");
-        int quizTime = RequestParameters.positiveInt(request, "quizTime");
+        int quizId = RequestParameters.positiveInt(request, QUIZ);
+        String quizName = RequestParameters.requiredText(request, QUIZ_NAME);
+        String quizSubject = RequestParameters.requiredText(request, QUIZ_SUBJECT);
+        String quizComplexity = RequestParameters.requiredText(request, QUIZ_COMPLEXITY);
+        int quizTime = RequestParameters.positiveInt(request, QUIZ_TIME);
 
-        request.setAttribute("quiz", quizId);
-        request.setAttribute("quizName", quizName);
-        request.setAttribute("quizComplexity", quizComplexity);
-        request.setAttribute("quizSubject", quizSubject);
-        request.setAttribute("quizTime", quizTime);
+        request.setAttribute(QUIZ, quizId);
+        request.setAttribute(QUIZ_NAME, quizName);
+        request.setAttribute(QUIZ_COMPLEXITY, quizComplexity);
+        request.setAttribute(QUIZ_SUBJECT, quizSubject);
+        request.setAttribute(QUIZ_TIME, quizTime);
         setFormOptions(request);
         request.getRequestDispatcher(EDIT_VIEW).forward(request, response);
     }
@@ -157,11 +164,11 @@ public class QuizServlet extends HttpServlet {
                                    QuizForm form,
                                    String view) throws ServletException, IOException {
         setFormOptions(request);
-        request.setAttribute("quiz", form.id());
-        request.setAttribute("quizName", form.name());
-        request.setAttribute("quizSubject", form.subject());
-        request.setAttribute("quizComplexity", form.complexity());
-        request.setAttribute("quizTime", form.time());
+        request.setAttribute(QUIZ, form.id());
+        request.setAttribute(QUIZ_NAME, form.name());
+        request.setAttribute(QUIZ_SUBJECT, form.subject());
+        request.setAttribute(QUIZ_COMPLEXITY, form.complexity());
+        request.setAttribute(QUIZ_TIME, form.time());
         request.setAttribute("quizNameMessage", duplicateNameMessage(request));
         request.getRequestDispatcher(view).forward(request, response);
     }
@@ -187,13 +194,13 @@ public class QuizServlet extends HttpServlet {
         }
 
         static QuizForm forUpdate(HttpServletRequest request) throws BadRequestException {
-            return from(request, RequestParameters.positiveInt(request, "quiz"));
+            return from(request, RequestParameters.positiveInt(request, QUIZ));
         }
 
         private static QuizForm from(HttpServletRequest request, int id) throws BadRequestException {
             return new QuizForm(
                     id,
-                    RequestParameters.requiredText(request, "quizName"),
+                    RequestParameters.requiredText(request, QUIZ_NAME),
                     RequestParameters.requiredText(request, "subjectName"),
                     RequestParameters.requiredText(request, "complexity"),
                     RequestParameters.positiveInt(request, "time"));
