@@ -106,9 +106,9 @@ public class QuizServlet extends HttpServlet {
 
     @Override
     protected void doPut(HttpServletRequest request,
-                         HttpServletResponse response) throws ServletException, IOException {
+                         HttpServletResponse response) {
         setFormOptions(request);
-        request.getRequestDispatcher(ADD_VIEW).forward(request, response);
+        ServletResponseHandler.forward(request.getRequestDispatcher(ADD_VIEW), request, response);
     }
 
     void create(HttpServletRequest request,
