@@ -223,6 +223,8 @@ public class RepositoryCoverageTest {
         Result result = result();
         ok.oneRow();
         assertTrue(repository.findById(1).isPresent());
+        ok.empty();
+        assertTrue(repository.findById(404).isEmpty());
         repository.delete(result);
         assertTrue(repository.save(result));
         repository.update(result);
