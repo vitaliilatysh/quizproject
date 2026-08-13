@@ -24,6 +24,7 @@ import java.util.List;
 @EnableConfigurationProperties(SecurityProperties.class)
 public class SecurityConfiguration {
     @Bean
+    @SuppressWarnings("java:S4502") // Bearer-only auth never relies on automatically submitted cookies.
     SecurityFilterChain apiSecurity(
             HttpSecurity http,
             RateLimitFilter rateLimitFilter,
