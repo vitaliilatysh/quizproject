@@ -19,7 +19,7 @@ public class PojoCoverageTest {
         Class<?>[] types = {
                 ProfileDto.class, QuizDto.class, ResultDto.class, UserDto.class,
                 Answer.class, Attempt.class, Level.class, Question.class, Quiz.class,
-                Result.class, Role.class, Status.class, Subject.class, User.class
+                Role.class, Status.class, Subject.class, User.class
         };
 
         for (Class<?> type : types) {

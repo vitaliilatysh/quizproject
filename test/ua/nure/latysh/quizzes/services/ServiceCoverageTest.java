@@ -9,7 +9,6 @@ import ua.nure.latysh.quizzes.entities.Attempt;
 import ua.nure.latysh.quizzes.entities.Level;
 import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.entities.Quiz;
-import ua.nure.latysh.quizzes.entities.Result;
 import ua.nure.latysh.quizzes.entities.Role;
 import ua.nure.latysh.quizzes.entities.Status;
 import ua.nure.latysh.quizzes.entities.Subject;
@@ -19,7 +18,6 @@ import ua.nure.latysh.quizzes.repositories.AttemptRepository;
 import ua.nure.latysh.quizzes.repositories.LevelRepository;
 import ua.nure.latysh.quizzes.repositories.QuestionRepository;
 import ua.nure.latysh.quizzes.repositories.QuizRepository;
-import ua.nure.latysh.quizzes.repositories.ResultRepository;
 import ua.nure.latysh.quizzes.repositories.RoleRepository;
 import ua.nure.latysh.quizzes.repositories.StatusRepository;
 import ua.nure.latysh.quizzes.repositories.SubjectRepository;
@@ -372,14 +370,6 @@ public class ServiceCoverageTest {
         quiz.setSubjectId(subjectId);
         quiz.setTimeToPass(time);
         return quiz;
-    }
-
-    private static Result result(int id, int answerId, int attemptId) {
-        Result result = new Result();
-        result.setId(id);
-        result.setAnswerId(answerId);
-        result.setAttemptId(attemptId);
-        return result;
     }
 
     private static Subject subject(int id, String name) {

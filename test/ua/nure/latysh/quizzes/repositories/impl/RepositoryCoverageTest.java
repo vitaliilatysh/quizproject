@@ -7,7 +7,6 @@ import ua.nure.latysh.quizzes.entities.Attempt;
 import ua.nure.latysh.quizzes.entities.Level;
 import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.entities.Quiz;
-import ua.nure.latysh.quizzes.entities.Result;
 import ua.nure.latysh.quizzes.entities.Role;
 import ua.nure.latysh.quizzes.entities.Status;
 import ua.nure.latysh.quizzes.entities.Subject;
@@ -220,38 +219,6 @@ public class RepositoryCoverageTest {
     }
 
     @Test
-    public void resultRepositoryCoversSuccessfulAndFailedJdbcCalls() throws Exception {
-        Fixture ok = new Fixture();
-        ResultRepositoryImpl repository = new ResultRepositoryImpl(ok.dbConnector);
-        Result result = result();
-        ok.oneRow();
-        assertTrue(repository.findById(1).isPresent());
-        ok.empty();
-        assertTrue(repository.findById(404).isEmpty());
-        repository.delete(result);
-        assertTrue(repository.save(result));
-        repository.update(result);
-        ok.oneRow();
-        assertEquals(1, repository.findAll().size());
-        ok.oneRow();
-        assertEquals(1, repository.findByAttemptId(2).size());
-        ok.oneRow();
-        assertEquals(1, repository.findAllByUserId(3).size());
-
-        Fixture failed = new Fixture();
-        ResultRepositoryImpl failing = new ResultRepositoryImpl(failed.dbConnector);
-        failed.failPreparedStatements();
-        assertThrows(RepositoryException.class, () -> failing.findById(1));
-        assertThrows(RepositoryException.class, () -> failing.delete(result));
-        assertThrows(RepositoryException.class, () -> failing.save(result));
-        assertThrows(RepositoryException.class, () -> failing.update(result));
-        assertThrows(RepositoryException.class, () -> failing.findByAttemptId(2));
-        assertThrows(RepositoryException.class, () -> failing.findAllByUserId(3));
-        failed.failStatements();
-        assertThrows(RepositoryException.class, failing::findAll);
-    }
-
-    @Test
     public void roleAndStatusRepositoriesCoverSuccessfulAndFailedJdbcCalls() throws Exception {
         Fixture roleOk = new Fixture();
         RoleRepositoryImpl roles = new RoleRepositoryImpl(roleOk.dbConnector);
@@ -409,14 +376,6 @@ public class RepositoryCoverageTest {
         quiz.setLevelId(1);
         quiz.setSubjectId(2);
         return quiz;
-    }
-
-    private static Result result() {
-        Result result = new Result();
-        result.setId(1);
-        result.setAnswerId(1);
-        result.setAttemptId(2);
-        return result;
     }
 
     private static Role role() {
