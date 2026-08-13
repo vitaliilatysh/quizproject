@@ -143,6 +143,14 @@ public class QuizServletCoverageTest {
         QuizServlet servlet = new QuizServlet(
                 quizService, mock(SubjectService.class), mock(LevelService.class));
 
+        WebContext successfulDelete = context();
+        Quiz quiz = quiz(5, "Direct delete");
+        when(successfulDelete.request.getParameter("quiz")).thenReturn("5");
+        when(quizService.findQuizById(5)).thenReturn(Optional.of(quiz));
+        servlet.doDelete(successfulDelete.request, successfulDelete.response);
+        verify(quizService).deleteQuiz(quiz);
+        verify(successfulDelete.response).sendRedirect("quizzes");
+
         WebContext invalidDelete = action("delete");
         when(invalidDelete.request.getParameter("quiz")).thenReturn("invalid");
         servlet.doPost(invalidDelete.request, invalidDelete.response);
