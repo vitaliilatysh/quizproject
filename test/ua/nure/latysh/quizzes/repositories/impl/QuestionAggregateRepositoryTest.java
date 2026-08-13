@@ -10,7 +10,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -22,6 +21,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 public class QuestionAggregateRepositoryTest {
 
@@ -36,7 +36,7 @@ public class QuestionAggregateRepositoryTest {
 
         assertEquals(42, saved.getId());
         verify(fixture.connection).setAutoCommit(false);
-        verify(fixture.answerStatement, org.mockito.Mockito.times(4)).addBatch();
+        verify(fixture.answerStatement, times(4)).addBatch();
         verify(fixture.answerStatement).executeBatch();
         verify(fixture.connection).commit();
         verify(fixture.dbConnector, never()).rollback(fixture.connection);
@@ -77,7 +77,7 @@ public class QuestionAggregateRepositoryTest {
 
         fixture.repository.updateWithAnswers(question(9, 7), answers(true));
 
-        verify(fixture.answerStatement, org.mockito.Mockito.times(4)).setInt(4, 9);
+        verify(fixture.answerStatement).setInt(4, 9);
         verify(fixture.connection).commit();
     }
 

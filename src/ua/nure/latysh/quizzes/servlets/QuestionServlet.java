@@ -1,12 +1,10 @@
 package ua.nure.latysh.quizzes.servlets;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.entities.Answer;
 import ua.nure.latysh.quizzes.entities.Attempt;
 import ua.nure.latysh.quizzes.entities.Question;
 import ua.nure.latysh.quizzes.entities.Quiz;
 import ua.nure.latysh.quizzes.entities.User;
-import ua.nure.latysh.quizzes.services.AnswerService;
 import ua.nure.latysh.quizzes.services.AttemptService;
 import ua.nure.latysh.quizzes.services.QuestionService;
 import ua.nure.latysh.quizzes.services.QuizService;
@@ -28,12 +26,15 @@ import java.util.ResourceBundle;
 @WebServlet(urlPatterns = {"/questions", "/questions/edit", "/questions/add", "/questions/view"})
 public class QuestionServlet extends HttpServlet {
 
-    private static final Logger logger = Logger.getLogger(QuestionServlet.class);
     private static final String QUESTIONS_VIEW = "/WEB-INF/views/questions.jsp";
     private static final String LIST_VIEW = "/WEB-INF/views/listQuestions.jsp";
     private static final String ADD_VIEW = "/WEB-INF/views/addQuestion.jsp";
     private static final String EDIT_VIEW = "/WEB-INF/views/editQuestion.jsp";
-    private static final String QUESTIONS_LOCATION = "questions";
+    private static final String QUESTIONS = "questions";
+    private static final String QUIZ = "quiz";
+    private static final String QUESTION = "question";
+    private static final String QUESTION_ID = "questionId";
+    private static final String QUIZ_NOT_FOUND = "Quiz not found: ";
     private static final int QUESTION_MAX_LENGTH = 250;
     private static final int ANSWER_MAX_LENGTH = 50;
     private static final List<String> ANSWER_SUFFIXES = List.of("A", "B", "C", "D");
@@ -44,11 +45,6 @@ public class QuestionServlet extends HttpServlet {
 
     public QuestionServlet() {
         this(new QuizService(), new QuestionService(), new AttemptService());
-    }
-
-    QuestionServlet(QuizService quizService, QuestionService questionService,
-                    AnswerService answerService, AttemptService attemptService) {
-        this(quizService, questionService, attemptService);
     }
 
     QuestionServlet(QuizService quizService, QuestionService questionService,
@@ -80,7 +76,6 @@ public class QuestionServlet extends HttpServlet {
                 case "delete" -> deleteQuestion(request, response);
                 default -> throw new BadRequestException("Unknown action: " + action);
             }
-            logAction(request, action);
         } catch (BadRequestException exception) {
             ServletResponseHandler.sendError(response, HttpServletResponse.SC_BAD_REQUEST, exception.getMessage());
         } catch (NoSuchElementException exception) {
@@ -92,13 +87,13 @@ public class QuestionServlet extends HttpServlet {
 
     private void showAddForm(HttpServletRequest request, HttpServletResponse response)
             throws BadRequestException {
-        int quizId = RequestParameters.positiveInt(request, "quiz");
+        int quizId = RequestParameters.positiveInt(request, QUIZ);
         if (quizService.findQuizById(quizId).isEmpty()) {
             ServletResponseHandler.sendError(response, HttpServletResponse.SC_NOT_FOUND,
-                    "Quiz not found: " + quizId);
+                    QUIZ_NOT_FOUND + quizId);
             return;
         }
-        request.setAttribute("quiz", quizId);
+        request.setAttribute(QUIZ, quizId);
         request.setAttribute("action", "create");
         ServletResponseHandler.forward(request.getRequestDispatcher(ADD_VIEW), request, response);
     }
@@ -132,7 +127,7 @@ public class QuestionServlet extends HttpServlet {
 
     private void deleteQuestion(HttpServletRequest request, HttpServletResponse response)
             throws BadRequestException {
-        int questionId = RequestParameters.positiveInt(request, "question");
+        int questionId = RequestParameters.positiveInt(request, QUESTION);
         Optional<Question> question = questionService.findQuestionById(questionId);
         if (question.isEmpty()) {
             ServletResponseHandler.sendError(response, HttpServletResponse.SC_NOT_FOUND,
@@ -145,38 +140,38 @@ public class QuestionServlet extends HttpServlet {
 
     private void showEditForm(HttpServletRequest request, HttpServletResponse response)
             throws BadRequestException {
-        int questionId = RequestParameters.positiveInt(request, "question");
+        int questionId = RequestParameters.positiveInt(request, QUESTION);
         QuestionService.QuestionDetails details = questionService.getQuestionDetails(questionId);
         Question question = details.question();
-        request.setAttribute("quiz", question.getQuizId());
-        request.setAttribute("questionId", question.getId());
-        request.setAttribute("question", question.getQuestion());
+        request.setAttribute(QUIZ, question.getQuizId());
+        request.setAttribute(QUESTION_ID, question.getId());
+        request.setAttribute(QUESTION, question.getQuestion());
         setAnswerAttributes(request, details.answers());
         ServletResponseHandler.forward(request.getRequestDispatcher(EDIT_VIEW), request, response);
     }
 
     private void listQuestions(HttpServletRequest request, HttpServletResponse response)
             throws BadRequestException {
-        int quizId = RequestParameters.positiveInt(request, "quiz");
+        int quizId = RequestParameters.positiveInt(request, QUIZ);
         if (quizService.findQuizById(quizId).isEmpty()) {
             ServletResponseHandler.sendError(response, HttpServletResponse.SC_NOT_FOUND,
-                    "Quiz not found: " + quizId);
+                    QUIZ_NOT_FOUND + quizId);
             return;
         }
         showQuestionList(request, response, quizId);
     }
 
     private void showQuestionList(HttpServletRequest request, HttpServletResponse response, int quizId) {
-        request.setAttribute("questions", questionService.findQuestionsByQuizId(quizId));
-        request.setAttribute("quiz", quizId);
+        request.setAttribute(QUESTIONS, questionService.findQuestionsByQuizId(quizId));
+        request.setAttribute(QUIZ, quizId);
         ServletResponseHandler.forward(request.getRequestDispatcher(LIST_VIEW), request, response);
     }
 
     private void runQuestions(HttpServletRequest request, HttpServletResponse response)
             throws BadRequestException {
-        int quizId = RequestParameters.positiveInt(request, "quiz");
+        int quizId = RequestParameters.positiveInt(request, QUIZ);
         Quiz quiz = quizService.findQuizById(quizId)
-                .orElseThrow(() -> new NoSuchElementException("Quiz not found: " + quizId));
+                .orElseThrow(() -> new NoSuchElementException(QUIZ_NOT_FOUND + quizId));
         List<Question> questions = questionService.findQuestionsByQuizId(quizId);
         Map<Question, List<Answer>> answersPerQuestion = new LinkedHashMap<>();
         for (Question question : questions) {
@@ -193,16 +188,16 @@ public class QuestionServlet extends HttpServlet {
         session.setAttribute("quizId", quizId);
         session.setAttribute("attemptId", attempt.getId());
         session.setAttribute("quizExpiresAt", attempt.getExpiresAt().getTime());
-        session.setAttribute("questions", questions);
-        session.setAttribute("answersPerQuestion", answersPerQuestion);
-        ServletResponseHandler.redirect(response, QUESTIONS_LOCATION);
+        request.setAttribute(QUESTIONS, questions);
+        request.setAttribute("answersPerQuestion", answersPerQuestion);
+        ServletResponseHandler.forward(request.getRequestDispatcher(QUESTIONS_VIEW), request, response);
     }
 
     private void showInvalidForm(HttpServletRequest request, HttpServletResponse response,
                                  QuestionForm form, String view) {
-        request.setAttribute("quiz", form.quizId());
-        request.setAttribute("questionId", form.questionId());
-        request.setAttribute("question", form.question());
+        request.setAttribute(QUIZ, form.quizId());
+        request.setAttribute(QUESTION_ID, form.questionId());
+        request.setAttribute(QUESTION, form.question());
         setAnswerAttributes(request, form.toAnswers(List.of()));
         request.setAttribute("checkboxAnswersMessage", validationMessage(request));
         ServletResponseHandler.forward(request.getRequestDispatcher(view), request, response);
@@ -223,20 +218,13 @@ public class QuestionServlet extends HttpServlet {
                 .getString("validation.add.question.correct");
     }
 
-    private void logAction(HttpServletRequest request, String action) {
-        User user = (User) request.getSession().getAttribute("user");
-        if (user != null) {
-            logger.info(user.getLogin() + " completed question action " + action);
-        }
-    }
-
     record QuestionForm(int quizId, int questionId, String question,
                         List<String> answers, List<Boolean> correct) {
 
         static QuestionForm from(HttpServletRequest request, boolean update) throws BadRequestException {
-            int quizId = RequestParameters.positiveInt(request, "quiz");
-            int questionId = update ? RequestParameters.positiveInt(request, "questionId") : 0;
-            String question = RequestParameters.boundedText(request, "question", QUESTION_MAX_LENGTH);
+            int quizId = RequestParameters.positiveInt(request, QUIZ);
+            int questionId = update ? RequestParameters.positiveInt(request, QUESTION_ID) : 0;
+            String question = RequestParameters.boundedText(request, QUESTION, QUESTION_MAX_LENGTH);
             List<String> answers = new ArrayList<>(ANSWER_SUFFIXES.size());
             List<Boolean> correct = new ArrayList<>(ANSWER_SUFFIXES.size());
             for (String suffix : ANSWER_SUFFIXES) {

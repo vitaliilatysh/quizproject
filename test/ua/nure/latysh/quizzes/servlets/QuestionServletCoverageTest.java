@@ -23,12 +23,10 @@ import java.util.Locale;
 import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -161,8 +159,8 @@ public class QuestionServletCoverageTest {
         verify(run.session).setAttribute("quizTime", 180);
         verify(run.session).setAttribute("attemptId", 44);
         verify(run.session).setAttribute("quizExpiresAt", 1_700_000_000_000L);
-        verify(run.session).setAttribute(org.mockito.ArgumentMatchers.eq("answersPerQuestion"), any());
-        verify(run.response).sendRedirect("questions");
+        verify(run.request).setAttribute(org.mockito.ArgumentMatchers.eq("answersPerQuestion"), any());
+        verify(run.dispatcher).forward(run.request, run.response);
     }
 
     @Test
@@ -219,11 +217,7 @@ public class QuestionServletCoverageTest {
     }
 
     @Test
-    public void legacyConstructorAndMalformedAnswerIdsAreCovered() {
-        Dependencies dependencies = new Dependencies();
-        assertNotNull(new QuestionServlet(
-                dependencies.quizService, dependencies.questionService,
-                mock(ua.nure.latysh.quizzes.services.AnswerService.class), dependencies.attemptService));
+    public void malformedAnswerIdsAreRejected() {
         QuestionServlet.QuestionForm form = new QuestionServlet.QuestionForm(
                 1, 2, "Question", List.of("A", "B", "C", "D"),
                 List.of(true, false, false, false));

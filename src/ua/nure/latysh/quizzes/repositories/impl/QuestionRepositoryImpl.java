@@ -70,49 +70,20 @@ public class QuestionRepositoryImpl implements QuestionRepository {
 
     @Override
     public Question createWithAnswers(Question question, List<Answer> answers) {
-        try {
-            try (Connection connection = dbConnector.getConnection()) {
-                connection.setAutoCommit(false);
-                try {
-                    Question savedQuestion = insertQuestion(connection, question);
-                    insertAnswers(connection, savedQuestion.getId(), answers);
-                    connection.commit();
-                    return savedQuestion;
-                } catch (RepositoryException exception) {
-                    rollback(connection, exception);
-                    throw exception;
-                } catch (SQLException exception) {
-                    RepositoryException failure = failure("create question with answers", exception);
-                    rollback(connection, failure);
-                    throw failure;
-                }
-            }
-        } catch (SQLException exception) {
-            throw failure("close question transaction", exception);
-        }
+        return inTransaction("create question with answers", connection -> {
+            Question savedQuestion = insertQuestion(connection, question);
+            insertAnswers(connection, savedQuestion.getId(), answers);
+            return savedQuestion;
+        });
     }
 
     @Override
     public void updateWithAnswers(Question question, List<Answer> answers) {
-        try {
-            try (Connection connection = dbConnector.getConnection()) {
-                connection.setAutoCommit(false);
-                try {
-                    updateQuestion(connection, question);
-                    updateAnswers(connection, question.getId(), answers);
-                    connection.commit();
-                } catch (RepositoryException exception) {
-                    rollback(connection, exception);
-                    throw exception;
-                } catch (SQLException exception) {
-                    RepositoryException failure = failure("update question with answers", exception);
-                    rollback(connection, failure);
-                    throw failure;
-                }
-            }
-        } catch (SQLException exception) {
-            throw failure("close question transaction", exception);
-        }
+        inTransaction("update question with answers", connection -> {
+            updateQuestion(connection, question);
+            updateAnswers(connection, question.getId(), answers);
+            return null;
+        });
     }
 
     @Override
@@ -150,10 +121,10 @@ public class QuestionRepositoryImpl implements QuestionRepository {
 
     private void insertAnswers(Connection connection, int questionId, List<Answer> answers) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(INSERT_ANSWER)) {
+            statement.setInt(3, questionId);
             for (Answer answer : answers) {
                 statement.setString(1, answer.getAnswer());
                 statement.setBoolean(2, answer.isCorrect());
-                statement.setInt(3, questionId);
                 statement.addBatch();
             }
             statement.executeBatch();
@@ -173,11 +144,11 @@ public class QuestionRepositoryImpl implements QuestionRepository {
 
     private void updateAnswers(Connection connection, int questionId, List<Answer> answers) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(UPDATE_ANSWER)) {
+            statement.setInt(4, questionId);
             for (Answer answer : answers) {
                 statement.setString(1, answer.getAnswer());
                 statement.setBoolean(2, answer.isCorrect());
                 statement.setInt(3, answer.getId());
-                statement.setInt(4, questionId);
                 statement.addBatch();
             }
             int[] updatedRows = statement.executeBatch();
@@ -189,6 +160,30 @@ public class QuestionRepositoryImpl implements QuestionRepository {
                     throw new RepositoryException("Answer does not belong to question " + questionId, null);
                 }
             }
+        }
+    }
+
+    private <T> T inTransaction(String operation, TransactionWork<T> work) {
+        try (Connection connection = dbConnector.getConnection()) {
+            connection.setAutoCommit(false);
+            return executeTransaction(connection, operation, work);
+        } catch (SQLException exception) {
+            throw failure(operation, exception);
+        }
+    }
+
+    private <T> T executeTransaction(Connection connection, String operation, TransactionWork<T> work) {
+        try {
+            T result = work.execute(connection);
+            connection.commit();
+            return result;
+        } catch (RepositoryException exception) {
+            rollback(connection, exception);
+            throw exception;
+        } catch (SQLException exception) {
+            RepositoryException transactionFailure = failure(operation, exception);
+            rollback(connection, transactionFailure);
+            throw transactionFailure;
         }
     }
 
@@ -276,5 +271,10 @@ public class QuestionRepositoryImpl implements QuestionRepository {
     @FunctionalInterface
     private interface StatementConfigurer {
         void configure(PreparedStatement statement) throws SQLException;
+    }
+
+    @FunctionalInterface
+    private interface TransactionWork<T> {
+        T execute(Connection connection) throws SQLException;
     }
 }
