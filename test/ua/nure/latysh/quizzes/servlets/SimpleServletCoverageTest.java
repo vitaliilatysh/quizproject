@@ -19,6 +19,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
@@ -110,7 +111,7 @@ public class SimpleServletCoverageTest {
         verify(required.dispatcher).forward(required.request, required.response);
 
         User existingUser = user(4, "existing", 1);
-        when(userService.findUserByLogin("existing")).thenReturn(existingUser);
+        when(userService.findUserByLogin("existing")).thenReturn(Optional.of(existingUser));
         WebContext existing = context();
         stubSignup(existing, "existing", "First", "Last", "password-one", "password-two", Locale.ENGLISH);
         servlet.doPost(existing.request, existing.response);
@@ -122,7 +123,7 @@ public class SimpleServletCoverageTest {
                         .getString("validation.password"));
 
         User savedUser = user(5, "new-user", 1);
-        when(userService.findUserByLogin("new-user")).thenReturn(null, savedUser);
+        when(userService.findUserByLogin("new-user")).thenReturn(Optional.empty(), Optional.of(savedUser));
         WebContext success = context();
         HttpSession oldSession = mock(HttpSession.class);
         HttpSession newSession = mock(HttpSession.class);
@@ -147,6 +148,12 @@ public class SimpleServletCoverageTest {
         new LogoutServlet().doPost(logout.request, logout.response);
         verify(logout.session).invalidate();
         verify(logout.response).sendRedirect("/quiz/");
+
+        WebContext anonymousLogout = context();
+        when(anonymousLogout.request.getSession(false)).thenReturn(anonymousLogout.session);
+        when(anonymousLogout.request.getContextPath()).thenReturn("/quiz");
+        new LogoutServlet().doPost(anonymousLogout.request, anonymousLogout.response);
+        verify(anonymousLogout.session).invalidate();
 
         UserService userService = mock(UserService.class);
         UserDto dto = new UserDto();
@@ -194,7 +201,7 @@ public class SimpleServletCoverageTest {
         ResultAdminServlet servlet = new ResultAdminServlet(resultService, userService);
         User user = user(10, "admin", 1);
         ResultDto dto = new ResultDto();
-        when(userService.findUserByLogin("admin")).thenReturn(user);
+        when(userService.findUserByLogin("admin")).thenReturn(Optional.of(user));
         when(resultService.getAllResultsBetweenFinishDates("from", "to")).thenReturn(List.of(dto));
 
         WebContext filtered = context();
@@ -222,7 +229,7 @@ public class SimpleServletCoverageTest {
         subject.setId(2);
         subject.setName("Java");
         when(service.getAllSubjects()).thenReturn(List.of(subject));
-        when(service.findSubjectById(2)).thenReturn(subject);
+        when(service.findSubjectById(2)).thenReturn(Optional.of(subject));
 
         WebContext list = context();
         servlet.doGet(list.request, list.response);
@@ -254,6 +261,19 @@ public class SimpleServletCoverageTest {
         servlet.doPost(update.request, update.response);
         verify(service).updateSubject(subject);
         verify(update.response).sendRedirect("subjects");
+
+        WebContext missing = context();
+        when(missing.request.getParameter("subjectId")).thenReturn("404");
+        when(missing.request.getParameter("subjectUpdatedName")).thenReturn("Missing");
+        when(service.findSubjectById(404)).thenReturn(Optional.empty());
+        servlet.doPost(missing.request, missing.response);
+        verify(missing.response).setStatus(HttpServletResponse.SC_NOT_FOUND);
+
+        WebContext invalidDelete = context();
+        when(invalidDelete.request.getParameter("delete")).thenReturn("yes");
+        when(invalidDelete.request.getParameter("subjectId")).thenReturn("invalid");
+        servlet.doPost(invalidDelete.request, invalidDelete.response);
+        verify(invalidDelete.response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
     }
 
     @Test

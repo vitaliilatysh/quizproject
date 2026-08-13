@@ -17,6 +17,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -51,7 +52,7 @@ public class QuizServletCoverageTest {
         when(quizService.getAllQuizzes()).thenReturn(List.of(dto));
         when(subjectService.getAllSubjects()).thenReturn(List.of(subject));
         when(levelService.findAllLevels()).thenReturn(List.of(level));
-        when(quizService.findQuizById(4)).thenReturn(quiz);
+        when(quizService.findQuizById(4)).thenReturn(Optional.of(quiz));
         when(quizService.findQuizBySubjectName("Java")).thenReturn(List.of(dto));
 
         WebContext get = context();
@@ -72,6 +73,12 @@ public class QuizServletCoverageTest {
         servlet.doPost(delete.request, delete.response);
         verify(quizService).deleteQuiz(quiz);
         verify(delete.response).sendRedirect("quizzes");
+
+        WebContext invalidDelete = context();
+        when(invalidDelete.request.getParameter("action")).thenReturn("delete");
+        when(invalidDelete.request.getParameter("quiz")).thenReturn("invalid");
+        servlet.doPost(invalidDelete.request, invalidDelete.response);
+        verify(invalidDelete.response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
 
         WebContext edit = context();
         when(edit.request.getParameter("action")).thenReturn("edit");
@@ -101,8 +108,8 @@ public class QuizServletCoverageTest {
         QuizServlet servlet = new QuizServlet(quizService, subjectService, levelService);
         when(subjectService.getAllSubjects()).thenReturn(List.of(new Subject()));
         when(levelService.findAllLevels()).thenReturn(List.of(new Level()));
-        when(quizService.findQuizByName("New quiz")).thenReturn(quiz(1, "Different"));
-        when(quizService.findQuizByName("Duplicate")).thenReturn(quiz(2, "Duplicate"));
+        when(quizService.findQuizByName("New quiz")).thenReturn(Optional.empty());
+        when(quizService.findQuizByName("Duplicate")).thenReturn(Optional.of(quiz(2, "Duplicate")));
 
         WebContext created = quizForm("create", "1", "New quiz");
         servlet.doPost(created.request, created.response);
@@ -124,9 +131,9 @@ public class QuizServletCoverageTest {
         QuizServlet servlet = new QuizServlet(quizService, subjectService, levelService);
         when(subjectService.getAllSubjects()).thenReturn(List.of(new Subject()));
         when(levelService.findAllLevels()).thenReturn(List.of(new Level()));
-        when(quizService.findQuizByName("Same")).thenReturn(quiz(1, "Same"));
-        when(quizService.findQuizByName("Taken")).thenReturn(quiz(9, "Taken"));
-        when(quizService.findQuizByName("Renamed")).thenReturn(quiz(5, "Old"));
+        when(quizService.findQuizByName("Same")).thenReturn(Optional.of(quiz(1, "Same")));
+        when(quizService.findQuizByName("Taken")).thenReturn(Optional.of(quiz(9, "Taken")));
+        when(quizService.findQuizByName("Renamed")).thenReturn(Optional.empty());
 
         WebContext same = quizForm("update", "1", "Same");
         servlet.doPost(same.request, same.response);

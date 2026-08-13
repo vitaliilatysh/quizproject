@@ -5,6 +5,7 @@ import ua.nure.latysh.quizzes.repositories.AnswerRepository;
 import ua.nure.latysh.quizzes.repositories.impl.AnswerRepositoryImpl;
 
 import java.util.List;
+import java.util.Optional;
 
 public class AnswerService {
     private final AnswerRepository answerRepository;
@@ -25,7 +26,7 @@ public class AnswerService {
         return answerRepository.save(answer);
     }
 
-    public Answer findAnswerById(int answerId) {
+    public Optional<Answer> findAnswerById(int answerId) {
         return answerRepository.findById(answerId);
     }
 

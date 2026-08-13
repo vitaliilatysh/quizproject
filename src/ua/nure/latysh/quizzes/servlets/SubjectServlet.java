@@ -10,6 +10,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 @WebServlet("/subjects")
 public class SubjectServlet extends HttpServlet {
@@ -45,19 +46,23 @@ public class SubjectServlet extends HttpServlet {
         } else if(request.getParameter("delete") != null) {
 
             String subjectId = request.getParameter("subjectId");
-            Subject subjectToDelete = subjectService.findSubjectById(Integer.parseInt(subjectId));
-
-            if (subjectToDelete != null) {
-                subjectService.deleteSubject(subjectToDelete);
+            Integer parsedSubjectId = parseId(subjectId);
+            if (parsedSubjectId == null) {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                return;
             }
+            subjectService.findSubjectById(parsedSubjectId).ifPresent(subjectService::deleteSubject);
             response.sendRedirect("subjects");
         } else if(request.getParameter("edit") != null){
             String forward = "/WEB-INF/views/edit_subject.jsp";
 
             String subjectId = request.getParameter("subjectId");
-            Subject editSubject = subjectService.findSubjectById(Integer.parseInt(subjectId));
-
-            request.setAttribute("subject", editSubject);
+            Integer parsedSubjectId = parseId(subjectId);
+            if (parsedSubjectId == null) {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+            request.setAttribute("subject", subjectService.findSubjectById(parsedSubjectId).orElse(null));
 
             request.getRequestDispatcher(forward).forward(request, response);
 
@@ -65,12 +70,30 @@ public class SubjectServlet extends HttpServlet {
 
             String subjectId = request.getParameter("subjectId");
             String subjectName = request.getParameter("subjectUpdatedName");
-            Subject foundSubject = subjectService.findSubjectById(Integer.parseInt(subjectId));
+            Integer parsedSubjectId = parseId(subjectId);
+            if (parsedSubjectId == null) {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+            Optional<Subject> subject = subjectService.findSubjectById(parsedSubjectId);
+            if (subject.isEmpty()) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                return;
+            }
+            Subject foundSubject = subject.get();
             foundSubject.setName(subjectName);
             subjectService.updateSubject(foundSubject);
 
             response.sendRedirect("subjects");
 
+        }
+    }
+
+    private Integer parseId(String value) {
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException _) {
+            return null;
         }
     }
 

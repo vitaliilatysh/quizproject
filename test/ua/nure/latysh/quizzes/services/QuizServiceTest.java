@@ -16,6 +16,7 @@ import ua.nure.latysh.quizzes.repositories.SubjectRepository;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -50,8 +51,8 @@ public class QuizServiceTest {
         List<Question> questions = Arrays.asList(new Question(), new Question());
 
         when(quizRepository.findAll()).thenReturn(Collections.singletonList(quiz));
-        when(subjectRepository.findById(3)).thenReturn(subject);
-        when(levelRepository.findById(2)).thenReturn(level);
+        when(subjectRepository.findById(3)).thenReturn(Optional.of(subject));
+        when(levelRepository.findById(2)).thenReturn(Optional.of(level));
         when(questionRepository.findAllByQuizId(7)).thenReturn(questions);
 
         List<QuizDto> result = quizService.getAllQuizzes();
@@ -70,8 +71,8 @@ public class QuizServiceTest {
     @Test
     public void addQuizConvertsDtoBeforeSaving() {
         QuizDto dto = dto(0, "SQL", "Medium", "Databases", 15);
-        when(levelRepository.findByName("Medium")).thenReturn(level(4, "Medium"));
-        when(subjectRepository.findByName("Databases")).thenReturn(subject(8, "Databases"));
+        when(levelRepository.findByName("Medium")).thenReturn(Optional.of(level(4, "Medium")));
+        when(subjectRepository.findByName("Databases")).thenReturn(Optional.of(subject(8, "Databases")));
         when(quizRepository.save(org.mockito.ArgumentMatchers.any(Quiz.class))).thenReturn(true);
 
         boolean saved = quizService.addQuiz(dto);
@@ -89,8 +90,8 @@ public class QuizServiceTest {
     @Test
     public void updateQuizPreservesIdWhileConvertingDto() {
         QuizDto dto = dto(11, "HTTP", "Hard", "Web", 30);
-        when(levelRepository.findByName("Hard")).thenReturn(level(5, "Hard"));
-        when(subjectRepository.findByName("Web")).thenReturn(subject(9, "Web"));
+        when(levelRepository.findByName("Hard")).thenReturn(Optional.of(level(5, "Hard")));
+        when(subjectRepository.findByName("Web")).thenReturn(Optional.of(subject(9, "Web")));
 
         quizService.updateQuiz(dto);
 

@@ -5,6 +5,7 @@ import ua.nure.latysh.quizzes.repositories.impl.SubjectRepositoryImpl;
 import ua.nure.latysh.quizzes.repositories.SubjectRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public class SubjectService {
 
@@ -30,7 +31,7 @@ public class SubjectService {
         subjectRepository.delete(subject);
     }
 
-    public Subject findSubjectById(int subjectId){
+    public Optional<Subject> findSubjectById(int subjectId){
         return subjectRepository.findById(subjectId);
     }
 

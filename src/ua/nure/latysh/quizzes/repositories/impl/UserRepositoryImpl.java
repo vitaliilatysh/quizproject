@@ -1,8 +1,8 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.User;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.UserRepository;
 
 import java.sql.Connection;
@@ -13,10 +13,9 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class UserRepositoryImpl implements UserRepository {
-
-    private static final Logger logger = Logger.getLogger(UserRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public UserRepositoryImpl() {
@@ -27,55 +26,20 @@ public class UserRepositoryImpl implements UserRepository {
         this.dbConnector = dbConnector;
     }
 
-    private User extractUser(ResultSet rs)
-            throws SQLException {
-        User user = new User();
-        user.setId(rs.getInt("id"));
-        user.setLogin(rs.getString("login"));
-        user.setFirstName(rs.getString("first_name"));
-        user.setLastName(rs.getString("last_name"));
-        user.setPassword(rs.getString("password"));
-        user.setRegisterDateTime(rs.getTimestamp("register_date"));
-        user.setLoginDateTime(rs.getTimestamp("login_date"));
-        user.setStatusId(rs.getInt("status_id"));
-        user.setRoleId(rs.getInt("role_id"));
-        return user;
-    }
-
     @Override
-    public User findById(int questionId) {
-        User user = new User();
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT * FROM users WHERE id = ?")) {
-            statement.setInt(1, questionId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    user = extractUser(resultSet);
-                }
-            }
-        } catch (SQLException e) {
-            logger.error(e);
-        }
-        return user;
+    public Optional<User> findById(int userId) {
+        return findOne("SELECT * FROM users WHERE id = ?", statement -> statement.setInt(1, userId));
     }
 
     @Override
     public void delete(User user) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("DELETE FROM users WHERE id = ?")) {
-            statement.setInt(1, user.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        execute("DELETE FROM users WHERE id = ?", statement -> statement.setInt(1, user.getId()), "delete user");
     }
 
     @Override
     public boolean save(User user) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "INSERT INTO users (login, password, first_name, last_name, register_date, status_id, role_id) "
-                             + "VALUES (?, ?, ?, ?, ?, ?, ?)")) {
+        execute("INSERT INTO users (login, password, first_name, last_name, register_date, status_id, role_id) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?)", statement -> {
             statement.setString(1, user.getLogin());
             statement.setString(2, user.getPassword());
             statement.setString(3, user.getFirstName());
@@ -83,37 +47,24 @@ public class UserRepositoryImpl implements UserRepository {
             statement.setTimestamp(5, new Timestamp(user.getRegisterDateTime().getTime()));
             statement.setInt(6, user.getStatusId());
             statement.setInt(7, user.getRoleId());
-            statement.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            logger.error(e);
-            return false;
-        }
+        }, "save user");
+        return true;
     }
 
     @Override
     public void update(User user) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "UPDATE users SET status_id = ? WHERE id = ?")) {
+        execute("UPDATE users SET status_id = ? WHERE id = ?", statement -> {
             statement.setInt(1, user.getStatusId());
             statement.setInt(2, user.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        }, "update user");
     }
 
+    @Override
     public void updateLoginDate(User user) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "UPDATE users SET login_date = ? WHERE id = ?")) {
+        execute("UPDATE users SET login_date = ? WHERE id = ?", statement -> {
             statement.setTimestamp(1, new Timestamp(user.getLoginDateTime().getTime()));
             statement.setInt(2, user.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        }, "update user login date");
     }
 
     @Override
@@ -125,40 +76,67 @@ public class UserRepositoryImpl implements UserRepository {
             while (resultSet.next()) {
                 users.add(extractUser(resultSet));
             }
-        } catch (SQLException e) {
-            logger.error(e);
-        }
-        return users;
-    }
-
-    public void updatePassword(User user) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "UPDATE users SET password = ? WHERE id = ?")) {
-            statement.setString(1, user.getPassword());
-            statement.setInt(2, user.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
+            return users;
+        } catch (SQLException exception) {
+            throw failure("list users", exception);
         }
     }
 
     @Override
-    public User findByLogin(String login) {
-        User user = new User();
+    public void updatePassword(User user) {
+        execute("UPDATE users SET password = ? WHERE id = ?", statement -> {
+            statement.setString(1, user.getPassword());
+            statement.setInt(2, user.getId());
+        }, "update user password");
+    }
+
+    @Override
+    public Optional<User> findByLogin(String login) {
+        return findOne("SELECT * FROM users WHERE login = ?", statement -> statement.setString(1, login));
+    }
+
+    private Optional<User> findOne(String sql, StatementConfigurer configurer) {
         try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT * FROM users WHERE login = ?")) {
-            statement.setString(1, login);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
             try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    user = extractUser(resultSet);
-                } else {
-                    user = null;
-                }
+                return resultSet.next() ? Optional.of(extractUser(resultSet)) : Optional.empty();
             }
-        } catch (SQLException e) {
-            logger.error(e);
+        } catch (SQLException exception) {
+            throw failure("find user", exception);
         }
+    }
+
+    private void execute(String sql, StatementConfigurer configurer, String operation) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw failure(operation, exception);
+        }
+    }
+
+    private User extractUser(ResultSet resultSet) throws SQLException {
+        User user = new User();
+        user.setId(resultSet.getInt("id"));
+        user.setLogin(resultSet.getString("login"));
+        user.setFirstName(resultSet.getString("first_name"));
+        user.setLastName(resultSet.getString("last_name"));
+        user.setPassword(resultSet.getString("password"));
+        user.setRegisterDateTime(resultSet.getTimestamp("register_date"));
+        user.setLoginDateTime(resultSet.getTimestamp("login_date"));
+        user.setStatusId(resultSet.getInt("status_id"));
+        user.setRoleId(resultSet.getInt("role_id"));
         return user;
+    }
+
+    private RepositoryException failure(String operation, SQLException exception) {
+        return new RepositoryException("Could not " + operation, exception);
+    }
+
+    @FunctionalInterface
+    private interface StatementConfigurer {
+        void configure(PreparedStatement statement) throws SQLException;
     }
 }

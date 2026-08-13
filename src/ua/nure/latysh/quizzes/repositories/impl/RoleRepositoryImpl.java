@@ -1,8 +1,8 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Role;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.RoleRepository;
 
 import java.sql.Connection;
@@ -12,10 +12,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class RoleRepositoryImpl implements RoleRepository {
-
-    private static final Logger logger = Logger.getLogger(RoleRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public RoleRepositoryImpl() {
@@ -27,56 +26,36 @@ public class RoleRepositoryImpl implements RoleRepository {
     }
 
     @Override
-    public Role findById(int roleId) {
-        Role role = new Role();
+    public Optional<Role> findById(int roleId) {
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement("SELECT * FROM roles WHERE id = ?")) {
             statement.setInt(1, roleId);
             try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    role = extractRole(resultSet);
-                }
+                return resultSet.next() ? Optional.of(extractRole(resultSet)) : Optional.empty();
             }
-        } catch (SQLException e) {
-            logger.error(e);
+        } catch (SQLException exception) {
+            throw failure("find role by id", exception);
         }
-        return role;
     }
 
     @Override
     public void delete(Role role) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("DELETE FROM roles WHERE id = ?")) {
-            statement.setInt(1, role.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        execute("DELETE FROM roles WHERE id = ?", statement -> statement.setInt(1, role.getId()), "delete role");
     }
 
     @Override
     public boolean save(Role role) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("INSERT INTO roles (name) VALUES (?)")) {
-            statement.setString(1, role.getRole());
-            statement.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            logger.error(e);
-            return false;
-        }
+        execute("INSERT INTO roles (name) VALUES (?)", statement -> statement.setString(1, role.getRole()),
+                "save role");
+        return true;
     }
 
     @Override
     public void update(Role role) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("UPDATE roles SET name = ? WHERE id = ?")) {
+        execute("UPDATE roles SET name = ? WHERE id = ?", statement -> {
             statement.setString(1, role.getRole());
             statement.setInt(2, role.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        }, "update role");
     }
 
     @Override
@@ -88,18 +67,35 @@ public class RoleRepositoryImpl implements RoleRepository {
             while (resultSet.next()) {
                 roles.add(extractRole(resultSet));
             }
-        } catch (SQLException e) {
-            logger.error(e);
+            return roles;
+        } catch (SQLException exception) {
+            throw failure("list roles", exception);
         }
-        return roles;
     }
 
-    private Role extractRole(ResultSet rs)
-            throws SQLException {
+    private void execute(String sql, StatementConfigurer configurer, String operation) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw failure(operation, exception);
+        }
+    }
+
+    private Role extractRole(ResultSet resultSet) throws SQLException {
         Role role = new Role();
-        role.setId(rs.getInt("id"));
-        role.setRole(rs.getString("name"));
+        role.setId(resultSet.getInt("id"));
+        role.setRole(resultSet.getString("name"));
         return role;
     }
 
+    private RepositoryException failure(String operation, SQLException exception) {
+        return new RepositoryException("Could not " + operation, exception);
+    }
+
+    @FunctionalInterface
+    private interface StatementConfigurer {
+        void configure(PreparedStatement statement) throws SQLException;
+    }
 }

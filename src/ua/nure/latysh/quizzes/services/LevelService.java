@@ -5,6 +5,7 @@ import ua.nure.latysh.quizzes.repositories.LevelRepository;
 import ua.nure.latysh.quizzes.repositories.impl.LevelRepositoryImpl;
 
 import java.util.List;
+import java.util.Optional;
 
 public class LevelService {
     private final LevelRepository levelRepository;
@@ -17,7 +18,7 @@ public class LevelService {
         this.levelRepository = levelRepository;
     }
 
-    public Level findAnswerById(String levelName) {
+    public Optional<Level> findAnswerById(String levelName) {
         return levelRepository.findByName(levelName);
     }
 

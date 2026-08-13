@@ -1,8 +1,8 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Subject;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.SubjectRepository;
 
 import java.sql.Connection;
@@ -12,10 +12,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class SubjectRepositoryImpl implements SubjectRepository {
-
-    private static final Logger logger = Logger.getLogger(SubjectRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public SubjectRepositoryImpl() {
@@ -26,83 +25,35 @@ public class SubjectRepositoryImpl implements SubjectRepository {
         this.dbConnector = dbConnector;
     }
 
-    private Subject extractSubject(ResultSet rs)
-            throws SQLException {
-        Subject subject = new Subject();
-        subject.setId(rs.getInt("id"));
-        subject.setName(rs.getString("name"));
-        return subject;
+    @Override
+    public Optional<Subject> findByName(String subjectName) {
+        return findOne("SELECT * FROM subjects WHERE name = ?", statement -> statement.setString(1, subjectName));
     }
 
     @Override
-    public Subject findByName(String subjectName) {
-        Subject subject = new Subject();
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT * FROM subjects WHERE name = ?")) {
-            statement.setString(1, subjectName);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    subject = extractSubject(resultSet);
-                }
-            }
-        } catch (SQLException e) {
-            logger.error(e);
-        }
-        return subject;
-    }
-
-    @Override
-    public Subject findById(int subjectId) {
-        Subject foundSubject = new Subject();
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT * FROM subjects WHERE id = ?")) {
-            statement.setInt(1, subjectId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    foundSubject = extractSubject(resultSet);
-                }
-            }
-        } catch (SQLException e) {
-            logger.error(e);
-        }
-        return foundSubject;
+    public Optional<Subject> findById(int subjectId) {
+        return findOne("SELECT * FROM subjects WHERE id = ?", statement -> statement.setInt(1, subjectId));
     }
 
     @Override
     public void delete(Subject subject) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("DELETE FROM subjects WHERE id = ?")) {
-            statement.setInt(1, subject.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        execute("DELETE FROM subjects WHERE id = ?", statement -> statement.setInt(1, subject.getId()),
+                "delete subject");
     }
 
     @Override
     public boolean save(Subject subject) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("INSERT INTO subjects (name) VALUES (?)")) {
-            statement.setString(1, subject.getName());
-            statement.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            logger.error(e);
-            return false;
-        }
+        execute("INSERT INTO subjects (name) VALUES (?)", statement -> statement.setString(1, subject.getName()),
+                "save subject");
+        return true;
     }
 
     @Override
     public void update(Subject subject) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "UPDATE subjects SET name = ? WHERE id = ?")) {
+        execute("UPDATE subjects SET name = ? WHERE id = ?", statement -> {
             statement.setString(1, subject.getName());
             statement.setInt(2, subject.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        }, "update subject");
     }
 
     @Override
@@ -114,10 +65,47 @@ public class SubjectRepositoryImpl implements SubjectRepository {
             while (resultSet.next()) {
                 subjects.add(extractSubject(resultSet));
             }
-        } catch (SQLException e) {
-            logger.error(e);
+            return subjects;
+        } catch (SQLException exception) {
+            throw failure("list subjects", exception);
         }
-        return subjects;
     }
 
+    private Optional<Subject> findOne(String sql, StatementConfigurer configurer) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? Optional.of(extractSubject(resultSet)) : Optional.empty();
+            }
+        } catch (SQLException exception) {
+            throw failure("find subject", exception);
+        }
+    }
+
+    private void execute(String sql, StatementConfigurer configurer, String operation) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw failure(operation, exception);
+        }
+    }
+
+    private Subject extractSubject(ResultSet resultSet) throws SQLException {
+        Subject subject = new Subject();
+        subject.setId(resultSet.getInt("id"));
+        subject.setName(resultSet.getString("name"));
+        return subject;
+    }
+
+    private RepositoryException failure(String operation, SQLException exception) {
+        return new RepositoryException("Could not " + operation, exception);
+    }
+
+    @FunctionalInterface
+    private interface StatementConfigurer {
+        void configure(PreparedStatement statement) throws SQLException;
+    }
 }

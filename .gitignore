@@ -7,3 +7,6 @@ out
 /build
 /.m2
 /target
+/.gradle-p2
+/.p2-*
+/p2classes

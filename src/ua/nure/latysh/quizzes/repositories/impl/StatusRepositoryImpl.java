@@ -1,8 +1,8 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Status;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.StatusRepository;
 
 import java.sql.Connection;
@@ -12,10 +12,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class StatusRepositoryImpl implements StatusRepository {
-
-    private static final Logger logger = Logger.getLogger(StatusRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public StatusRepositoryImpl() {
@@ -27,60 +26,38 @@ public class StatusRepositoryImpl implements StatusRepository {
     }
 
     @Override
-    public Status findById(int statusId) {
-        Status status = new Status();
+    public Optional<Status> findById(int statusId) {
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement("SELECT * FROM statuses WHERE id = ?")) {
             statement.setInt(1, statusId);
             try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    status = extractStatus(resultSet);
-                }
+                return resultSet.next() ? Optional.of(extractStatus(resultSet)) : Optional.empty();
             }
-        } catch (SQLException e) {
-            logger.error(e);
+        } catch (SQLException exception) {
+            throw failure("find status by id", exception);
         }
-        return status;
     }
-
 
     @Override
     public void delete(Status status) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("DELETE FROM statuses WHERE id = ?")) {
-            statement.setInt(1, status.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        execute("DELETE FROM statuses WHERE id = ?", statement -> statement.setInt(1, status.getId()),
+                "delete status");
     }
 
     @Override
     public boolean save(Status status) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("INSERT INTO statuses (name) VALUES (?)")) {
-            statement.setString(1, status.getStatus());
-            statement.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            logger.error(e);
-            return false;
-        }
+        execute("INSERT INTO statuses (name) VALUES (?)", statement -> statement.setString(1, status.getStatus()),
+                "save status");
+        return true;
     }
 
     @Override
     public void update(Status status) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "UPDATE statuses SET name = ? WHERE id = ?")) {
+        execute("UPDATE statuses SET name = ? WHERE id = ?", statement -> {
             statement.setString(1, status.getStatus());
             statement.setInt(2, status.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        }, "update status");
     }
-
 
     @Override
     public List<Status> findAll() {
@@ -91,18 +68,35 @@ public class StatusRepositoryImpl implements StatusRepository {
             while (resultSet.next()) {
                 statuses.add(extractStatus(resultSet));
             }
-        } catch (SQLException e) {
-            logger.error(e);
+            return statuses;
+        } catch (SQLException exception) {
+            throw failure("list statuses", exception);
         }
-        return statuses;
     }
 
-    private Status extractStatus(ResultSet rs)
-            throws SQLException {
+    private void execute(String sql, StatementConfigurer configurer, String operation) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw failure(operation, exception);
+        }
+    }
+
+    private Status extractStatus(ResultSet resultSet) throws SQLException {
         Status status = new Status();
-        status.setId(rs.getInt("id"));
-        status.setStatus(rs.getString("name"));
+        status.setId(resultSet.getInt("id"));
+        status.setStatus(resultSet.getString("name"));
         return status;
     }
 
+    private RepositoryException failure(String operation, SQLException exception) {
+        return new RepositoryException("Could not " + operation, exception);
+    }
+
+    @FunctionalInterface
+    private interface StatementConfigurer {
+        void configure(PreparedStatement statement) throws SQLException;
+    }
 }

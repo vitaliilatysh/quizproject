@@ -1,8 +1,8 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Answer;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.AnswerRepository;
 
 import java.sql.Connection;
@@ -12,10 +12,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class AnswerRepositoryImpl implements AnswerRepository {
-
-    private static final Logger logger = Logger.getLogger(AnswerRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public AnswerRepositoryImpl() {
@@ -27,20 +26,16 @@ public class AnswerRepositoryImpl implements AnswerRepository {
     }
 
     @Override
-    public Answer findById(int answerId) {
-        Answer answer = new Answer();
+    public Optional<Answer> findById(int answerId) {
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement("SELECT * FROM answers WHERE id = ?")) {
             statement.setInt(1, answerId);
             try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    answer = extractAnswer(resultSet);
-                }
+                return resultSet.next() ? Optional.of(extractAnswer(resultSet)) : Optional.empty();
             }
-        } catch (SQLException e) {
-            logger.error(e);
+        } catch (SQLException exception) {
+            throw failure("find answer by id", exception);
         }
-        return answer;
     }
 
     @Override
@@ -49,8 +44,8 @@ public class AnswerRepositoryImpl implements AnswerRepository {
              PreparedStatement statement = connection.prepareStatement("DELETE FROM answers WHERE id = ?")) {
             statement.setInt(1, answer.getId());
             statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
+        } catch (SQLException exception) {
+            throw failure("delete answer", exception);
         }
     }
 
@@ -64,9 +59,8 @@ public class AnswerRepositoryImpl implements AnswerRepository {
             statement.setInt(3, answer.getQuestionId());
             statement.executeUpdate();
             return true;
-        } catch (SQLException e) {
-            logger.error(e);
-            return false;
+        } catch (SQLException exception) {
+            throw failure("save answer", exception);
         }
     }
 
@@ -79,8 +73,8 @@ public class AnswerRepositoryImpl implements AnswerRepository {
             statement.setBoolean(2, answer.isCorrect());
             statement.setInt(3, answer.getId());
             statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
+        } catch (SQLException exception) {
+            throw failure("update answer", exception);
         }
     }
 
@@ -93,20 +87,10 @@ public class AnswerRepositoryImpl implements AnswerRepository {
             while (resultSet.next()) {
                 answers.add(extractAnswer(resultSet));
             }
-        } catch (SQLException e) {
-            logger.error(e);
+            return answers;
+        } catch (SQLException exception) {
+            throw failure("list answers", exception);
         }
-        return answers;
-    }
-
-    private Answer extractAnswer(ResultSet rs)
-            throws SQLException {
-        Answer answer = new Answer();
-        answer.setId(rs.getInt("id"));
-        answer.setAnswer(rs.getString("answer"));
-        answer.setCorrect(rs.getBoolean("correct"));
-        answer.setQuestionId(rs.getInt("question_id"));
-        return answer;
     }
 
     @Override
@@ -121,10 +105,22 @@ public class AnswerRepositoryImpl implements AnswerRepository {
                     answers.add(extractAnswer(resultSet));
                 }
             }
-        } catch (SQLException e) {
-            logger.error(e);
+            return answers;
+        } catch (SQLException exception) {
+            throw failure("list answers by question", exception);
         }
-        return answers;
     }
 
+    private Answer extractAnswer(ResultSet resultSet) throws SQLException {
+        Answer answer = new Answer();
+        answer.setId(resultSet.getInt("id"));
+        answer.setAnswer(resultSet.getString("answer"));
+        answer.setCorrect(resultSet.getBoolean("correct"));
+        answer.setQuestionId(resultSet.getInt("question_id"));
+        return answer;
+    }
+
+    private RepositoryException failure(String operation, SQLException exception) {
+        return new RepositoryException("Could not " + operation, exception);
+    }
 }

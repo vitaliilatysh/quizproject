@@ -1,8 +1,8 @@
 package ua.nure.latysh.quizzes.repositories.impl;
 
-import org.apache.log4j.Logger;
 import ua.nure.latysh.quizzes.db.connector.DbConnector;
 import ua.nure.latysh.quizzes.entities.Result;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 import ua.nure.latysh.quizzes.repositories.ResultRepository;
 
 import java.sql.Connection;
@@ -12,10 +12,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class ResultRepositoryImpl implements ResultRepository {
-
-    private static final Logger logger = Logger.getLogger(ResultRepositoryImpl.class);
     private final DbConnector dbConnector;
 
     public ResultRepositoryImpl() {
@@ -27,60 +26,40 @@ public class ResultRepositoryImpl implements ResultRepository {
     }
 
     @Override
-    public Result findById(int resultId) {
-        Result result = new Result();
+    public Optional<Result> findById(int resultId) {
         try (Connection connection = dbConnector.getConnection();
              PreparedStatement statement = connection.prepareStatement("SELECT * FROM results WHERE id = ?")) {
             statement.setInt(1, resultId);
             try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    result = extractResult(resultSet);
-                }
+                return resultSet.next() ? Optional.of(extractResult(resultSet)) : Optional.empty();
             }
-        } catch (SQLException e) {
-            logger.error(e);
+        } catch (SQLException exception) {
+            throw failure("find result by id", exception);
         }
-        return result;
     }
 
     @Override
     public void delete(Result result) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement("DELETE FROM results WHERE id = ?")) {
-            statement.setInt(1, result.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        execute("DELETE FROM results WHERE id = ?", statement -> statement.setInt(1, result.getId()),
+                "delete result");
     }
 
     @Override
     public boolean save(Result result) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "INSERT INTO results (answer_id, attempt_id) VALUES (?, ?)")) {
+        execute("INSERT INTO results (answer_id, attempt_id) VALUES (?, ?)", statement -> {
             statement.setInt(1, result.getAnswerId());
             statement.setInt(2, result.getAttemptId());
-            statement.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            logger.error(e);
-            return false;
-        }
+        }, "save result");
+        return true;
     }
 
     @Override
     public void update(Result result) {
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "UPDATE results SET answer_id = ?, attempt_id = ? WHERE id = ?")) {
+        execute("UPDATE results SET answer_id = ?, attempt_id = ? WHERE id = ?", statement -> {
             statement.setInt(1, result.getAnswerId());
             statement.setInt(2, result.getAttemptId());
             statement.setInt(3, result.getId());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            logger.error(e);
-        }
+        }, "update result");
     }
 
     @Override
@@ -92,55 +71,63 @@ public class ResultRepositoryImpl implements ResultRepository {
             while (resultSet.next()) {
                 results.add(extractResult(resultSet));
             }
-        } catch (SQLException e) {
-            logger.error(e);
+            return results;
+        } catch (SQLException exception) {
+            throw failure("list results", exception);
         }
-        return results;
-    }
-
-    private Result extractResult(ResultSet rs)
-            throws SQLException {
-        Result result = new Result();
-        result.setId(rs.getInt("id"));
-        result.setAnswerId(rs.getInt("answer_id"));
-        result.setAttemptId(rs.getInt("attempt_id"));
-        return result;
     }
 
     @Override
     public List<Result> findByAttemptId(int attemptId) {
-        List<Result> results = new ArrayList<>();
-        try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "SELECT * FROM results WHERE attempt_id = ?")) {
-            statement.setInt(1, attemptId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    results.add(extractResult(resultSet));
-                }
-            }
-        } catch (SQLException e) {
-            logger.error(e);
-        }
-        return results;
+        return findMany("SELECT * FROM results WHERE attempt_id = ?", statement -> statement.setInt(1, attemptId));
     }
 
     @Override
     public List<Result> findAllByUserId(int userId) {
+        return findMany("SELECT results.* FROM results JOIN attempts ON results.attempt_id = attempts.id "
+                        + "WHERE attempts.user_id = ?", statement -> statement.setInt(1, userId));
+    }
+
+    private List<Result> findMany(String sql, StatementConfigurer configurer) {
         List<Result> results = new ArrayList<>();
         try (Connection connection = dbConnector.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "SELECT results.* FROM results JOIN attempts ON results.attempt_id = attempts.id "
-                             + "WHERE attempts.user_id = ?")) {
-            statement.setInt(1, userId);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     results.add(extractResult(resultSet));
                 }
             }
-        } catch (SQLException e) {
-            logger.error(e);
+            return results;
+        } catch (SQLException exception) {
+            throw failure("list results", exception);
         }
-        return results;
+    }
+
+    private void execute(String sql, StatementConfigurer configurer, String operation) {
+        try (Connection connection = dbConnector.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            configurer.configure(statement);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw failure(operation, exception);
+        }
+    }
+
+    private Result extractResult(ResultSet resultSet) throws SQLException {
+        Result result = new Result();
+        result.setId(resultSet.getInt("id"));
+        result.setAnswerId(resultSet.getInt("answer_id"));
+        result.setAttemptId(resultSet.getInt("attempt_id"));
+        return result;
+    }
+
+    private RepositoryException failure(String operation, SQLException exception) {
+        return new RepositoryException("Could not " + operation, exception);
+    }
+
+    @FunctionalInterface
+    private interface StatementConfigurer {
+        void configure(PreparedStatement statement) throws SQLException;
     }
 }

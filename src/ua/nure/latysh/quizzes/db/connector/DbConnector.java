@@ -1,29 +1,34 @@
 package ua.nure.latysh.quizzes.db.connector;
 
-import org.apache.log4j.Logger;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 
 public class DbConnector {
 
-    private static final Logger logger = Logger.getLogger(DbConnector.class);
     private static DbConnector instance;
-    private DataSource ds;
+    private final DataSource dataSource;
 
     private DbConnector() {
+        this(lookupDataSource());
+    }
+
+    public DbConnector(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    private static DataSource lookupDataSource() {
         try {
             Context initContext = new InitialContext();
             Context envContext = (Context) initContext.lookup("java:/comp/env");
-            ds = (DataSource) envContext.lookup("jdbc/quizzes");
+            return (DataSource) envContext.lookup("jdbc/quizzes");
         } catch (NamingException ex) {
-            logger.error(ex);
+            throw new RepositoryException("Could not locate the quizzes data source", ex);
         }
     }
 
@@ -35,13 +40,11 @@ public class DbConnector {
     }
 
     public Connection getConnection() {
-        Connection con = null;
         try {
-            con = ds.getConnection();
+            return dataSource.getConnection();
         } catch (SQLException ex) {
-            logger.error(ex);
+            throw new RepositoryException("Could not open a database connection", ex);
         }
-        return con;
     }
 
     public void rollback(Connection con) {
@@ -49,43 +52,7 @@ public class DbConnector {
             try {
                 con.rollback();
             } catch (SQLException ex) {
-                logger.error(ex);
-            }
-        }
-    }
-
-    public void close(Connection con, Statement stmt, ResultSet rs) {
-        close(rs);
-        close(stmt);
-        close(con);
-    }
-
-    private void close(Connection con) {
-        if (con != null) {
-            try {
-                con.close();
-            } catch (SQLException ex) {
-                logger.error(ex);
-            }
-        }
-    }
-
-    private void close(Statement stmt) {
-        if (stmt != null) {
-            try {
-                stmt.close();
-            } catch (SQLException ex) {
-                logger.error(ex);
-            }
-        }
-    }
-
-    private void close(ResultSet rs) {
-        if (rs != null) {
-            try {
-                rs.close();
-            } catch (SQLException ex) {
-                logger.error(ex);
+                throw new RepositoryException("Could not roll back the database transaction", ex);
             }
         }
     }

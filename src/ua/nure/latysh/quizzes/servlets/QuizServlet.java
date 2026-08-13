@@ -16,6 +16,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.ResourceBundle;
 
 @WebServlet("/quizzes")
@@ -79,9 +80,21 @@ public class QuizServlet extends HttpServlet {
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String quizId = req.getParameter("quiz");
-        Quiz quiz = quizService.findQuizById(Integer.parseInt(quizId));
-        quizService.deleteQuiz(quiz);
+        Integer parsedQuizId = parseId(quizId);
+        if (parsedQuizId == null) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
+        quizService.findQuizById(parsedQuizId).ifPresent(quizService::deleteQuiz);
         resp.sendRedirect("quizzes");
+    }
+
+    private Integer parseId(String value) {
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException _) {
+            return null;
+        }
     }
 
     @Override
@@ -104,7 +117,7 @@ public class QuizServlet extends HttpServlet {
         Locale lang = (Locale) request.getSession().getAttribute("lang");
         ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
 
-        Quiz quiz = quizService.findQuizByName(quizName);
+        Optional<Quiz> quiz = quizService.findQuizByName(quizName);
 
         QuizDto quizDto = new QuizDto();
         quizDto.setTimeToPass(Integer.parseInt(quizTime));
@@ -115,10 +128,10 @@ public class QuizServlet extends HttpServlet {
         List<Subject> subjects = subjectService.getAllSubjects();
         List<Level> complexities = levelService.findAllLevels();
 
-        if (!quizName.isEmpty() && !quizName.equalsIgnoreCase(quiz.getName())){
+        if (!quizName.isEmpty() && quiz.isEmpty()){
             quizService.addQuiz(quizDto);
             response.sendRedirect("quizzes");
-        } else if(!quizName.isEmpty() && quizName.equalsIgnoreCase(quiz.getName())){
+        } else if(!quizName.isEmpty()){
             request.setAttribute("complexities", complexities);
             request.setAttribute("quizComplexity", quizComplexity);
             request.setAttribute("quizSubject", quizSubject);
@@ -140,7 +153,7 @@ public class QuizServlet extends HttpServlet {
         Locale lang = (Locale) request.getSession().getAttribute("lang");
         ResourceBundle mybundle = ResourceBundle.getBundle("messages", lang);
 
-        Quiz quiz = quizService.findQuizByName(quizName);
+        Optional<Quiz> quiz = quizService.findQuizByName(quizName);
 
         QuizDto quizDto = new QuizDto();
         quizDto.setId(Integer.parseInt(quizId));
@@ -153,11 +166,7 @@ public class QuizServlet extends HttpServlet {
         List<Level> complexities = levelService.findAllLevels();
 
 
-        if (!quizName.isEmpty() && quizName.equalsIgnoreCase(quiz.getName()) && quiz.getId() == Integer.parseInt(quizId)) {
-            quizDto.setName(quizName);
-            quizService.updateQuiz(quizDto);
-            response.sendRedirect("quizzes");
-        } else if (!quizName.isEmpty() && quizName.equalsIgnoreCase(quiz.getName()) && quiz.getId() != Integer.parseInt(quizId)) {
+        if (!quizName.isEmpty() && quiz.isPresent() && quiz.get().getId() != Integer.parseInt(quizId)) {
             request.setAttribute("complexities", complexities);
             request.setAttribute("quizComplexity", quizComplexity);
             request.setAttribute("subjects", subjects);
@@ -166,7 +175,7 @@ public class QuizServlet extends HttpServlet {
             request.setAttribute("quiz", quizId);
             request.setAttribute("quizNameMessage", mybundle.getString("validation.input.username.exist"));
             request.getRequestDispatcher("/WEB-INF/views/editQuiz.jsp").forward(request, response);
-        } else if (!quizName.isEmpty() && !quizName.equalsIgnoreCase(quiz.getName())) {
+        } else if (!quizName.isEmpty()) {
             quizDto.setName(quizName);
             quizService.updateQuiz(quizDto);
             response.sendRedirect("quizzes");

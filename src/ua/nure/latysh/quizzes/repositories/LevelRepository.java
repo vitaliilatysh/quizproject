@@ -2,6 +2,8 @@ package ua.nure.latysh.quizzes.repositories;
 
 import ua.nure.latysh.quizzes.entities.Level;
 
+import java.util.Optional;
+
 public interface LevelRepository extends CrudRepository<Level> {
-    Level findByName(String levelName);
+    Optional<Level> findByName(String levelName);
 }

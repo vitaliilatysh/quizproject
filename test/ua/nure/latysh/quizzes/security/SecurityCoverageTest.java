@@ -31,6 +31,7 @@ public class SecurityCoverageTest {
         assertFalse(hasher.matches("strong-password", "pbkdf2-sha256$short"));
         assertFalse(hasher.matches("strong-password", "pbkdf2-sha256$bad$%%%$%%%"));
         assertTrue(hasher.matchesLegacy("legacy", "legacy"));
+        assertFalse(hasher.matchesLegacy(null, "legacy"));
         assertFalse(hasher.matchesLegacy("legacy", null));
         assertFalse(hasher.isEncoded(null));
 

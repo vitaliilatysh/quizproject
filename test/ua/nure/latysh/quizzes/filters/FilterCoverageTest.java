@@ -98,6 +98,15 @@ public class FilterCoverageTest {
         filter.doFilter(validRequest, validResponse, validChain);
         verify(validChain).doFilter(validRequest, validResponse);
 
+        HttpServletRequest differentRequest = mock(HttpServletRequest.class);
+        HttpServletResponse differentResponse = mock(HttpServletResponse.class);
+        FilterChain differentChain = mock(FilterChain.class);
+        when(differentRequest.getSession(true)).thenReturn(session);
+        when(differentRequest.getMethod()).thenReturn("POST");
+        when(differentRequest.getParameter(CsrfFilter.REQUEST_PARAMETER)).thenReturn("different");
+        filter.doFilter(differentRequest, differentResponse, differentChain);
+        verify(differentResponse).sendError(HttpServletResponse.SC_FORBIDDEN, "Invalid CSRF token");
+
         HttpServletRequest invalidRequest = mock(HttpServletRequest.class);
         HttpServletResponse invalidResponse = mock(HttpServletResponse.class);
         FilterChain invalidChain = mock(FilterChain.class);
@@ -132,12 +141,14 @@ public class FilterCoverageTest {
         assertAuthorized(filter, "/results", "GET", null, 1, false);
         assertAuthorized(filter, "/quizzes", "GET", null, 2, true);
         assertAuthorized(filter, "/quizzes", "GET", null, 1, true);
+        assertAuthorized(filter, "/quizzes", "GET", null, 3, false);
         assertAuthorized(filter, "/quizzes", "POST", "search", 2, true);
         assertAuthorized(filter, "/quizzes", "POST", "update", 1, true);
         assertAuthorized(filter, "/quizzes", "POST", "update", 2, false);
         assertAuthorized(filter, "/quizzes", "POST", "unknown", 1, false);
         assertAuthorized(filter, "/questions", "GET", null, 1, true);
         assertAuthorized(filter, "/questions", "GET", null, 2, true);
+        assertAuthorized(filter, "/questions", "GET", null, 3, false);
         assertAuthorized(filter, "/questions", "POST", "run", 2, true);
         assertAuthorized(filter, "/questions", "POST", "run", 1, false);
         assertAuthorized(filter, "/questions", "POST", "editQuestion", 1, true);

@@ -1,3 +1,5 @@
+-- Legacy one-shot bootstrap retained for existing installations.
+-- New installations and CI use the versioned scripts in resources/db/migration.
 DROP SCHEMA IF EXISTS tests_db;
 CREATE SCHEMA IF NOT EXISTS tests_db
   CHARACTER SET utf8

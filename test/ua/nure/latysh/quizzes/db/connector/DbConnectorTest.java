@@ -2,19 +2,20 @@ package ua.nure.latysh.quizzes.db.connector;
 
 import org.junit.Test;
 import org.mockito.MockedConstruction;
+import ua.nure.latysh.quizzes.exceptions.RepositoryException;
 
 import javax.naming.Context;
 import javax.naming.InitialContext;
+import javax.naming.NamingException;
 import javax.sql.DataSource;
 import java.lang.reflect.Field;
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
@@ -43,45 +44,31 @@ public class DbConnectorTest {
     }
 
     @Test
-    public void connectionRollbackAndCloseHandleSuccessNullsAndSqlErrors() throws Exception {
-        DbConnector connector = DbConnector.getInstance();
+    public void lookupConnectionAndRollbackFailuresAreExplicit() throws Exception {
         DataSource dataSource = mock(DataSource.class);
-        setDataSource(connector, dataSource);
         when(dataSource.getConnection()).thenThrow(new SQLException("connection"));
-        assertNull(connector.getConnection());
+        DbConnector connector = new DbConnector(dataSource);
+        assertThrows(RepositoryException.class, connector::getConnection);
 
         Connection connection = mock(Connection.class);
-        Statement statement = mock(Statement.class);
-        ResultSet resultSet = mock(ResultSet.class);
         connector.rollback(null);
         connector.rollback(connection);
         verify(connection).rollback();
-        connector.close(connection, statement, resultSet);
-        verify(resultSet).close();
-        verify(statement).close();
-        verify(connection).close();
+        doThrow(new SQLException("rollback")).when(connection).rollback();
+        assertThrows(RepositoryException.class, () -> connector.rollback(connection));
 
-        Connection brokenConnection = mock(Connection.class);
-        Statement brokenStatement = mock(Statement.class);
-        ResultSet brokenResultSet = mock(ResultSet.class);
-        doThrow(new SQLException("rollback")).when(brokenConnection).rollback();
-        doThrow(new SQLException("connection close")).when(brokenConnection).close();
-        doThrow(new SQLException("statement close")).when(brokenStatement).close();
-        doThrow(new SQLException("result set close")).when(brokenResultSet).close();
-        connector.rollback(brokenConnection);
-        connector.close(brokenConnection, brokenStatement, brokenResultSet);
-        connector.close(null, null, null);
+        resetSingleton();
+        try (MockedConstruction<InitialContext> construction = mockConstruction(InitialContext.class,
+                (initialContext, context) -> when(initialContext.lookup("java:/comp/env"))
+                        .thenThrow(new NamingException("missing")))) {
+            assertThrows(RepositoryException.class, DbConnector::getInstance);
+            assertEquals(1, construction.constructed().size());
+        }
     }
 
     private static void resetSingleton() throws Exception {
         Field instance = DbConnector.class.getDeclaredField("instance");
         instance.setAccessible(true);
         instance.set(null, null);
-    }
-
-    private static void setDataSource(DbConnector connector, DataSource dataSource) throws Exception {
-        Field field = DbConnector.class.getDeclaredField("ds");
-        field.setAccessible(true);
-        field.set(connector, dataSource);
     }
 }

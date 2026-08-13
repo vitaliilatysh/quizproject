@@ -20,8 +20,10 @@ import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -51,7 +53,7 @@ public class QuestionServletCoverageTest {
         Question question = question(3, 12, "Question");
         List<Answer> answers = answers();
         when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(question));
-        when(dependencies.questionService.findQuestionById(3)).thenReturn(question);
+        when(dependencies.questionService.findQuestionById(3)).thenReturn(Optional.of(question));
         when(dependencies.answerService.findAnswersByQuestionId(3)).thenReturn(answers);
 
         WebContext get = context();
@@ -104,7 +106,7 @@ public class QuestionServletCoverageTest {
         ua.nure.latysh.quizzes.entities.Attempt attempt = new ua.nure.latysh.quizzes.entities.Attempt();
         attempt.setId(44);
         attempt.setExpiresAt(new java.util.Date(1_700_000_000_000L));
-        when(dependencies.quizService.findQuizById(12)).thenReturn(quiz);
+        when(dependencies.quizService.findQuizById(12)).thenReturn(Optional.of(quiz));
         when(dependencies.attemptService.startAttempt(persistedUser, quiz)).thenReturn(attempt);
         when(dependencies.questionService.findQuestionsByQuizId(12)).thenReturn(List.of(first, second));
         when(dependencies.answerService.findAnswersByQuestionId(1)).thenReturn(List.of(answer(1, false)));
@@ -157,7 +159,7 @@ public class QuestionServletCoverageTest {
         Dependencies dependencies = new Dependencies();
         QuestionServlet servlet = dependencies.servlet();
         when(dependencies.questionService.findQuestionById(3))
-                .thenAnswer(invocation -> question(3, 12, "Original"));
+                .thenAnswer(invocation -> Optional.of(question(3, 12, "Original")));
         when(dependencies.answerService.findAnswersByQuestionId(3))
                 .thenAnswer(invocation -> answers());
         when(dependencies.questionService.findQuestionsByQuizId(12))
@@ -180,6 +182,30 @@ public class QuestionServletCoverageTest {
         verify(dependencies.answerService, org.mockito.Mockito.times(8)).updateAnswer(any());
         verify(firstPattern.request).setAttribute("quiz", 12);
         verify(secondPattern.dispatcher).forward(secondPattern.request, secondPattern.response);
+    }
+
+    @Test
+    public void missingRequiredEntitiesFailFast() {
+        Dependencies dependencies = new Dependencies();
+        QuestionServlet servlet = dependencies.servlet();
+
+        WebContext edit = action("edit");
+        when(edit.request.getParameter("question")).thenReturn("404");
+        when(dependencies.questionService.findQuestionById(404)).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(edit.request, edit.response));
+
+        WebContext delete = action("delete");
+        when(delete.request.getParameter("question")).thenReturn("404");
+        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(delete.request, delete.response));
+
+        WebContext run = action("run");
+        when(run.request.getParameter("quiz")).thenReturn("404");
+        when(dependencies.quizService.findQuizById(404)).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(run.request, run.response));
+
+        WebContext save = editForm();
+        when(save.request.getParameter("questionId")).thenReturn("404");
+        assertThrows(IllegalArgumentException.class, () -> servlet.doPost(save.request, save.response));
     }
 
     private static WebContext questionForm(String action) {
