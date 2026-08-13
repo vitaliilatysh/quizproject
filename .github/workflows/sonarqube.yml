@@ -40,36 +40,40 @@ jobs:
           validate-wrappers: true
 
       - name: Refresh dependency lock state
-        run: ./gradlew dependencies --write-locks --no-daemon && cat gradle.lockfile
+        run: ./gradlew dependencies :api:dependencies --write-locks --no-daemon && cat gradle.lockfile && cat api/gradle.lockfile
 
       - name: Test and collect coverage
-        run: ./gradlew clean test jacocoTestReport --no-daemon
+        run: ./gradlew clean test jacocoTestReport :api:test :api:jacocoTestReport --no-daemon
 
       - name: Upload coverage diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
-          path: build/reports/jacoco/test
+          path: |
+            build/reports/jacoco/test
+            api/build/reports/jacoco/test
 
       - name: Report uncovered lines
         run: |
           python3 - <<'PY'
+          import pathlib
           import xml.etree.ElementTree as ET
 
-          root = ET.parse("build/reports/jacoco/test/jacocoTestReport.xml").getroot()
-          for package in root.findall("package"):
-              for source in package.findall("sourcefile"):
-                  missed = [
-                      line.get("nr")
-                      for line in source.findall("line")
-                      if int(line.get("mi", "0")) > 0
-                  ]
-                  if missed:
-                      print(f"{package.get('name')}/{source.get('name')}: {', '.join(missed)}")
+          for report in pathlib.Path('.').glob('**/jacocoTestReport.xml'):
+              root = ET.parse(report).getroot()
+              for package in root.findall('package'):
+                  for source in package.findall('sourcefile'):
+                      missed = [
+                          line.get('nr')
+                          for line in source.findall('line')
+                          if int(line.get('mi', '0')) > 0
+                      ]
+                      if missed:
+                          print(f"{report}: {package.get('name')}/{source.get('name')}: {', '.join(missed)}")
           PY
 
       - name: Verify coverage and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew jacocoTestCoverageVerification sonar --no-daemon
+        run: ./gradlew jacocoTestCoverageVerification :api:jacocoTestCoverageVerification sonar --no-daemon

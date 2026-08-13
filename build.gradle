@@ -117,6 +117,8 @@ sonar {
         property 'sonar.organization', 'vitaliilatysh'
         property 'sonar.gradle.scanAll', 'true'
         property 'sonar.qualitygate.wait', 'true'
+        property 'sonar.coverage.jacoco.xmlReportPaths',
+                'build/reports/jacoco/test/jacocoTestReport.xml,api/build/reports/jacoco/test/jacocoTestReport.xml'
         property 'sonar.cpd.exclusions', 'web/WEB-INF/views/**/*.jsp'
         property 'sonar.exclusions', 'resources/db/migration/**/*.sql'
     }
@@ -124,6 +126,7 @@ sonar {
 
 tasks.named('sonar') {
     dependsOn tasks.named('jacocoTestReport')
+    dependsOn ':api:jacocoTestReport'
 }
 
 tasks.named('war') {
