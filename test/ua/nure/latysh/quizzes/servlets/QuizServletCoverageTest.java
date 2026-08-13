@@ -177,11 +177,16 @@ public class QuizServletCoverageTest {
         verify(missingName.response).sendError(
                 HttpServletResponse.SC_BAD_REQUEST, "Missing or blank parameter: quizName");
 
-        WebContext failedAdd = action("add");
+        WebContext failedEdit = action("edit");
+        when(failedEdit.request.getParameter("quiz")).thenReturn("5");
+        when(failedEdit.request.getParameter("quizName")).thenReturn("Quiz");
+        when(failedEdit.request.getParameter("quizSubject")).thenReturn("Java");
+        when(failedEdit.request.getParameter("quizComplexity")).thenReturn("easy");
+        when(failedEdit.request.getParameter("quizTime")).thenReturn("10");
         doThrow(new ServletException("forward failed"))
-                .when(failedAdd.dispatcher).forward(failedAdd.request, failedAdd.response);
-        servlet.doPost(failedAdd.request, failedAdd.response);
-        verify(failedAdd.response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                .when(failedEdit.dispatcher).forward(failedEdit.request, failedEdit.response);
+        servlet.doPost(failedEdit.request, failedEdit.response);
+        verify(failedEdit.response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 
     private static Quiz quiz(int id, String name) {

@@ -66,7 +66,7 @@ public class RequestParametersTest {
     private static void assertBadRequest(HttpServletRequest request,
                                          String name,
                                          boolean integer,
-                                         String expectedMessage) throws Exception {
+                                         String expectedMessage) {
         ThrowingRunnable action = integer
                 ? () -> RequestParameters.positiveInt(request, name)
                 : () -> RequestParameters.requiredText(request, name);
