@@ -39,20 +39,28 @@
 
 ```bash
 DB_URL=jdbc:mysql://localhost:3306/tests_db DB_USERNAME=root DB_PASSWORD=secret \
+JWT_SECRET=<base64-encoded-32-byte-secret> \
   ./gradlew :api:bootRun
 ```
 
 У Windows передайте ці значення як змінні середовища та виконайте `gradlew.bat :api:bootRun`.
 Типовий API-порт — `8081`; його можна змінити через `API_PORT`.
 
+`JWT_SECRET` є обов’язковим Base64-значенням щонайменше з 32 випадкових байтів. Наприклад, секрет можна
+згенерувати командою `openssl rand -base64 32`. Термін дії токена типово становить 15 хвилин і
+налаштовується через `JWT_TTL`. Дозволені браузерні джерела задаються списком `CORS_ALLOWED_ORIGINS`.
+
+- `POST /api/v1/auth/login` — отримання JWT за логіном і паролем;
 - `GET /api/v1/quizzes` — список тестів;
 - `GET /api/v1/quizzes/{id}` — один тест;
-- `GET /api/v1/results/me` — результати поточного користувача через HTTP Basic;
+- `GET /api/v1/results/me` — результати поточного користувача з роллю `USER` або `ADMIN`;
+- `GET /api/v1/admin/status` — перевірка доступу лише для ролі `ADMIN`;
 - `GET /actuator/health` — перевірка стану;
 - `/swagger-ui.html` — інтерактивна OpenAPI-документація.
 
-На етапі P6 API доступний тільки для читання. HTTP Basic використовує наявні облікові записи й сумісний
-як із PBKDF2-хешами, так і з legacy-паролями; token-based автентифікація запланована окремо.
+Захищені маршрути приймають заголовок `Authorization: Bearer <token>`. API повертає однакові JSON-помилки
+для `401`, `403` і `429`; ліміти запитів налаштовуються через `API_RATE_LIMIT_REQUESTS`,
+`LOGIN_RATE_LIMIT_REQUESTS`, `API_RATE_LIMIT_WINDOW` та `API_RATE_LIMIT_MAX_CLIENTS`.
 
 ## Міграції бази даних
 

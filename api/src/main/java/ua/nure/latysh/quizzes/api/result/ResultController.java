@@ -22,9 +22,8 @@ public class ResultController {
 
     @GetMapping("/me")
     @Operation(summary = "List the current user's completed quiz results")
-    @SecurityRequirement(name = "basicAuth")
+    @SecurityRequirement(name = "bearerAuth")
     public List<ResultResponse> getMyResults(Authentication authentication) {
         return resultQueryService.findCompletedByUsername(authentication.getName());
     }
 }
-
