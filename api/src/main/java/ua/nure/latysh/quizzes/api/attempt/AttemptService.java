@@ -187,8 +187,9 @@ public class AttemptService {
                         """,
                 resultSet -> {
                     int questionId = resultSet.getInt("question_id");
+                    String questionText = resultSet.getString("question");
                     var question = questions.computeIfAbsent(questionId,
-                            ignored -> new MutableQuestion(resultSet.getString("question")));
+                            ignored -> new MutableQuestion(questionText));
                     question.answers().add(new AnswerOptionResponse(
                             resultSet.getInt("answer_id"), resultSet.getString("answer")));
                 }, quizId);
