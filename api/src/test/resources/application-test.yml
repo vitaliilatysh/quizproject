@@ -7,3 +7,10 @@ spring:
     init:
       mode: always
 
+quiz:
+  security:
+    jwt-secret: cDctdGVzdC1zZWNyZXQtbXVzdC1iZS1hdC1sZWFzdC0zMi1ieXRlcw==
+    allowed-origins: https://app.example.test
+    rate-limit:
+      requests: 100
+      login-attempts: 3

@@ -4,7 +4,8 @@ INSERT INTO users VALUES
   (1, 'student', 'secret123', 1, 2),
   (2, 'blocked', 'secret123', 2, 2),
   (3, 'empty', 'secret123', 1, 2),
-  (4, 'encoded', 'placeholder', 1, 2);
+  (4, 'encoded', 'placeholder', 1, 2),
+  (5, 'admin', 'secret123', 1, 1);
 INSERT INTO subjects VALUES (1, 'Java Basics'), (2, 'Collections');
 INSERT INTO levels VALUES (1, 'low'), (2, 'medium');
 INSERT INTO quizzes VALUES
@@ -16,4 +17,3 @@ INSERT INTO questions VALUES
 INSERT INTO attempts VALUES
   (1, 80, TIMESTAMP '2026-08-12 10:15:30', TRUE, 1, 1),
   (2, 20, NULL, FALSE, 2, 1);
-

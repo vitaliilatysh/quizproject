@@ -31,11 +31,14 @@ public class ApiUserDetailsService implements UserDetailsService {
                 .query((resultSet, rowNumber) -> User.withUsername(resultSet.getString("login"))
                         .password(resultSet.getString("password"))
                         .disabled(!"active".equalsIgnoreCase(resultSet.getString("status_name")))
-                        .authorities(new SimpleGrantedAuthority("ROLE_" +
-                                resultSet.getString("role_name").toUpperCase(Locale.ROOT)))
+                        .authorities(new SimpleGrantedAuthority(toAuthority(resultSet.getString("role_name"))))
                         .build())
                 .optional()
                 .orElseThrow(() -> new UsernameNotFoundException("Unknown user"));
     }
-}
 
+    private static String toAuthority(String role) {
+        String normalized = role.toUpperCase(Locale.ROOT);
+        return "ROLE_" + ("STUDENT".equals(normalized) ? "USER" : normalized);
+    }
+}

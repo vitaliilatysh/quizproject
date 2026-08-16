@@ -13,9 +13,10 @@ public class OpenApiConfiguration {
     OpenAPI quizOpenApi() {
         return new OpenAPI()
                 .info(new Info().title("Quiz REST API").version("v1")
-                        .description("Read-only API for quizzes and authenticated user results."))
-                .components(new Components().addSecuritySchemes("basicAuth", new SecurityScheme()
+                        .description("Quiz API with JWT authentication and role-based access control."))
+                .components(new Components().addSecuritySchemes("bearerAuth", new SecurityScheme()
                         .type(SecurityScheme.Type.HTTP)
-                        .scheme("basic")));
+                        .scheme("bearer")
+                        .bearerFormat("JWT")));
     }
 }
