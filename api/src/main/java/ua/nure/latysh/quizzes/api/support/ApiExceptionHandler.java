@@ -29,6 +29,16 @@ public class ApiExceptionHandler {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(ResourceConflictException.class)
+    ResponseEntity<ApiError> conflict(ResourceConflictException exception, HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    ResponseEntity<ApiError> invalidSubmission(InvalidRequestException exception, HttpServletRequest request) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(ConstraintViolationException.class)
     ResponseEntity<ApiError> invalidRequest(ConstraintViolationException exception, HttpServletRequest request) {
         return response(HttpStatus.BAD_REQUEST, "Request validation failed", request.getRequestURI());
@@ -49,3 +59,4 @@ public class ApiExceptionHandler {
                 Instant.now(clock), status.value(), status.getReasonPhrase(), message, path));
     }
 }
+

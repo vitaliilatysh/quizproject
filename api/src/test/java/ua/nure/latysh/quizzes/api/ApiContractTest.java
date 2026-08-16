@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -30,6 +31,9 @@ class ApiContractTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void listsQuizzesAndReturnsOneById() throws Exception {
@@ -131,6 +135,133 @@ class ApiContractTest {
     }
 
     @Test
+    void completesAnOwnedQuizAttemptWithoutLeakingCorrectAnswers() throws Exception {
+        String token = login("apiuser", "secret123", "192.0.2.50");
+        MvcResult started = startAttempt(token)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.quizId").value(1))
+                .andExpect(jsonPath("$.completed").value(false))
+                .andExpect(jsonPath("$.score").doesNotExist())
+                .andExpect(jsonPath("$.completedAt").doesNotExist())
+                .andExpect(jsonPath("$.questions.length()").value(2))
+                .andExpect(jsonPath("$.questions[0].text").value("Question 1"))
+                .andExpect(jsonPath("$.questions[0].answers.length()").value(4))
+                .andExpect(jsonPath("$.questions[0].answers[0].text").value("Answer 1.1"))
+                .andExpect(jsonPath("$.questions[0].answers[0].correct").doesNotExist())
+                .andReturn();
+        long attemptId = objectMapper.readTree(started.getResponse().getContentAsString()).get("attemptId").asLong();
+
+        mockMvc.perform(get("/api/v1/attempts/{attemptId}", attemptId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attemptId").value(attemptId));
+
+        mockMvc.perform(post("/api/v1/attempts/{attemptId}/complete", attemptId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[1,5,6]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attemptId").value(attemptId))
+                .andExpect(jsonPath("$.quizId").value(1))
+                .andExpect(jsonPath("$.score").value(100))
+                .andExpect(jsonPath("$.completedAt").exists());
+
+        mockMvc.perform(get("/api/v1/attempts/{attemptId}", attemptId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completed").value(true))
+                .andExpect(jsonPath("$.score").value(100))
+                .andExpect(jsonPath("$.completedAt").exists());
+
+        mockMvc.perform(post("/api/v1/attempts/{attemptId}/complete", attemptId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Attempt " + attemptId + " was already completed"));
+    }
+
+    @Test
+    void rejectsInvalidUnauthorizedAndStaleAttemptOperations() throws Exception {
+        mockMvc.perform(post("/api/v1/quizzes/1/attempts"))
+                .andExpect(status().isUnauthorized());
+
+        String token = login("apiuser", "secret123", "192.0.2.51");
+        mockMvc.perform(post("/api/v1/quizzes/0/attempts")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/quizzes/99/attempts")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Quiz 99 was not found"));
+        mockMvc.perform(post("/api/v1/quizzes/2/attempts")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Quiz 2 is not ready for attempts"));
+        mockMvc.perform(get("/api/v1/attempts/999")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/attempts/1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/v1/attempts/2/complete")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Attempt 2 has expired"));
+        mockMvc.perform(post("/api/v1/attempts/3/complete")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("The attempted quiz no longer contains valid questions"));
+
+        long invalidAnswerAttempt = attemptId(startAttempt(token).andExpect(status().isCreated()).andReturn());
+        mockMvc.perform(post("/api/v1/attempts/{attemptId}/complete", invalidAnswerAttempt)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[999]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("An answer does not belong to the attempted quiz"));
+
+        mockMvc.perform(post("/api/v1/attempts/{attemptId}/complete", invalidAnswerAttempt)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Request validation failed"));
+        mockMvc.perform(post("/api/v1/attempts/{attemptId}/complete", invalidAnswerAttempt)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[0]}"))
+                .andExpect(status().isBadRequest());
+
+        long unansweredAttempt = attemptId(startAttempt(token).andExpect(status().isCreated()).andReturn());
+        mockMvc.perform(post("/api/v1/attempts/{attemptId}/complete", unansweredAttempt)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.score").value(0));
+    }
+
+    @Test
+    void rejectsATokenWhoseUserWasRemovedAfterLogin() throws Exception {
+        String token = login("orphan", "secret123", "192.0.2.52");
+        jdbcTemplate.update("DELETE FROM users WHERE id = 7");
+        try {
+            mockMvc.perform(post("/api/v1/quizzes/1/attempts")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Current user was not found"));
+        } finally {
+            jdbcTemplate.update("INSERT INTO users VALUES (7, 'orphan', 'secret123', 1, 2)");
+        }
+    }
+
+    @Test
     void appliesCorsAllowlistWithoutRateLimitingPreflightRequests() throws Exception {
         mockMvc.perform(options("/api/v1/results/me")
                         .header(HttpHeaders.ORIGIN, "https://app.example.test")
@@ -190,6 +321,15 @@ class ApiContractTest {
         return objectMapper.readTree(result.getResponse().getContentAsString()).get("accessToken").asString();
     }
 
+    private org.springframework.test.web.servlet.ResultActions startAttempt(String token) throws Exception {
+        return mockMvc.perform(post("/api/v1/quizzes/1/attempts")
+                .header(HttpHeaders.AUTHORIZATION, bearer(token)));
+    }
+
+    private long attemptId(MvcResult result) throws Exception {
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("attemptId").asLong();
+    }
+
     private org.springframework.test.web.servlet.ResultActions performLogin(
             String username, String password, String remoteAddress) throws Exception {
         return mockMvc.perform(post("/api/v1/auth/login")
@@ -205,3 +345,4 @@ class ApiContractTest {
         return "Bearer " + token;
     }
 }
+
