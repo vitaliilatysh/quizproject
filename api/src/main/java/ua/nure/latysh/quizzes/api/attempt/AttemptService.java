@@ -42,6 +42,7 @@ public class AttemptService {
             WHERE attempts.id = :attemptId
               AND users.login = :username
             """;
+    private static final String OWNED_ATTEMPT_FOR_UPDATE = OWNED_ATTEMPT + "FOR UPDATE";
 
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
@@ -120,12 +121,12 @@ public class AttemptService {
     }
 
     private int requireReadyQuiz(int quizId) {
-        Integer duration = jdbcTemplate.query("SELECT time_to_pass FROM quizzes WHERE id = ?",
-                        resultSet -> resultSet.next() ? resultSet.getInt(1) : null, quizId);
-        if (duration == null) {
-            throw new ResourceNotFoundException("Quiz " + quizId + " was not found");
-        }
-        Integer invalidQuestions = jdbcTemplate.queryForObject("""
+        int duration = jdbcTemplate.query("SELECT time_to_pass FROM quizzes WHERE id = ?",
+                        (resultSet, rowNumber) -> resultSet.getInt(1), quizId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz " + quizId + " was not found"));
+        int invalidQuestions = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM (
                     SELECT questions.id
@@ -137,26 +138,28 @@ public class AttemptService {
                         OR SUM(CASE WHEN answers.correct = TRUE THEN 1 ELSE 0 END) = 0
                 ) invalid_questions
                 """, Integer.class, quizId);
-        Integer totalQuestions = jdbcTemplate.queryForObject(
+        int totalQuestions = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM questions WHERE quiz_id = ?", Integer.class, quizId);
-        if (totalQuestions == null || totalQuestions == 0 || invalidQuestions == null || invalidQuestions > 0) {
+        if (totalQuestions == 0 || invalidQuestions > 0) {
             throw new ResourceConflictException("Quiz " + quizId + " is not ready for attempts");
         }
         return duration;
     }
 
     private int requireUserId(String username) {
-        Integer userId = jdbcTemplate.query("SELECT id FROM users WHERE login = ?",
-                resultSet -> resultSet.next() ? resultSet.getInt(1) : null, username);
-        if (userId == null) {
-            throw new ResourceNotFoundException("Current user was not found");
-        }
-        return userId;
+        return jdbcTemplate.query("SELECT id FROM users WHERE login = ?",
+                        (resultSet, rowNumber) -> resultSet.getInt(1), username)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Current user was not found"));
     }
 
     private Optional<AttemptRow> findAttempt(long attemptId, String username, boolean forUpdate) {
-        String sql = OWNED_ATTEMPT + (forUpdate ? "FOR UPDATE" : "");
-        return namedJdbcTemplate.query(sql, Map.of("attemptId", attemptId, "username", username), attemptMapper())
+        Map<String, Object> parameters = Map.of("attemptId", attemptId, "username", username);
+        List<AttemptRow> attempts = forUpdate
+                ? namedJdbcTemplate.query(OWNED_ATTEMPT_FOR_UPDATE, parameters, attemptMapper())
+                : namedJdbcTemplate.query(OWNED_ATTEMPT, parameters, attemptMapper());
+        return attempts
                 .stream()
                 .findFirst();
     }
