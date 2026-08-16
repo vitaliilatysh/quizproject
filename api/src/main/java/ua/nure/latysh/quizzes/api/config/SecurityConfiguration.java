@@ -3,6 +3,7 @@ package ua.nure.latysh.quizzes.api.config;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -36,10 +37,12 @@ public class SecurityConfiguration {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/quizzes/**", "/actuator/health", "/actuator/info",
+                        .requestMatchers("/api/v1/auth/login", "/actuator/health", "/actuator/info",
                                 "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
                         .permitAll()
-                        .requestMatchers("/api/v1/results/me").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/quizzes/**").permitAll()
+                        .requestMatchers("/api/v1/results/me", "/api/v1/attempts/**",
+                                "/api/v1/quizzes/*/attempts").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().denyAll())
                 .exceptionHandling(exceptions -> exceptions
@@ -78,3 +81,4 @@ public class SecurityConfiguration {
         return converter;
     }
 }
+
