@@ -80,6 +80,46 @@ curl -X POST http://localhost:8081/api/v1/attempts/42/complete \
 API перевіряє власника та термін дії спроби, приймає лише відповіді з вибраного тесту, зберігає їх і
 завершує спробу атомарно. Повторне завершення повертає `409 Conflict`.
 
+## Docker і Kubernetes для REST API
+
+Кореневий `Dockerfile` збирає лише Spring Boot-модуль `api` у Java 25 runtime-образ. Контейнер працює
+від непривілейованого користувача та слухає порт `8081`:
+
+```bash
+docker build -t ghcr.io/vitaliilatysh/quizproject-api:latest .
+docker push ghcr.io/vitaliilatysh/quizproject-api:latest
+```
+
+MySQL має бути доступним із кластера, а міграції потрібно застосувати до розгортання API. Для запуску
+готових Kubernetes-ресурсів:
+
+1. У `deploy/kubernetes/backend/config-map.yaml` замініть `CORS_ALLOWED_ORIGINS` на адресу фронтенду.
+2. Скопіюйте `deploy/kubernetes/backend/secret.env.example` у `secret.env` і заповніть реальні значення.
+   Файл `secret.env` і маніфест `secret.yaml` ігноруються Git.
+3. Для незмінного production-релізу замініть `newTag` у `deploy/kubernetes/backend/kustomization.yaml`
+   на тег або digest опублікованого образу.
+4. Створіть namespace і Secret, а потім застосуйте Kustomize-конфігурацію:
+
+```bash
+kubectl apply -f deploy/kubernetes/backend/namespace.yaml
+kubectl -n quizproject create secret generic quiz-api-secrets \
+  --from-env-file=deploy/kubernetes/backend/secret.env \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -k deploy/kubernetes/backend
+kubectl -n quizproject rollout status deployment/quiz-api
+```
+
+Для локальної перевірки без Ingress відкрийте Service через port-forward:
+
+```bash
+kubectl -n quizproject port-forward service/quiz-api 8081:80
+curl http://localhost:8081/actuator/health/readiness
+```
+
+Маніфести створюють два екземпляри API, `ClusterIP` Service, startup/liveness/readiness probes,
+ліміти ресурсів і `PodDisruptionBudget`. Ingress буде зручніше додати разом із фронтендом, щоб в одному
+місці налаштувати домен, TLS та маршрути `/api` і `/`.
+
 ## Міграції бази даних
 
 Версійовані Flyway-міграції зберігаються в `resources/db/migration`. Нова база створюється міграцією `V1`, а `V2` додає обмеження безпеки для паролів, спроб і відповідей.

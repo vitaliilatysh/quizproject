@@ -5,8 +5,11 @@ out
 /.gradle
 /.gradle-user-home
 /build
+/api/build
 /.m2
 /target
 /.gradle-p2
 /.p2-*
 /p2classes
+/deploy/kubernetes/backend/secret.env
+/deploy/kubernetes/backend/secret.yaml
