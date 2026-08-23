@@ -1,0 +1,16 @@
+.git
+.github
+.gradle
+.gradle-user-home
+.idea
+**/build
+*.iml
+out
+target
+
+# The container image only packages the Spring Boot API module.
+deploy
+resources
+src
+test
+web

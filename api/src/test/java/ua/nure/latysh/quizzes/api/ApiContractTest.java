@@ -297,6 +297,14 @@ class ApiContractTest {
                 .andExpect(header().doesNotExist("X-RateLimit-Limit"))
                 .andExpect(jsonPath("$.status").value("UP"));
 
+        mockMvc.perform(get("/actuator/health/liveness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+
+        mockMvc.perform(get("/actuator/health/readiness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Quiz REST API"))
