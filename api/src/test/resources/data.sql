@@ -1,13 +1,14 @@
 INSERT INTO roles VALUES (1, 'admin'), (2, 'student');
 INSERT INTO statuses VALUES (1, 'active'), (2, 'blocked');
 INSERT INTO users VALUES
-  (1, 'student', 'secret123', 1, 2),
-  (2, 'blocked', 'secret123', 2, 2),
-  (3, 'empty', 'secret123', 1, 2),
-  (4, 'encoded', 'placeholder', 1, 2),
-  (5, 'admin', 'secret123', 1, 1),
-  (6, 'apiuser', 'secret123', 1, 2),
-  (7, 'orphan', 'secret123', 1, 2);
+  (1, 'student', 'secret123', 'Student', 'User', TIMESTAMP '2025-01-01 09:00:00', NULL, 1, 2),
+  (2, 'blocked', 'secret123', 'Blocked', 'User', TIMESTAMP '2025-01-02 09:00:00', NULL, 2, 2),
+  (3, 'empty', 'secret123', 'Empty', 'User', TIMESTAMP '2025-01-03 09:00:00', NULL, 1, 2),
+  (4, 'encoded', 'placeholder', 'Encoded', 'User', TIMESTAMP '2025-01-04 09:00:00', NULL, 1, 2),
+  (5, 'admin', 'secret123', 'Admin', 'User', TIMESTAMP '2025-01-05 09:00:00', NULL, 1, 1),
+  (6, 'apiuser', 'secret123', 'API', 'User', TIMESTAMP '2025-01-06 09:00:00', NULL, 1, 2),
+  (7, 'orphan', 'secret123', 'Orphan', 'User', TIMESTAMP '2025-01-07 09:00:00', NULL, 1, 2);
+ALTER TABLE users ALTER COLUMN id RESTART WITH 8;
 INSERT INTO subjects VALUES (1, 'Java Basics'), (2, 'Collections');
 INSERT INTO levels VALUES (1, 'low'), (2, 'medium');
 INSERT INTO quizzes VALUES
