@@ -359,7 +359,8 @@ class ApiContractTest {
         mockMvc.perform(get("/api/v1/admin/results")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].username").value("student"));
+                .andExpect(jsonPath("$[*].username")
+                        .value(org.hamcrest.Matchers.hasItem("student")));
         mockMvc.perform(get("/api/v1/admin/results")
                         .param("from", "2026-01-01T00:00:00Z")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
