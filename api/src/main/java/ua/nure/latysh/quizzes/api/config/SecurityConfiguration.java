@@ -37,12 +37,14 @@ public class SecurityConfiguration {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/api/v1/auth/login", "/actuator/health", "/actuator/health/**",
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register",
+                                "/actuator/health", "/actuator/health/**",
                                 "/actuator/info",
                                 "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/quizzes/**").permitAll()
-                        .requestMatchers("/api/v1/results/me", "/api/v1/attempts/**",
+                        .requestMatchers("/api/v1/results/me", "/api/v1/users/me", "/api/v1/users/me/**",
+                                "/api/v1/attempts/**",
                                 "/api/v1/quizzes/*/attempts").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().denyAll())

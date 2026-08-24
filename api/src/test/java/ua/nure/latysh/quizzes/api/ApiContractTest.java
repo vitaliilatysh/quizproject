@@ -124,6 +124,87 @@ class ApiContractTest {
     }
 
     @Test
+    void registersProfilesAndChangesTheCurrentUsersPassword() throws Exception {
+        mockMvc.perform(get("/api/v1/users/me"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"short","firstName":"","lastName":"User","password":"spaces are bad"}
+                                """)
+                        .with(request -> {
+                            request.setRemoteAddr("192.0.2.70");
+                            return request;
+                        }))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Request validation failed"));
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"student","firstName":"Existing","lastName":"User","password":"secret123"}
+                                """)
+                        .with(request -> {
+                            request.setRemoteAddr("192.0.2.71");
+                            return request;
+                        }))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Username is already registered"));
+
+        MvcResult registered = mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"p10user","firstName":"Vitalii","lastName":"Latysh","password":"initial123"}
+                                """)
+                        .with(request -> {
+                            request.setRemoteAddr("192.0.2.72");
+                            return request;
+                        }))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andReturn();
+        String token = objectMapper.readTree(registered.getResponse().getContentAsString())
+                .get("accessToken").asString();
+
+        mockMvc.perform(get("/api/v1/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("p10user"))
+                .andExpect(jsonPath("$.firstName").value("Vitalii"))
+                .andExpect(jsonPath("$.lastName").value("Latysh"))
+                .andExpect(jsonPath("$.role").value("student"))
+                .andExpect(jsonPath("$.status").value("active"))
+                .andExpect(jsonPath("$.registeredAt").exists())
+                .andExpect(jsonPath("$.lastLoginAt").exists());
+
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"wrong-password\",\"newPassword\":\"updated123\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Current password is incorrect"));
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"initial123\",\"newPassword\":\"initial123\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message")
+                        .value("New password must differ from the current password"));
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"initial123\",\"newPassword\":\"updated123\"}"))
+                .andExpect(status().isNoContent());
+
+        performLogin("p10user", "initial123", "192.0.2.73")
+                .andExpect(status().isUnauthorized());
+        performLogin("p10user", "updated123", "192.0.2.74")
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void enforcesUserAndAdministratorRoles() throws Exception {
         String userToken = login("student", "secret123", "192.0.2.30");
         mockMvc.perform(get("/api/v1/admin/status").header(HttpHeaders.AUTHORIZATION, bearer(userToken)))
@@ -507,12 +588,26 @@ class ApiContractTest {
         String token = login("orphan", "secret123", "192.0.2.52");
         jdbcTemplate.update("DELETE FROM users WHERE id = 7");
         try {
+            mockMvc.perform(get("/api/v1/users/me")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Current user was not found"));
+            mockMvc.perform(put("/api/v1/users/me/password")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"currentPassword\":\"secret123\",\"newPassword\":\"updated123\"}"))
+                    .andExpect(status().isNotFound());
             mockMvc.perform(post("/api/v1/quizzes/1/attempts")
                             .header(HttpHeaders.AUTHORIZATION, bearer(token)))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.message").value("Current user was not found"));
         } finally {
-            jdbcTemplate.update("INSERT INTO users VALUES (7, 'orphan', 'secret123', 1, 2)");
+            jdbcTemplate.update("""
+                    INSERT INTO users VALUES (
+                        7, 'orphan', 'secret123', 'Orphan', 'User',
+                        TIMESTAMP '2025-01-07 09:00:00', NULL, 1, 2
+                    )
+                    """);
         }
     }
 

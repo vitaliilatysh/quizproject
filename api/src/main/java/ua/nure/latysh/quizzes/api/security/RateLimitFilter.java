@@ -15,6 +15,7 @@ import java.io.IOException;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
     private static final String LOGIN_PATH = "/api/v1/auth/login";
+    private static final String REGISTER_PATH = "/api/v1/auth/register";
 
     private final RateLimitService rateLimitService;
     private final ApiErrorWriter errorWriter;
@@ -39,11 +40,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
-        boolean login = LOGIN_PATH.equals(request.getRequestURI());
-        int limit = login
+        boolean sensitiveAuthentication = LOGIN_PATH.equals(request.getRequestURI())
+                || REGISTER_PATH.equals(request.getRequestURI());
+        int limit = sensitiveAuthentication
                 ? properties.rateLimit().loginAttempts()
                 : properties.rateLimit().requests();
-        String key = request.getRemoteAddr() + (login ? ":login" : ":api");
+        String key = request.getRemoteAddr() + (sensitiveAuthentication ? ":auth" : ":api");
         RateLimitDecision decision = rateLimitService.acquire(key, limit, properties.rateLimit().window());
 
         response.setHeader("X-RateLimit-Limit", Integer.toString(decision.limit()));
