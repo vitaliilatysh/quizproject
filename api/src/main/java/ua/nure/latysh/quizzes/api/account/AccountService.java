@@ -21,13 +21,9 @@ public class AccountService {
     private final Clock clock;
 
     public AccountService(JdbcTemplate jdbcTemplate, PasswordEncoder passwordEncoder) {
-        this(jdbcTemplate, passwordEncoder, Clock.systemUTC());
-    }
-
-    AccountService(JdbcTemplate jdbcTemplate, PasswordEncoder passwordEncoder, Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = passwordEncoder;
-        this.clock = clock;
+        this.clock = Clock.systemUTC();
     }
 
     @Transactional
