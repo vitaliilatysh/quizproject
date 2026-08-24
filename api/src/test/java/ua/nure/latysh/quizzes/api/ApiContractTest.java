@@ -14,8 +14,11 @@ import tools.jackson.databind.ObjectMapper;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -132,6 +135,257 @@ class ApiContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.service").value("quiz-api"))
                 .andExpect(jsonPath("$.access").value("admin"));
+    }
+
+    @Test
+    void providesCompleteAdministrativeContentManagement() throws Exception {
+        String userToken = login("student", "secret123", "192.0.2.60");
+        String adminToken = login("admin", "secret123", "192.0.2.61");
+
+        mockMvc.perform(get("/api/v1/admin/subjects"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/admin/subjects")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userToken)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/admin/subjects")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Collections"));
+        mockMvc.perform(get("/api/v1/admin/levels")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("low"));
+        mockMvc.perform(get("/api/v1/admin/quizzes")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].subjectId").value(1));
+
+        int subjectId = responseId(mockMvc.perform(post("/api/v1/admin/subjects")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\" Data Science \"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Data Science"))
+                .andReturn());
+
+        mockMvc.perform(post("/api/v1/admin/subjects")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Java Basics\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/admin/subjects")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(put("/api/v1/admin/subjects/{subjectId}", subjectId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Data Engineering\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Data Engineering"));
+        mockMvc.perform(put("/api/v1/admin/subjects/{subjectId}", subjectId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Java Basics\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(put("/api/v1/admin/subjects/999")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Missing\"}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/v1/admin/subjects/1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Subject 1 is used by a quiz"));
+
+        String quizRequest = """
+                {"name":"Data structures","subjectId":%d,"levelId":1,"timeToPassMinutes":15}
+                """.formatted(subjectId);
+        int quizId = responseId(mockMvc.perform(post("/api/v1/admin/quizzes")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(quizRequest))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.subject").value("Data Engineering"))
+                .andReturn());
+
+        mockMvc.perform(post("/api/v1/admin/quizzes")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Java syntax\",\"subjectId\":1,\"levelId\":1,\"timeToPassMinutes\":5}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/admin/quizzes")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Missing subject\",\"subjectId\":999,\"levelId\":1,\"timeToPassMinutes\":5}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/v1/admin/quizzes")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Missing level\",\"subjectId\":1,\"levelId\":999,\"timeToPassMinutes\":5}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/v1/admin/quizzes")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Bad duration\",\"subjectId\":1,\"levelId\":1,\"timeToPassMinutes\":0}"))
+                .andExpect(status().isBadRequest());
+
+        String updatedQuiz = """
+                {"name":"Algorithms","subjectId":%d,"levelId":2,"timeToPassMinutes":20}
+                """.formatted(subjectId);
+        mockMvc.perform(put("/api/v1/admin/quizzes/{quizId}", quizId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatedQuiz))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Algorithms"))
+                .andExpect(jsonPath("$.complexity").value("medium"));
+        mockMvc.perform(put("/api/v1/admin/quizzes/{quizId}", quizId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Lists\",\"subjectId\":2,\"levelId\":2,\"timeToPassMinutes\":10}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(put("/api/v1/admin/quizzes/999")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatedQuiz))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/v1/admin/quizzes/{quizId}/questions", quizId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+        mockMvc.perform(get("/api/v1/admin/quizzes/999/questions")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isNotFound());
+
+        String questionRequest = """
+                {"text":"What is a stack?","answers":[
+                  {"text":"LIFO","correct":true},{"text":"FIFO","correct":false},
+                  {"text":"Tree","correct":false},{"text":"Graph","correct":false}]}
+                """;
+        int questionId = responseId(mockMvc.perform(post(
+                                "/api/v1/admin/quizzes/{quizId}/questions", quizId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(questionRequest))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.answers.length()").value(4))
+                .andReturn());
+
+        String updatedQuestion = questionRequest.replace("What is a stack?", "Choose LIFO")
+                .replace("\"LIFO\"", "\"Stack\"");
+        mockMvc.perform(put("/api/v1/admin/questions/{questionId}", questionId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatedQuestion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("Choose LIFO"))
+                .andExpect(jsonPath("$.answers[0].text").value("Stack"));
+        mockMvc.perform(post("/api/v1/admin/quizzes/{quizId}/questions", quizId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(questionRequest.replace("true", "false")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("A question must have at least one correct answer"));
+        mockMvc.perform(post("/api/v1/admin/quizzes/{quizId}/questions", quizId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"Too few\",\"answers\":[]}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/admin/quizzes/999/questions")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(questionRequest))
+                .andExpect(status().isNotFound());
+
+        jdbcTemplate.update("INSERT INTO questions (id, question, quiz_id) VALUES (99, 'Broken', ?)", quizId);
+        mockMvc.perform(put("/api/v1/admin/questions/99")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(questionRequest))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Question 99 does not contain exactly four answers"));
+        mockMvc.perform(delete("/api/v1/admin/questions/99")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(put("/api/v1/admin/questions/999")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(questionRequest))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/v1/admin/questions/{questionId}", questionId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/v1/admin/questions/{questionId}", questionId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].username").value("admin"));
+        mockMvc.perform(patch("/api/v1/admin/users/3/status")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"blocked\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("blocked"));
+        mockMvc.perform(patch("/api/v1/admin/users/3/status")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("active"));
+        mockMvc.perform(patch("/api/v1/admin/users/5/status")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"blocked\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(patch("/api/v1/admin/users/999/status")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"active\"}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(patch("/api/v1/admin/users/3/status")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"paused\"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/admin/results")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].username").value("student"));
+        mockMvc.perform(get("/api/v1/admin/results")
+                        .param("from", "2026-01-01T00:00:00Z")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/results")
+                        .param("to", "2026-12-31T23:59:59Z")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/results")
+                        .param("from", "2027-01-01T00:00:00Z")
+                        .param("to", "2026-01-01T00:00:00Z")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(delete("/api/v1/admin/quizzes/{quizId}", quizId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/v1/admin/quizzes/{quizId}", quizId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/v1/admin/subjects/{subjectId}", subjectId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/v1/admin/subjects/{subjectId}", subjectId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -336,6 +590,10 @@ class ApiContractTest {
 
     private long attemptId(MvcResult result) throws Exception {
         return objectMapper.readTree(result.getResponse().getContentAsString()).get("attemptId").asLong();
+    }
+
+    private int responseId(MvcResult result) throws Exception {
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asInt();
     }
 
     private org.springframework.test.web.servlet.ResultActions performLogin(

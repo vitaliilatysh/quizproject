@@ -58,12 +58,21 @@ JWT_SECRET=<base64-encoded-32-byte-secret> \
 - `POST /api/v1/attempts/{id}/complete` — одноразове надсилання відповідей і розрахунок результату;
 - `GET /api/v1/results/me` — результати поточного користувача з роллю `USER` або `ADMIN`;
 - `GET /api/v1/admin/status` — перевірка доступу лише для ролі `ADMIN`;
+- `/api/v1/admin/subjects` — створення, перейменування та видалення предметів;
+- `/api/v1/admin/quizzes` — CRUD тестів і довідник складності;
+- `/api/v1/admin/quizzes/{id}/questions` — перегляд і створення запитань із чотирма варіантами;
+- `/api/v1/admin/questions/{id}` — редагування та видалення запитань;
+- `/api/v1/admin/users` — список користувачів і керування їхнім статусом;
+- `/api/v1/admin/results` — усі завершені результати з необов’язковим часовим діапазоном;
 - `GET /actuator/health` — перевірка стану;
 - `/swagger-ui.html` — інтерактивна OpenAPI-документація.
 
 Захищені маршрути приймають заголовок `Authorization: Bearer <token>`. API повертає однакові JSON-помилки
 для `401`, `403` і `429`; ліміти запитів налаштовуються через `API_RATE_LIMIT_REQUESTS`,
 `LOGIN_RATE_LIMIT_REQUESTS`, `API_RATE_LIMIT_WINDOW` та `API_RATE_LIMIT_MAX_CLIENTS`.
+
+Адміністративні mutation-endpoint-и приймають `POST`, `PUT`, `PATCH` і `DELETE`, доступні лише JWT із
+роллю `ADMIN` та використовуються окремим React frontend замість старих JSP-форм.
 
 Для проходження тесту отримайте JWT, створіть спробу, а потім передайте вибрані ідентифікатори відповідей:
 
