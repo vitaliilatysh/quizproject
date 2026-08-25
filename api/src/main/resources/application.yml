@@ -10,6 +10,9 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 1
+  flyway:
+    clean-disabled: true
+    validate-on-migrate: true
 
 server:
   port: ${API_PORT:8081}

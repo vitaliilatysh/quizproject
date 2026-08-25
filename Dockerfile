@@ -4,9 +4,9 @@ FROM eclipse-temurin:25-jdk-noble AS builder
 
 WORKDIR /workspace
 
-COPY gradlew gradlew.bat settings.gradle build.gradle gradle.lockfile ./
+COPY gradlew gradlew.bat settings.gradle build.gradle ./
 COPY gradle ./gradle
-COPY api/build.gradle api/gradle.lockfile ./api/
+COPY api/build.gradle ./api/
 
 # Keep dependency resolution in a separate layer for faster rebuilds.
 RUN sed -i 's/\r$//' gradlew \

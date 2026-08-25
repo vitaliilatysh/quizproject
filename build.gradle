@@ -1,115 +1,10 @@
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'org.flywaydb:flyway-mysql:13.0.0'
-    }
-}
-
 plugins {
-    id 'java'
-    id 'war'
-    id 'jacoco'
-    id 'org.flywaydb.flyway' version '13.0.0'
+    id 'base'
     id 'org.sonarqube' version '7.3.1.8318'
 }
 
 group = 'ua.nure.latysh'
 version = '1.0-SNAPSHOT'
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
-
-repositories {
-    mavenCentral()
-}
-
-dependencyLocking {
-    lockAllConfigurations()
-}
-
-sourceSets {
-    main {
-        java.srcDirs = ['src']
-        resources.srcDirs = ['resources']
-    }
-    test {
-        java.srcDirs = ['test']
-        resources.srcDirs = []
-    }
-}
-
-dependencies {
-    providedCompile 'javax.servlet:javax.servlet-api:4.0.1'
-    implementation 'log4j:log4j:1.2.17'
-    runtimeOnly 'com.mysql:mysql-connector-j:8.0.33'
-
-    testImplementation 'junit:junit:4.13.2'
-    testImplementation 'org.mockito:mockito-core:5.23.0'
-    testImplementation 'com.mysql:mysql-connector-j:8.0.33'
-    testImplementation 'org.flywaydb:flyway-core:13.0.0'
-    testImplementation 'org.flywaydb:flyway-mysql:13.0.0'
-    testImplementation 'org.testcontainers:testcontainers-mysql:2.0.5'
-}
-
-flyway {
-    url = providers.environmentVariable('DB_URL').orElse('jdbc:mysql://localhost:3306/tests_db').get()
-    user = providers.environmentVariable('DB_USERNAME').orElse('root').get()
-    password = providers.environmentVariable('DB_PASSWORD').orElse('').get()
-    locations = ['classpath:db/migration']
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-    options.release = 25
-}
-
-tasks.named('test') {
-    useJUnit()
-    exclude '**/MySqlRepositoryIntegrationTest.class'
-}
-
-tasks.register('integrationTest', Test) {
-    description = 'Runs MySQL repository tests in Testcontainers.'
-    group = 'verification'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    include '**/MySqlRepositoryIntegrationTest.class'
-    shouldRunAfter tasks.named('test')
-}
-
-jacoco {
-    toolVersion = '0.8.15'
-}
-
-tasks.named('jacocoTestReport') {
-    dependsOn tasks.named('test')
-    reports {
-        xml.required = true
-        html.required = true
-    }
-}
-
-tasks.named('jacocoTestCoverageVerification') {
-    dependsOn tasks.named('test')
-    violationRules {
-        rule {
-            limit {
-                counter = 'LINE'
-                value = 'COVEREDRATIO'
-                minimum = 1.0
-            }
-        }
-    }
-}
-
-tasks.named('check') {
-    dependsOn tasks.named('jacocoTestCoverageVerification')
-}
 
 sonar {
     properties {
@@ -118,17 +13,11 @@ sonar {
         property 'sonar.gradle.scanAll', 'true'
         property 'sonar.qualitygate.wait', 'true'
         property 'sonar.coverage.jacoco.xmlReportPaths',
-                'build/reports/jacoco/test/jacocoTestReport.xml,api/build/reports/jacoco/test/jacocoTestReport.xml'
-        property 'sonar.cpd.exclusions', 'web/WEB-INF/views/**/*.jsp'
-        property 'sonar.exclusions', 'resources/db/migration/**/*.sql'
+                'api/build/reports/jacoco/test/jacocoTestReport.xml'
+        property 'sonar.exclusions', 'api/src/main/resources/db/migration/**/*.sql'
     }
 }
 
 tasks.named('sonar') {
-    dependsOn tasks.named('jacocoTestReport')
     dependsOn ':api:jacocoTestReport'
-}
-
-tasks.named('war') {
-    from 'web'
 }

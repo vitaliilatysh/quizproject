@@ -40,19 +40,17 @@ jobs:
           validate-wrappers: true
 
       - name: Refresh dependency lock state
-        run: ./gradlew dependencies :api:dependencies --write-locks --no-daemon && cat gradle.lockfile && cat api/gradle.lockfile
+        run: ./gradlew :api:dependencies --write-locks --no-daemon && cat api/gradle.lockfile
 
       - name: Test and collect coverage
-        run: ./gradlew clean test jacocoTestReport :api:test :api:jacocoTestReport --no-daemon
+        run: ./gradlew clean :api:test :api:jacocoTestReport :api:integrationTest --no-daemon
 
       - name: Upload coverage diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: jacoco-report
-          path: |
-            build/reports/jacoco/test
-            api/build/reports/jacoco/test
+          path: api/build/reports/jacoco/test
 
       - name: Report uncovered lines
         run: |
@@ -76,4 +74,4 @@ jobs:
       - name: Verify coverage and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew jacocoTestCoverageVerification :api:jacocoTestCoverageVerification sonar --no-daemon
+        run: ./gradlew :api:jacocoTestCoverageVerification sonar --no-daemon
