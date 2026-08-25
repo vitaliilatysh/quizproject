@@ -10,7 +10,3 @@ target
 
 # The container image only packages the Spring Boot API module.
 deploy
-resources
-src
-test
-web
