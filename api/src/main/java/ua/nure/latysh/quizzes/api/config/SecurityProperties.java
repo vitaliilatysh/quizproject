@@ -20,9 +20,15 @@ public record SecurityProperties(
         @NotEmpty List<String> allowedOrigins,
         @Valid @NotNull RateLimitProperties rateLimit) {
     public record RateLimitProperties(
+            @NotNull Backend backend,
             @Positive int requests,
             @Positive int loginAttempts,
             @NotNull Duration window,
-            @Positive int maxClients) {
+            @Positive int maxClients,
+            @NotNull List<String> trustedProxyCidrs) {
+        public enum Backend {
+            MEMORY,
+            REDIS
+        }
     }
 }

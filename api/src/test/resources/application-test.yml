@@ -9,10 +9,24 @@ spring:
     init:
       mode: always
 
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,db
+  health:
+    redis:
+      enabled: false
+
 quiz:
   security:
     jwt-secret: cDctdGVzdC1zZWNyZXQtbXVzdC1iZS1hdC1sZWFzdC0zMi1ieXRlcw==
     allowed-origins: https://app.example.test
     rate-limit:
+      backend: memory
       requests: 100
       login-attempts: 3
+      trusted-proxy-cidrs:
+        - 10.0.0.0/8
+        - 127.0.0.1/32

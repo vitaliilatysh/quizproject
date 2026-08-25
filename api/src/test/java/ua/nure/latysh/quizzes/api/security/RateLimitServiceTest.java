@@ -16,7 +16,7 @@ class RateLimitServiceTest {
     void tracksAndResetsAFixedWindow() {
         Clock clock = mock(Clock.class);
         when(clock.millis()).thenReturn(1_000L, 1_500L, 3_100L);
-        RateLimitService service = new RateLimitService(clock, 10);
+        RateLimitService service = new InMemoryRateLimitService(clock, 10);
 
         RateLimitDecision first = service.acquire("client", 1, Duration.ofSeconds(2));
         RateLimitDecision blocked = service.acquire("client", 1, Duration.ofSeconds(2));
@@ -34,7 +34,7 @@ class RateLimitServiceTest {
     void evictsTheLeastRecentlyUsedClientAtCapacity() {
         Clock clock = mock(Clock.class);
         when(clock.millis()).thenReturn(1_000L);
-        RateLimitService service = new RateLimitService(clock, 1);
+        RateLimitService service = new InMemoryRateLimitService(clock, 1);
 
         assertTrue(service.acquire("first", 1, Duration.ofMinutes(1)).allowed());
         assertTrue(service.acquire("second", 1, Duration.ofMinutes(1)).allowed());

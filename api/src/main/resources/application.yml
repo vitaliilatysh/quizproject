@@ -10,6 +10,13 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 1
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_TIMEOUT:2s}
   flyway:
     clean-disabled: true
     validate-on-migrate: true
@@ -21,10 +28,13 @@ server:
     include-message: never
 
 management:
+  health:
+    redis:
+      enabled: ${REDIS_HEALTH_ENABLED:true}
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       show-details: never
@@ -32,7 +42,7 @@ management:
         enabled: true
       group:
         readiness:
-          include: readinessState,db
+          include: ${READINESS_HEALTH_INDICATORS:readinessState,db,redis}
 
 springdoc:
   swagger-ui:
@@ -49,7 +59,9 @@ quiz:
     token-ttl: ${JWT_TTL:PT15M}
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
     rate-limit:
+      backend: ${RATE_LIMIT_BACKEND:redis}
       requests: ${API_RATE_LIMIT_REQUESTS:120}
       login-attempts: ${LOGIN_RATE_LIMIT_REQUESTS:5}
       window: ${API_RATE_LIMIT_WINDOW:PT1M}
       max-clients: ${API_RATE_LIMIT_MAX_CLIENTS:10000}
+      trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:127.0.0.1/32,::1/128}

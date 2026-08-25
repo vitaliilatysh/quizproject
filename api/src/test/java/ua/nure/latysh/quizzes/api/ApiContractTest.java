@@ -655,6 +655,18 @@ class ApiContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
 
+        mockMvc.perform(get("/actuator/metrics"))
+                .andExpect(status().isUnauthorized());
+        String adminToken = login("admin", "secret123", "192.0.2.90");
+        mockMvc.perform(get("/actuator/metrics")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.names").isArray());
+        mockMvc.perform(get("/actuator/metrics/quiz.rate.limit.requests")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("quiz.rate.limit.requests"));
+
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Quiz REST API"))

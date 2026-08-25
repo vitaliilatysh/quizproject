@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.List;
 
+import static ua.nure.latysh.quizzes.api.config.SecurityProperties.RateLimitProperties.Backend.MEMORY;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -30,6 +32,7 @@ class JwtConfigurationTest {
 
     private static SecurityProperties properties(String secret) {
         return new SecurityProperties(secret, "quiz-api", Duration.ofMinutes(15), List.of("https://example.test"),
-                new SecurityProperties.RateLimitProperties(100, 3, Duration.ofMinutes(1), 100));
+                new SecurityProperties.RateLimitProperties(
+                        MEMORY, 100, 3, Duration.ofMinutes(1), 100, List.of("127.0.0.1/32")));
     }
 }
