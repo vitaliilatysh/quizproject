@@ -1,5 +1,6 @@
 package ua.nure.latysh.quizzes.api.security;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import ua.nure.latysh.quizzes.api.config.SecurityProperties;
@@ -16,6 +17,7 @@ public class InMemoryRateLimitService implements RateLimitService {
     private final int maxClients;
     private final Map<String, Window> windows = new LinkedHashMap<>(16, 0.75f, true);
 
+    @Autowired
     public InMemoryRateLimitService(SecurityProperties properties) {
         this(Clock.systemUTC(), properties.rateLimit().maxClients());
     }
