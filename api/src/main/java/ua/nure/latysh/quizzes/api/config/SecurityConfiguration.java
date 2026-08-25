@@ -24,6 +24,8 @@ import java.util.List;
 @Configuration
 @EnableConfigurationProperties(SecurityProperties.class)
 public class SecurityConfiguration {
+    private static final String ADMIN_ROLE = "ADMIN";
+
     @Bean
     @SuppressWarnings("java:S4502") // Bearer-only auth never relies on automatically submitted cookies.
     SecurityFilterChain apiSecurity(
@@ -42,12 +44,12 @@ public class SecurityConfiguration {
                                 "/actuator/info",
                                 "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
                         .permitAll()
-                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole(ADMIN_ROLE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/quizzes/**").permitAll()
                         .requestMatchers("/api/v1/results/me", "/api/v1/users/me", "/api/v1/users/me/**",
                                 "/api/v1/attempts/**",
-                                "/api/v1/quizzes/*/attempts").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                                "/api/v1/quizzes/*/attempts").hasAnyRole("USER", ADMIN_ROLE)
+                        .requestMatchers("/api/v1/admin/**").hasRole(ADMIN_ROLE)
                         .anyRequest().denyAll())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)

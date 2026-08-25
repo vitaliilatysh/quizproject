@@ -45,8 +45,9 @@ class RedisRateLimitServiceTest {
                 .when(template)
                 .execute(any(RedisScript.class), any(List.class), any());
         RedisRateLimitService service = new RedisRateLimitService(template);
+        Duration window = Duration.ofMinutes(1);
 
         assertThrows(IllegalStateException.class,
-                () -> service.acquire("api:client", 10, Duration.ofMinutes(1)));
+                () -> service.acquire("api:client", 10, window));
     }
 }

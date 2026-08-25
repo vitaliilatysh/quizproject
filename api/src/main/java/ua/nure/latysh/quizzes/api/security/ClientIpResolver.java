@@ -56,7 +56,7 @@ public class ClientIpResolver {
             }
             try {
                 return InetAddress.getByName(candidate) instanceof Inet6Address;
-            } catch (UnknownHostException exception) {
+            } catch (UnknownHostException _) {
                 return false;
             }
         }
@@ -70,7 +70,7 @@ public class ClientIpResolver {
                 if (value < 0 || value > 255) {
                     return false;
                 }
-            } catch (NumberFormatException exception) {
+            } catch (NumberFormatException _) {
                 return false;
             }
         }

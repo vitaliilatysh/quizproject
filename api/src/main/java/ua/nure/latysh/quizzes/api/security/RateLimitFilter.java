@@ -58,7 +58,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         RateLimitDecision decision;
         try {
             decision = rateLimitService.acquire(key, limit, properties.rateLimit().window());
-        } catch (DataAccessException exception) {
+        } catch (DataAccessException _) {
             recordMetric(scope, "unavailable");
             errorWriter.write(request, response, HttpStatus.SERVICE_UNAVAILABLE,
                     "Rate limiting is temporarily unavailable");
