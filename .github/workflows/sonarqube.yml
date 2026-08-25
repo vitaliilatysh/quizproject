@@ -40,7 +40,7 @@ jobs:
           validate-wrappers: true
 
       - name: Refresh dependency lock state
-        run: ./gradlew :api:dependencies --write-locks --no-daemon && cat api/gradle.lockfile
+        run: ./gradlew dependencies :api:dependencies --write-locks --no-daemon && cat gradle.lockfile && cat api/gradle.lockfile
 
       - name: Test and collect coverage
         run: ./gradlew clean :api:test :api:jacocoTestReport :api:integrationTest --no-daemon

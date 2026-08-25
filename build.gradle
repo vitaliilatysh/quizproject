@@ -6,15 +6,31 @@ plugins {
 group = 'ua.nure.latysh'
 version = '1.0-SNAPSHOT'
 
+dependencyLocking {
+    lockAllConfigurations()
+}
+
+// Keep an explicit lock state for the dependency-free aggregator project.
+configurations {
+    rootClasspath
+}
+
 sonar {
     properties {
         property 'sonar.projectKey', 'vitaliilatysh_quizproject'
         property 'sonar.organization', 'vitaliilatysh'
         property 'sonar.gradle.scanAll', 'true'
         property 'sonar.qualitygate.wait', 'true'
-        property 'sonar.coverage.jacoco.xmlReportPaths',
-                'api/build/reports/jacoco/test/jacocoTestReport.xml'
         property 'sonar.exclusions', 'api/src/main/resources/db/migration/**/*.sql'
+    }
+}
+
+project(':api') {
+    sonar {
+        properties {
+            property 'sonar.coverage.jacoco.xmlReportPaths',
+                    'build/reports/jacoco/test/jacocoTestReport.xml'
+        }
     }
 }
 

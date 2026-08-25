@@ -34,7 +34,7 @@ class MySqlMigrationIntegrationTest {
 
     @Test
     void startsOnlyAfterApplyingTheCompleteProductionSchema() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("2");
+        assertThat(flyway.info().current().getVersion()).hasToString("2");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class))
                 .isEqualTo(2);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class)).isEqualTo(2);
