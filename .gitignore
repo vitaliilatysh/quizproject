@@ -4,6 +4,7 @@ out
 *.iml
 /.gradle
 /.gradle-user-home
+/.gradle-user
 /build
 /api/build
 /.m2

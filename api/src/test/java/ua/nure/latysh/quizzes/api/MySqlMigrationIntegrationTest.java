@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 @SpringBootTest(properties = {
         "spring.sql.init.mode=never",
+        "quiz.security.rate-limit.backend=memory",
         "quiz.security.jwt-secret=cDctaW50ZWdyYXRpb24tc2VjcmV0LW11c3QtYmUtYXQtbGVhc3QtMzItYnl0ZXM=",
         "quiz.security.allowed-origins=https://app.example.test"
 })

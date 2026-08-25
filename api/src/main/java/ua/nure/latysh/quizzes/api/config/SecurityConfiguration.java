@@ -42,6 +42,7 @@ public class SecurityConfiguration {
                                 "/actuator/info",
                                 "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
                         .permitAll()
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/quizzes/**").permitAll()
                         .requestMatchers("/api/v1/results/me", "/api/v1/users/me", "/api/v1/users/me/**",
                                 "/api/v1/attempts/**",

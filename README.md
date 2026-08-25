@@ -13,6 +13,7 @@ Legacy JSP/Servlet WAR більше не є частиною backend.
 - Spring Boot 4.1
 - Spring Security і короткоживучі JWT
 - Spring JDBC та MySQL 8
+- Spring Data Redis і атомарні distributed rate limits
 - Flyway
 - Gradle 9.6.1
 - JUnit 6, Testcontainers і JaCoCo
@@ -25,26 +26,38 @@ Legacy JSP/Servlet WAR більше не є частиною backend.
 ~~~
 
 `:api:check` запускає unit та contract-тести й перевіряє 100% line coverage.
-`:api:integrationTest` піднімає чистий MySQL 8.4 через Testcontainers, запускає Spring Boot,
-застосовує production Flyway-міграції та перевіряє схему.
+`:api:integrationTest` піднімає чисті MySQL 8.4 і Redis 8.2 через Testcontainers. Перевірки
+застосовують production Flyway-міграції та доводять, що різні екземпляри API використовують один
+атомарний rate limit.
 
 Готовий executable JAR створюється в `api/build/libs`.
 
 ## Локальний запуск
 
-Створіть порожню базу MySQL і передайте конфігурацію через змінні середовища:
+Створіть порожню базу MySQL, запустіть Redis і передайте конфігурацію через змінні середовища:
+
+~~~bash
+docker run --rm --name quiz-redis -p 6379:6379 redis:8.2.8-alpine
+~~~
+
+В іншому терміналі:
 
 ~~~bash
 export DB_URL="jdbc:mysql://localhost:3306/tests_db?characterEncoding=UTF-8&serverTimezone=UTC"
 export DB_USERNAME="root"
 export DB_PASSWORD="secret"
+export REDIS_HOST="localhost"
 export JWT_SECRET="$(openssl rand -base64 32 | tr -d '\n')"
 export CORS_ALLOWED_ORIGINS="http://localhost:4173"
 ./gradlew :api:bootRun
 ~~~
 
 У Windows задайте ті самі змінні середовища та виконайте `gradlew.bat :api:bootRun`.
-Типовий порт — `8081`; його можна змінити через `API_PORT`.
+Типовий порт — `8081`; його можна змінити через `API_PORT`. Production використовує Redis
+за замовчуванням. Для ізольованої локальної розробки можна встановити
+`RATE_LIMIT_BACKEND=memory`, `REDIS_HEALTH_ENABLED=false` і
+`READINESS_HEALTH_INDICATORS=readinessState,db`, але цей режим не можна використовувати з кількома
+екземплярами API.
 
 Flyway автоматично перевіряє та застосовує міграції під час запуску API. Окремий ручний крок
 перед стартом застосунку більше не потрібний.
@@ -66,6 +79,7 @@ Flyway автоматично перевіряє та застосовує мі�
 - `GET /api/v1/results/me` — результати користувача;
 - `/api/v1/admin/**` — адміністративні операції;
 - `/actuator/health` — стан застосунку;
+- `/actuator/metrics` — метрики, доступні лише адміністратору;
 - `/swagger-ui.html` — інтерактивна OpenAPI-документація.
 
 Захищені маршрути приймають `Authorization: Bearer <token>`. Адміністративні операції
@@ -89,6 +103,7 @@ docker run --rm -p 8081:8081 \
   -e DB_URL="jdbc:mysql://host.docker.internal:3306/tests_db?serverTimezone=UTC" \
   -e DB_USERNAME=root \
   -e DB_PASSWORD=secret \
+  -e REDIS_HOST=host.docker.internal \
   -e JWT_SECRET="$(openssl rand -base64 32 | tr -d '\n')" \
   -e CORS_ALLOWED_ORIGINS=http://localhost:4173 \
   quizproject-api:local
@@ -101,14 +116,16 @@ docker run --rm -p 8081:8081 \
 Маніфести знаходяться в `deploy/kubernetes/backend` і створюють:
 
 - два екземпляри API;
+- Redis 8.2 для спільних атомарних rate limits;
 - `ClusterIP` Service;
 - startup, liveness і readiness probes;
 - resource requests/limits;
 - `PodDisruptionBudget`;
-- non-root контейнер із read-only root filesystem.
+- non-root контейнери з read-only root filesystem;
+- NetworkPolicy, яка дозволяє доступ до Redis лише pod-ам API.
 
-Створіть Secret із `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` і `JWT_SECRET`, після чого застосуйте
-Kustomize-конфігурацію:
+Створіть Secret із `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET` і `REDIS_PASSWORD`, після
+чого застосуйте Kustomize-конфігурацію:
 
 ~~~bash
 kubectl apply -f deploy/kubernetes/backend/namespace.yaml
@@ -120,13 +137,18 @@ kubectl -n quizproject rollout status deployment/quiz-api
 ~~~
 
 Spring Boot запускає Flyway до переходу readiness probe у стан `UP`, тому pod не приймає трафік
-зі схемою, яка ще не пройшла міграцію.
+зі схемою, яка ще не пройшла міграцію. Readiness також перевіряє Redis.
+
+`TRUSTED_PROXY_CIDRS` повинен містити лише мережі фактичних ingress/load-balancer proxy.
+Заголовок `X-Forwarded-For` ігнорується для запитів безпосередньо з недовіреної адреси.
 
 ## Безпека
 
 - паролі зберігаються як salted PBKDF2-HMAC-SHA256;
 - CORS використовує allowlist із `CORS_ALLOWED_ORIGINS`;
-- login та API мають окремі rate limits;
+- login та API мають окремі атомарні Redis rate limits, спільні для всіх pod-ів;
+- IP клієнта визначається справа наліво через ланцюжок лише довірених proxy;
+- відмова Redis закриває доступ контрольованою відповіддю `503`;
 - помилки `401`, `403` і `429` повертаються в одному JSON-форматі;
 - завершення спроби перевіряє власника, термін дії та допустимі відповіді;
 - секрети не зберігаються в репозиторії.

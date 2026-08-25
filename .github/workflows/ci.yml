@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and test
+    name: Java 25, MySQL, Redis and manifests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -35,8 +35,21 @@ jobs:
           cache-provider: basic
           validate-wrappers: true
 
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v5
+        with:
+          version: v1.36.1
+
       - name: Refresh dependency lock state
         run: ./gradlew dependencies :api:dependencies --write-locks --no-daemon && cat gradle.lockfile && cat api/gradle.lockfile
 
       - name: Build, test, and package
         run: ./gradlew clean :api:check :api:integrationTest :api:bootJar --no-daemon
+
+      - name: Render Kubernetes manifests
+        shell: bash
+        run: |
+          kubectl kustomize deploy/kubernetes/backend > backend.yaml
+          grep --quiet 'name: quiz-api' backend.yaml
+          grep --quiet 'name: quiz-redis' backend.yaml
+          grep --quiet 'kind: NetworkPolicy' backend.yaml

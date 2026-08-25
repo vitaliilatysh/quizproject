@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: quiz-redis
+  namespace: quizproject
+  labels:
+    app.kubernetes.io/name: quiz-redis
+    app.kubernetes.io/component: rate-limit-store
+    app.kubernetes.io/part-of: quizproject
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: quiz-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: quiz-api
+      ports:
+        - port: 6379
+          protocol: TCP
