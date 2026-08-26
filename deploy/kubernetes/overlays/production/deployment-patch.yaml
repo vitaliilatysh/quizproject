@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quiz-api
+  namespace: quizproject
+spec:
+  template:
+    spec:
+      containers:
+        - name: quiz-api
+          image: quiz-api:1.0.0
+          imagePullPolicy: Always

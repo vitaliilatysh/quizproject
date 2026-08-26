@@ -113,7 +113,8 @@ docker run --rm -p 8081:8081 \
 
 ## Kubernetes
 
-Маніфести знаходяться в `deploy/kubernetes/backend` і створюють:
+Базові маніфести знаходяться в `deploy/kubernetes/backend`, а готові конфігурації оточень — у
+`deploy/kubernetes/overlays/local` і `deploy/kubernetes/overlays/production`. Вони створюють:
 
 - два екземпляри API;
 - Redis 8.2 для спільних атомарних rate limits;
@@ -124,23 +125,47 @@ docker run --rm -p 8081:8081 \
 - non-root контейнери з read-only root filesystem;
 - NetworkPolicy, яка дозволяє доступ до Redis лише pod-ам API.
 
-Створіть Secret із `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET` і `REDIS_PASSWORD`, після
-чого застосуйте Kustomize-конфігурацію:
+Для локального кластера спочатку зберіть образ, створіть Secret із `DB_URL`, `DB_USERNAME`,
+`DB_PASSWORD`, `JWT_SECRET` і `REDIS_PASSWORD`, після чого застосуйте local overlay:
 
 ~~~bash
+docker build -t quizproject-api:local .
 kubectl apply -f deploy/kubernetes/backend/namespace.yaml
 kubectl -n quizproject create secret generic quiz-api-secrets \
   --from-env-file=deploy/kubernetes/backend/secret.env \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -k deploy/kubernetes/backend
+kubectl apply -k deploy/kubernetes/overlays/local
 kubectl -n quizproject rollout status deployment/quiz-api
 ~~~
+
+Production overlay використовує `ghcr.io/vitaliilatysh/quizproject:master`. Для відтворюваного
+розгортання застосовуйте manifest artifact із delivery workflow: у ньому image зафіксований
+registry digest `sha256:...`.
 
 Spring Boot запускає Flyway до переходу readiness probe у стан `UP`, тому pod не приймає трафік
 зі схемою, яка ще не пройшла міграцію. Readiness також перевіряє Redis.
 
 `TRUSTED_PROXY_CIDRS` повинен містити лише мережі фактичних ingress/load-balancer proxy.
 Заголовок `X-Forwarded-For` ігнорується для запитів безпосередньо з недовіреної адреси.
+
+## Delivery контейнера
+
+Workflow **Backend container delivery** виконується для кожного pull request:
+
+- збирає production Docker image;
+- блокує зміни з виправними критичними вразливостями за допомогою Trivy;
+- використовує точні commit SHA для сторонніх GitHub Actions, звірені з immutable release tags;
+- запускає image від непривілейованого користувача з read-only filesystem разом із MySQL 8.4 і
+  Redis 8.2 та перевіряє readiness, liveness і OpenAPI;
+- рендерить local і production Kustomize overlays.
+
+Після push у `master` workflow публікує multi-platform образи для `linux/amd64` і `linux/arm64`:
+
+- `ghcr.io/vitaliilatysh/quizproject:master`;
+- `ghcr.io/vitaliilatysh/quizproject:sha-<commit>`.
+
+До образу додаються SBOM і build provenance. Готовий production manifest з immutable image digest
+зберігається в GitHub Actions artifact `kubernetes-manifest-<commit>` протягом 30 днів.
 
 ## Безпека
 

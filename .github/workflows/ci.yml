@@ -50,6 +50,11 @@ jobs:
         shell: bash
         run: |
           kubectl kustomize deploy/kubernetes/backend > backend.yaml
+          kubectl kustomize deploy/kubernetes/overlays/local > local.yaml
+          kubectl kustomize deploy/kubernetes/overlays/production > production.yaml
+
           grep --quiet 'name: quiz-api' backend.yaml
           grep --quiet 'name: quiz-redis' backend.yaml
           grep --quiet 'kind: NetworkPolicy' backend.yaml
+          grep --quiet 'image: quizproject-api:local' local.yaml
+          grep --quiet 'image: ghcr.io/vitaliilatysh/quizproject:master' production.yaml
