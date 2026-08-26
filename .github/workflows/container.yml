@@ -1,0 +1,197 @@
+name: Backend container delivery
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  TEST_IMAGE: quizproject-api:test
+
+jobs:
+  verify:
+    name: Container, security and manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+        with:
+          version: v1.36.1
+
+      - name: Build test image
+        run: docker build --tag "${TEST_IMAGE}" .
+
+      - name: Reject fixed critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.TEST_IMAGE }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Start MySQL and Redis
+        shell: bash
+        run: |
+          docker network create quizproject-test
+
+          docker run --detach --name quiz-mysql --network quizproject-test \
+            --env MYSQL_DATABASE=tests_db \
+            --env MYSQL_USER=quiz_app \
+            --env MYSQL_PASSWORD=container-db-password \
+            --env MYSQL_ROOT_PASSWORD=container-root-password \
+            mysql:8.4
+
+          docker run --detach --name quiz-redis --network quizproject-test \
+            redis:8.2.8-alpine redis-server --save '' --appendonly no \
+            --requirepass container-redis-password
+
+          for attempt in {1..60}; do
+            if docker exec quiz-mysql mysqladmin ping --host=127.0.0.1 \
+              --user=root --password=container-root-password --silent; then
+              exit 0
+            fi
+            if [ "${attempt}" -eq 60 ]; then
+              docker logs quiz-mysql
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Run container smoke test
+        shell: bash
+        run: |
+          docker run --detach --name quiz-api-test --network quizproject-test \
+            --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --publish 127.0.0.1:8081:8081 \
+            --env 'DB_URL=jdbc:mysql://quiz-mysql:3306/tests_db?characterEncoding=UTF-8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false' \
+            --env DB_USERNAME=quiz_app \
+            --env DB_PASSWORD=container-db-password \
+            --env REDIS_HOST=quiz-redis \
+            --env REDIS_PASSWORD=container-redis-password \
+            --env JWT_SECRET=cXVpenByb2plY3QtY29udGFpbmVyLXNtb2tlLXRlc3Qtc2VjcmV0LTEyMzQ= \
+            --env CORS_ALLOWED_ORIGINS=http://localhost:4173 \
+            "${TEST_IMAGE}"
+
+          for attempt in {1..60}; do
+            if curl --silent --fail http://127.0.0.1:8081/actuator/health/readiness \
+              | grep --quiet '"status":"UP"'; then
+              break
+            fi
+            if [ "${attempt}" -eq 60 ]; then
+              docker logs quiz-api-test
+              exit 1
+            fi
+            sleep 2
+          done
+
+          test "$(docker inspect --format '{{.Config.User}}' quiz-api-test)" = '10001:10001'
+          curl --silent --fail http://127.0.0.1:8081/actuator/health/liveness \
+            | grep --quiet '"status":"UP"'
+          curl --silent --fail http://127.0.0.1:8081/v3/api-docs \
+            | grep --quiet '"title":"Quiz REST API"'
+
+      - name: Render Kubernetes overlays
+        shell: bash
+        run: |
+          kubectl kustomize deploy/kubernetes/overlays/local > local.yaml
+          kubectl kustomize deploy/kubernetes/overlays/production > production.yaml
+
+          grep --quiet 'image: quizproject-api:local' local.yaml
+          grep --quiet 'CORS_ALLOWED_ORIGINS: http://localhost:4173' local.yaml
+          grep --quiet 'image: ghcr.io/vitaliilatysh/quizproject:master' production.yaml
+          grep --quiet 'imagePullPolicy: Always' production.yaml
+          grep --quiet 'kind: NetworkPolicy' production.yaml
+
+      - name: Stop smoke environment
+        if: always()
+        shell: bash
+        run: |
+          docker rm --force quiz-api-test quiz-mysql quiz-redis 2>/dev/null || true
+          docker network rm quizproject-test 2>/dev/null || true
+
+  publish:
+    name: Publish immutable image
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+        with:
+          version: v1.36.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish multi-platform image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:master
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=sha-${{ github.sha }}
+            org.opencontainers.image.title=Quiz Project API
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Render immutable production manifest
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cp -R deploy/kubernetes "${RUNNER_TEMP}/kubernetes"
+          PRODUCTION_OVERLAY="${RUNNER_TEMP}/kubernetes/overlays/production/kustomization.yaml"
+          sed -i "s|    newTag: master|    digest: ${IMAGE_DIGEST}|" "${PRODUCTION_OVERLAY}"
+          kubectl kustomize "${RUNNER_TEMP}/kubernetes/overlays/production" \
+            > "${GITHUB_WORKSPACE}/quizproject-api-kubernetes.yaml"
+          grep --quiet "image: ${IMAGE_NAME}@${IMAGE_DIGEST}" \
+            "${GITHUB_WORKSPACE}/quizproject-api-kubernetes.yaml"
+
+      - name: Upload production manifest
+        uses: actions/upload-artifact@v6
+        with:
+          name: kubernetes-manifest-${{ github.sha }}
+          path: quizproject-api-kubernetes.yaml
+          if-no-files-found: error
+          retention-days: 30

@@ -10,7 +10,3 @@ resources:
   - redis-deployment.yaml
   - redis-service.yaml
   - redis-network-policy.yaml
-images:
-  - name: quiz-api
-    newName: ghcr.io/vitaliilatysh/quizproject-api
-    newTag: latest
