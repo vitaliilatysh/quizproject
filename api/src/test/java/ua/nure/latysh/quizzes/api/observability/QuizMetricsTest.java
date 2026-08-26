@@ -14,6 +14,7 @@ class QuizMetricsTest {
         metrics.recordSuccessfulLogin();
         metrics.recordFailedLogin();
         metrics.recordRegistration();
+        metrics.recordTokenRefresh();
         metrics.recordStartedAttempt();
         metrics.recordCompletedAttempt(75);
 
@@ -22,6 +23,7 @@ class QuizMetricsTest {
         assertEquals(1.0, registry.get("quiz.authentication.attempts")
                 .tag("outcome", "failure").counter().count());
         assertEquals(1.0, registry.get("quiz.account.registrations").counter().count());
+        assertEquals(1.0, registry.get("quiz.token.refreshes").counter().count());
         assertEquals(1.0, registry.get("quiz.attempts")
                 .tag("state", "started").counter().count());
         assertEquals(1.0, registry.get("quiz.attempts")

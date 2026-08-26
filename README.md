@@ -64,12 +64,16 @@ Flyway автоматично перевіряє та застосовує мі�
 перед стартом застосунку більше не потрібний.
 
 `JWT_SECRET` має бути Base64-значенням щонайменше з 32 випадкових байтів.
-Термін дії токена задається через `JWT_TTL` і типово становить 15 хвилин.
+Термін дії токена задається через `JWT_TTL` і типово становить 15 хвилин. Поки токен ще дійсний,
+клієнт може обміняти його на новий із повним терміном дії через `POST /api/v1/auth/refresh`, не
+вводячи пароль повторно — це дозволяє тривалим сесіям (наприклад, довгому проходженню тесту)
+залишатися активними без повторного логіна.
 
 ## Основні маршрути
 
 - `POST /api/v1/auth/login` — вхід;
 - `POST /api/v1/auth/register` — реєстрація та отримання JWT;
+- `POST /api/v1/auth/refresh` — обмін дійсного JWT на новий із повним терміном дії;
 - `GET /api/v1/users/me` — профіль;
 - `PUT /api/v1/users/me/password` — зміна пароля;
 - `GET /api/v1/quizzes` — список тестів;
@@ -193,6 +197,7 @@ Prometheus endpoint містить стандартні HTTP, JVM, HikariCP і R
 
 - `quiz_authentication_attempts_total{outcome=...}`;
 - `quiz_account_registrations_total`;
+- `quiz_token_refreshes_total`;
 - `quiz_attempts_total{state=...}`;
 - `quiz_attempt_score_*`;
 - `quiz_rate_limit_requests_total{scope=...,outcome=...}`.
