@@ -15,6 +15,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 import ua.nure.latysh.quizzes.api.security.JsonAccessDeniedHandler;
 import ua.nure.latysh.quizzes.api.security.JsonAuthenticationEntryPoint;
 import ua.nure.latysh.quizzes.api.security.RateLimitFilter;
@@ -59,7 +60,7 @@ public class SecurityConfiguration {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-                .addFilterBefore(correlationIdFilter, RateLimitFilter.class)
+                .addFilterBefore(correlationIdFilter, CorsFilter.class)
                 .addFilterBefore(rateLimitFilter, BearerTokenAuthenticationFilter.class)
                 .build();
     }
