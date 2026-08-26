@@ -25,7 +25,7 @@ public class QuizMetrics {
         attemptScores = DistributionSummary.builder("quiz.attempt.score")
                 .description("Completed quiz attempt scores")
                 .baseUnit("percent")
-                .minimumExpectedValue(0.0)
+                .minimumExpectedValue(1.0)
                 .maximumExpectedValue(100.0)
                 .register(meterRegistry);
     }
