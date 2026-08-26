@@ -12,7 +12,7 @@ Legacy JSP/Servlet WAR більше не є частиною backend.
 - Java 25
 - Spring Boot 4.1
 - Spring Security і короткоживучі JWT
-- Spring JDBC та MySQL 8
+- Spring Data JPA (Hibernate) та MySQL 8
 - Spring Data Redis і атомарні distributed rate limits
 - Micrometer і Prometheus
 - Flyway
