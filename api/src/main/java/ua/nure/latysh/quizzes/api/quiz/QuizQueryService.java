@@ -1,59 +1,52 @@
 package ua.nure.latysh.quizzes.api.quiz;
 
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import ua.nure.latysh.quizzes.api.domain.Quiz;
+import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
+import ua.nure.latysh.quizzes.api.domain.QuizRepository;
 import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class QuizQueryService {
-    private static final String SELECT_QUIZZES = """
-            SELECT quizzes.id,
-                   quizzes.name,
-                   subjects.name AS subject_name,
-                   levels.level AS complexity,
-                   quizzes.time_to_pass,
-                   COUNT(questions.id) AS total_questions
-            FROM quizzes
-            JOIN subjects ON subjects.id = quizzes.subject_id
-            JOIN levels ON levels.id = quizzes.level_id
-            LEFT JOIN questions ON questions.quiz_id = quizzes.id
-            """;
-    private static final String GROUP_AND_ORDER = """
-            GROUP BY quizzes.id, quizzes.name, subjects.name, levels.level, quizzes.time_to_pass
-            ORDER BY quizzes.id
-            """;
+    private final QuizRepository quizRepository;
+    private final QuestionRepository questionRepository;
 
-    private final JdbcClient jdbcClient;
-
-    public QuizQueryService(JdbcClient jdbcClient) {
-        this.jdbcClient = jdbcClient;
+    public QuizQueryService(QuizRepository quizRepository, QuestionRepository questionRepository) {
+        this.quizRepository = quizRepository;
+        this.questionRepository = questionRepository;
     }
 
     public List<QuizResponse> findAll() {
-        return jdbcClient.sql(SELECT_QUIZZES + GROUP_AND_ORDER)
-                .query(QuizQueryService::mapQuiz)
-                .list();
+        Map<Integer, Long> questionCounts = questionCountsByQuizId();
+        return quizRepository.findAllFetchingSubjectAndLevel().stream()
+                .map(quiz -> toResponse(quiz, questionCounts.getOrDefault(quiz.getId(), 0L)))
+                .toList();
     }
 
     public QuizResponse findById(int quizId) {
-        return jdbcClient.sql(SELECT_QUIZZES + "WHERE quizzes.id = :quizId\n" + GROUP_AND_ORDER)
-                .param("quizId", quizId)
-                .query(QuizQueryService::mapQuiz)
-                .optional()
+        Quiz quiz = quizRepository.findByIdFetchingSubjectAndLevel(quizId)
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz " + quizId + " was not found"));
+        return toResponse(quiz, questionRepository.countByQuiz_Id(quizId));
     }
 
-    private static QuizResponse mapQuiz(java.sql.ResultSet resultSet, int rowNumber)
-            throws java.sql.SQLException {
+    private Map<Integer, Long> questionCountsByQuizId() {
+        return questionRepository.countAllGroupedByQuiz().stream()
+                .collect(Collectors.toMap(
+                        QuestionRepository.QuizQuestionCount::getQuizId,
+                        QuestionRepository.QuizQuestionCount::getTotal));
+    }
+
+    private static QuizResponse toResponse(Quiz quiz, long totalQuestions) {
         return new QuizResponse(
-                resultSet.getInt("id"),
-                resultSet.getString("name"),
-                resultSet.getString("subject_name"),
-                resultSet.getString("complexity"),
-                resultSet.getInt("time_to_pass"),
-                resultSet.getInt("total_questions"));
+                quiz.getId(),
+                quiz.getName(),
+                quiz.getSubject().getName(),
+                quiz.getLevel().getLabel(),
+                quiz.getTimeToPass(),
+                (int) totalQuestions);
     }
 }
-

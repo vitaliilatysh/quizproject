@@ -1,8 +1,6 @@
 package ua.nure.latysh.quizzes.api.admin;
 
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.AnswerRequest;
@@ -15,328 +13,307 @@ import ua.nure.latysh.quizzes.api.admin.AdminModels.QuizResponse;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.ResultResponse;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.SubjectResponse;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.UserResponse;
+import ua.nure.latysh.quizzes.api.domain.Answer;
+import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
+import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
+import ua.nure.latysh.quizzes.api.domain.Level;
+import ua.nure.latysh.quizzes.api.domain.LevelRepository;
+import ua.nure.latysh.quizzes.api.domain.Question;
+import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
+import ua.nure.latysh.quizzes.api.domain.Quiz;
+import ua.nure.latysh.quizzes.api.domain.QuizRepository;
+import ua.nure.latysh.quizzes.api.domain.ResultRepository;
+import ua.nure.latysh.quizzes.api.domain.Status;
+import ua.nure.latysh.quizzes.api.domain.StatusRepository;
+import ua.nure.latysh.quizzes.api.domain.Subject;
+import ua.nure.latysh.quizzes.api.domain.SubjectRepository;
+import ua.nure.latysh.quizzes.api.domain.UserAccount;
+import ua.nure.latysh.quizzes.api.domain.UserRepository;
 import ua.nure.latysh.quizzes.api.support.InvalidRequestException;
 import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
 import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
 
-import java.sql.Statement;
-import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class AdminService {
-    private final JdbcTemplate jdbcTemplate;
+    private final SubjectRepository subjectRepository;
+    private final LevelRepository levelRepository;
+    private final QuizRepository quizRepository;
+    private final QuestionRepository questionRepository;
+    private final AnswerRepository answerRepository;
+    private final AttemptRepository attemptRepository;
+    private final ResultRepository resultRepository;
+    private final UserRepository userRepository;
+    private final StatusRepository statusRepository;
 
-    public AdminService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public AdminService(
+            SubjectRepository subjectRepository,
+            LevelRepository levelRepository,
+            QuizRepository quizRepository,
+            QuestionRepository questionRepository,
+            AnswerRepository answerRepository,
+            AttemptRepository attemptRepository,
+            ResultRepository resultRepository,
+            UserRepository userRepository,
+            StatusRepository statusRepository) {
+        this.subjectRepository = subjectRepository;
+        this.levelRepository = levelRepository;
+        this.quizRepository = quizRepository;
+        this.questionRepository = questionRepository;
+        this.answerRepository = answerRepository;
+        this.attemptRepository = attemptRepository;
+        this.resultRepository = resultRepository;
+        this.userRepository = userRepository;
+        this.statusRepository = statusRepository;
     }
 
     public List<SubjectResponse> subjects() {
-        return jdbcTemplate.query("SELECT id, name FROM subjects ORDER BY name",
-                (resultSet, rowNumber) -> new SubjectResponse(
-                        resultSet.getInt("id"), resultSet.getString("name")));
-    }
-
-    public List<LevelResponse> levels() {
-        return jdbcTemplate.query("SELECT id, level FROM levels ORDER BY id",
-                (resultSet, rowNumber) -> new LevelResponse(
-                        resultSet.getInt("id"), resultSet.getString("level")));
-    }
-
-    public List<QuizResponse> quizzes() {
-        return jdbcTemplate.query("""
-                        SELECT quizzes.id, quizzes.name, quizzes.time_to_pass,
-                               quizzes.level_id, levels.level,
-                               quizzes.subject_id, subjects.name AS subject_name,
-                               COUNT(questions.id) AS total_questions
-                        FROM quizzes
-                        JOIN levels ON levels.id = quizzes.level_id
-                        JOIN subjects ON subjects.id = quizzes.subject_id
-                        LEFT JOIN questions ON questions.quiz_id = quizzes.id
-                        GROUP BY quizzes.id, quizzes.name, quizzes.time_to_pass,
-                                 quizzes.level_id, levels.level, quizzes.subject_id, subjects.name
-                        ORDER BY quizzes.id
-                        """,
-                (resultSet, rowNumber) -> new QuizResponse(
-                        resultSet.getInt("id"),
-                        resultSet.getString("name"),
-                        resultSet.getInt("time_to_pass"),
-                        resultSet.getInt("level_id"),
-                        resultSet.getString("level"),
-                        resultSet.getInt("subject_id"),
-                        resultSet.getString("subject_name"),
-                        resultSet.getInt("total_questions")));
-    }
-
-    public List<QuestionResponse> questions(int quizId) {
-        requireExists("quizzes", quizId, "Quiz");
-        var questions = new LinkedHashMap<Integer, MutableQuestion>();
-        jdbcTemplate.query("""
-                        SELECT questions.id AS question_id, questions.question,
-                               answers.id AS answer_id, answers.answer, answers.correct
-                        FROM questions
-                        LEFT JOIN answers ON answers.question_id = questions.id
-                        WHERE questions.quiz_id = ?
-                        ORDER BY questions.id, answers.id
-                        """,
-                resultSet -> {
-                    int questionId = resultSet.getInt("question_id");
-                    String questionText = resultSet.getString("question");
-                    var question = questions.computeIfAbsent(questionId,
-                            ignored -> new MutableQuestion(questionText));
-                    int answerId = resultSet.getInt("answer_id");
-                    if (!resultSet.wasNull()) {
-                        question.answers().add(new AnswerResponse(
-                                answerId,
-                                resultSet.getString("answer"),
-                                resultSet.getBoolean("correct")));
-                    }
-                }, quizId);
-        return questions.entrySet().stream()
-                .map(entry -> new QuestionResponse(
-                        entry.getKey(), quizId, entry.getValue().text(), List.copyOf(entry.getValue().answers())))
+        return subjectRepository.findAllByOrderByNameAsc().stream()
+                .map(subject -> new SubjectResponse(subject.getId(), subject.getName()))
                 .toList();
     }
 
+    public List<LevelResponse> levels() {
+        return levelRepository.findAllByOrderByIdAsc().stream()
+                .map(level -> new LevelResponse(level.getId(), level.getLabel()))
+                .toList();
+    }
+
+    public List<QuizResponse> quizzes() {
+        Map<Integer, Long> questionCounts = questionCountsByQuizId();
+        return quizRepository.findAllFetchingSubjectAndLevel().stream()
+                .map(quiz -> toQuizResponse(quiz, questionCounts.getOrDefault(quiz.getId(), 0L)))
+                .toList();
+    }
+
+    public List<QuestionResponse> questions(int quizId) {
+        requireExistsQuiz(quizId);
+        return questionsWithAnswers(quizId);
+    }
+
+    @Transactional
     public SubjectResponse createSubject(String name) {
         String normalizedName = name.trim();
-        var keyHolder = new GeneratedKeyHolder();
+        var subject = new Subject(normalizedName);
         try {
-            jdbcTemplate.update(connection -> {
-                var statement = connection.prepareStatement(
-                        "INSERT INTO subjects (name) VALUES (?)", Statement.RETURN_GENERATED_KEYS);
-                statement.setString(1, normalizedName);
-                return statement;
-            }, keyHolder);
+            subjectRepository.saveAndFlush(subject);
         } catch (DataIntegrityViolationException exception) {
             throw duplicate("Subject", normalizedName);
         }
-        return new SubjectResponse(keyHolder.getKey().intValue(), normalizedName);
+        return new SubjectResponse(subject.getId(), normalizedName);
     }
 
+    @Transactional
     public SubjectResponse updateSubject(int subjectId, String name) {
         String normalizedName = name.trim();
+        Subject subject = subjectRepository.findById(subjectId)
+                .orElseThrow(() -> missing("Subject", subjectId));
+        subject.setName(normalizedName);
         try {
-            int updated = jdbcTemplate.update(
-                    "UPDATE subjects SET name = ? WHERE id = ?", normalizedName, subjectId);
-            requireUpdated(updated, "Subject", subjectId);
+            subjectRepository.saveAndFlush(subject);
         } catch (DataIntegrityViolationException exception) {
             throw duplicate("Subject", normalizedName);
         }
         return new SubjectResponse(subjectId, normalizedName);
     }
 
+    @Transactional
     public void deleteSubject(int subjectId) {
-        requireExists("subjects", subjectId, "Subject");
-        if (count("SELECT COUNT(*) FROM quizzes WHERE subject_id = ?", subjectId) > 0) {
+        Subject subject = subjectRepository.findById(subjectId)
+                .orElseThrow(() -> missing("Subject", subjectId));
+        if (quizRepository.existsBySubject_Id(subjectId)) {
             throw new ResourceConflictException("Subject " + subjectId + " is used by a quiz");
         }
-        jdbcTemplate.update("DELETE FROM subjects WHERE id = ?", subjectId);
+        subjectRepository.delete(subject);
     }
 
+    @Transactional
     public QuizResponse createQuiz(QuizRequest request) {
-        validateQuizReferences(request);
+        Subject subject = requireSubject(request.subjectId());
+        Level level = requireLevel(request.levelId());
         String name = request.name().trim();
-        var keyHolder = new GeneratedKeyHolder();
+        var quiz = new Quiz();
+        quiz.setName(name);
+        quiz.setTimeToPass(request.timeToPassMinutes());
+        quiz.setLevel(level);
+        quiz.setSubject(subject);
         try {
-            jdbcTemplate.update(connection -> {
-                var statement = connection.prepareStatement("""
-                        INSERT INTO quizzes (name, time_to_pass, level_id, subject_id)
-                        VALUES (?, ?, ?, ?)
-                        """, Statement.RETURN_GENERATED_KEYS);
-                statement.setString(1, name);
-                statement.setInt(2, request.timeToPassMinutes());
-                statement.setInt(3, request.levelId());
-                statement.setInt(4, request.subjectId());
-                return statement;
-            }, keyHolder);
+            quizRepository.saveAndFlush(quiz);
         } catch (DataIntegrityViolationException exception) {
             throw duplicate("Quiz", name);
         }
-        return quiz(keyHolder.getKey().intValue());
+        return toQuizResponse(quiz, 0);
     }
 
+    @Transactional
     public QuizResponse updateQuiz(int quizId, QuizRequest request) {
-        validateQuizReferences(request);
+        Quiz quiz = quizRepository.findByIdFetchingSubjectAndLevel(quizId)
+                .orElseThrow(() -> missing("Quiz", quizId));
+        Subject subject = requireSubject(request.subjectId());
+        Level level = requireLevel(request.levelId());
+        quiz.setName(request.name().trim());
+        quiz.setTimeToPass(request.timeToPassMinutes());
+        quiz.setLevel(level);
+        quiz.setSubject(subject);
         try {
-            int updated = jdbcTemplate.update("""
-                            UPDATE quizzes
-                            SET name = ?, time_to_pass = ?, level_id = ?, subject_id = ?
-                            WHERE id = ?
-                            """,
-                    request.name().trim(), request.timeToPassMinutes(), request.levelId(),
-                    request.subjectId(), quizId);
-            requireUpdated(updated, "Quiz", quizId);
+            quizRepository.saveAndFlush(quiz);
         } catch (DataIntegrityViolationException exception) {
             throw duplicate("Quiz", request.name().trim());
         }
-        return quiz(quizId);
+        return toQuizResponse(quiz, questionRepository.countByQuiz_Id(quizId));
     }
 
     @Transactional
     public void deleteQuiz(int quizId) {
-        requireExists("quizzes", quizId, "Quiz");
-        jdbcTemplate.update("""
-                DELETE FROM results
-                WHERE attempt_id IN (SELECT id FROM attempts WHERE quiz_id = ?)
-                   OR answer_id IN (
-                       SELECT answers.id FROM answers
-                       JOIN questions ON questions.id = answers.question_id
-                       WHERE questions.quiz_id = ?)
-                """, quizId, quizId);
-        jdbcTemplate.update("""
-                DELETE FROM answers
-                WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)
-                """, quizId);
-        jdbcTemplate.update("DELETE FROM attempts WHERE quiz_id = ?", quizId);
-        jdbcTemplate.update("DELETE FROM questions WHERE quiz_id = ?", quizId);
-        jdbcTemplate.update("DELETE FROM quizzes WHERE id = ?", quizId);
+        requireExistsQuiz(quizId);
+        resultRepository.deleteAllByQuizId(quizId);
+        answerRepository.deleteAllByQuizId(quizId);
+        attemptRepository.deleteAllByQuizId(quizId);
+        questionRepository.deleteAllByQuizId(quizId);
+        quizRepository.deleteById(quizId);
     }
 
     @Transactional
     public QuestionResponse createQuestion(int quizId, QuestionRequest request) {
-        requireExists("quizzes", quizId, "Quiz");
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> missing("Quiz", quizId));
         validateAnswers(request.answers());
-        var keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update(connection -> {
-            var statement = connection.prepareStatement(
-                    "INSERT INTO questions (question, quiz_id) VALUES (?, ?)",
-                    Statement.RETURN_GENERATED_KEYS);
-            statement.setString(1, request.text().trim());
-            statement.setInt(2, quizId);
-            return statement;
-        }, keyHolder);
-        int questionId = keyHolder.getKey().intValue();
-        insertAnswers(questionId, request.answers());
-        return question(questionId);
+        var question = new Question(request.text().trim(), quiz);
+        questionRepository.saveAndFlush(question);
+        insertAnswers(question, request.answers());
+        return questionsWithAnswers(quizId).stream()
+                .filter(response -> response.id() == question.getId())
+                .findFirst()
+                .orElseThrow(() -> missing("Question", question.getId()));
     }
 
     @Transactional
     public QuestionResponse updateQuestion(int questionId, QuestionRequest request) {
         validateAnswers(request.answers());
-        int updated = jdbcTemplate.update(
-                "UPDATE questions SET question = ? WHERE id = ?", request.text().trim(), questionId);
-        requireUpdated(updated, "Question", questionId);
-        List<Integer> answerIds = jdbcTemplate.query(
-                "SELECT id FROM answers WHERE question_id = ? ORDER BY id",
-                (resultSet, rowNumber) -> resultSet.getInt(1), questionId);
-        if (answerIds.size() != request.answers().size()) {
+        Question question = questionRepository.findById(questionId)
+                .orElseThrow(() -> missing("Question", questionId));
+        question.setQuestion(request.text().trim());
+        List<Answer> answers = answerRepository.findAllByQuestion_IdOrderByIdAsc(questionId);
+        if (answers.size() != request.answers().size()) {
             throw new ResourceConflictException(
                     "Question " + questionId + " does not contain exactly four answers");
         }
-        for (int index = 0; index < answerIds.size(); index++) {
-            AnswerRequest answer = request.answers().get(index);
-            jdbcTemplate.update(
-                    "UPDATE answers SET answer = ?, correct = ? WHERE id = ?",
-                    answer.text().trim(), answer.correct(), answerIds.get(index));
+        for (int index = 0; index < answers.size(); index++) {
+            AnswerRequest answerRequest = request.answers().get(index);
+            Answer answer = answers.get(index);
+            answer.setAnswer(answerRequest.text().trim());
+            answer.setCorrect(answerRequest.correct());
         }
-        return question(questionId);
+        return questionsWithAnswers(question.getQuiz().getId()).stream()
+                .filter(response -> response.id() == questionId)
+                .findFirst()
+                .orElseThrow(() -> missing("Question", questionId));
     }
 
     @Transactional
     public void deleteQuestion(int questionId) {
-        requireExists("questions", questionId, "Question");
-        jdbcTemplate.update("""
-                DELETE FROM results
-                WHERE answer_id IN (SELECT id FROM answers WHERE question_id = ?)
-                """, questionId);
-        jdbcTemplate.update("DELETE FROM answers WHERE question_id = ?", questionId);
-        jdbcTemplate.update("DELETE FROM questions WHERE id = ?", questionId);
+        if (!questionRepository.existsById(questionId)) {
+            throw missing("Question", questionId);
+        }
+        resultRepository.deleteAllByQuestionId(questionId);
+        answerRepository.deleteAllByQuestionId(questionId);
+        questionRepository.deleteById(questionId);
     }
 
     public List<UserResponse> users() {
-        return jdbcTemplate.query("""
-                        SELECT users.id, users.login, roles.name AS role_name, statuses.name AS status_name
-                        FROM users
-                        JOIN roles ON roles.id = users.role_id
-                        JOIN statuses ON statuses.id = users.status_id
-                        ORDER BY users.login
-                        """,
-                (resultSet, rowNumber) -> new UserResponse(
-                        resultSet.getInt("id"), resultSet.getString("login"),
-                        resultSet.getString("role_name"), resultSet.getString("status_name")));
+        return userRepository.findAllByOrderByLoginAsc().stream()
+                .map(user -> new UserResponse(
+                        user.getId(), user.getLogin(), user.getRole().getName(), user.getStatus().getName()))
+                .toList();
     }
 
+    @Transactional
     public UserResponse updateUserStatus(int userId, String status, String currentUsername) {
-        String normalizedStatus = status.toLowerCase(java.util.Locale.ROOT);
-        UserResponse user = user(userId);
-        if (user.username().equals(currentUsername) && "blocked".equals(normalizedStatus)) {
+        String normalizedStatus = status.toLowerCase(Locale.ROOT);
+        UserAccount user = userRepository.findById(userId)
+                .orElseThrow(() -> missing("User", userId));
+        if (user.getLogin().equals(currentUsername) && "blocked".equals(normalizedStatus)) {
             throw new ResourceConflictException("An administrator cannot block the current account");
         }
-        int updated = jdbcTemplate.update("""
-                        UPDATE users
-                        SET status_id = (SELECT id FROM statuses WHERE LOWER(name) = ?)
-                        WHERE id = ?
-                        """, normalizedStatus, userId);
-        requireUpdated(updated, "User", userId);
-        return user(userId);
+        user.setStatus(requireStatus(normalizedStatus));
+        return new UserResponse(user.getId(), user.getLogin(), user.getRole().getName(), user.getStatus().getName());
     }
 
     public List<ResultResponse> results(Instant from, Instant to) {
         if (from != null && to != null && from.isAfter(to)) {
             throw new InvalidRequestException("Result range start must not be after its end");
         }
-        StringBuilder sql = new StringBuilder("""
-                SELECT attempts.id AS attempt_id, users.login, quizzes.id AS quiz_id,
-                       quizzes.name AS quiz_name, attempts.score, attempts.end_time
-                FROM attempts
-                JOIN users ON users.id = attempts.user_id
-                JOIN quizzes ON quizzes.id = attempts.quiz_id
-                WHERE attempts.completed = TRUE AND attempts.end_time IS NOT NULL
-                """);
-        var parameters = new ArrayList<>();
-        if (from != null) {
-            sql.append(" AND attempts.end_time >= ?");
-            parameters.add(Timestamp.from(from));
+        return attemptRepository.findCompletedInRange(from, to).stream()
+                .map(attempt -> new ResultResponse(
+                        attempt.getId(),
+                        attempt.getUser().getLogin(),
+                        attempt.getQuiz().getId(),
+                        attempt.getQuiz().getName(),
+                        attempt.getScore(),
+                        attempt.getEndTime()))
+                .toList();
+    }
+
+    private List<QuestionResponse> questionsWithAnswers(int quizId) {
+        var questions = new LinkedHashMap<Integer, MutableQuestion>();
+        for (Question question : questionRepository.findAllByQuiz_IdOrderByIdAsc(quizId)) {
+            questions.put(question.getId(), new MutableQuestion(question.getQuestion()));
         }
-        if (to != null) {
-            sql.append(" AND attempts.end_time <= ?");
-            parameters.add(Timestamp.from(to));
+        for (Answer answer : answerRepository.findAllByQuestionQuizIdOrderByQuestionIdAndId(quizId)) {
+            var question = questions.get(answer.getQuestion().getId());
+            if (question != null) {
+                question.answers().add(new AnswerResponse(answer.getId(), answer.getAnswer(), answer.isCorrect()));
+            }
         }
-        sql.append(" ORDER BY attempts.end_time DESC, attempts.id DESC");
-        return jdbcTemplate.query(sql.toString(), (resultSet, rowNumber) -> new ResultResponse(
-                resultSet.getLong("attempt_id"),
-                resultSet.getString("login"),
-                resultSet.getInt("quiz_id"),
-                resultSet.getString("quiz_name"),
-                resultSet.getInt("score"),
-                resultSet.getTimestamp("end_time").toLocalDateTime().toInstant(ZoneOffset.UTC)),
-                parameters.toArray());
+        return questions.entrySet().stream()
+                .map(entry -> new QuestionResponse(
+                        entry.getKey(), quizId, entry.getValue().text(), List.copyOf(entry.getValue().answers())))
+                .toList();
     }
 
-    private QuizResponse quiz(int quizId) {
-        return quizzes().stream()
-                .filter(quiz -> quiz.id() == quizId)
-                .findFirst()
-                .orElseThrow(() -> missing("Quiz", quizId));
+    private Map<Integer, Long> questionCountsByQuizId() {
+        return questionRepository.countAllGroupedByQuiz().stream()
+                .collect(Collectors.toMap(
+                        QuestionRepository.QuizQuestionCount::getQuizId,
+                        QuestionRepository.QuizQuestionCount::getTotal));
     }
 
-    private QuestionResponse question(int questionId) {
-        Integer quizId = jdbcTemplate.query(
-                        "SELECT quiz_id FROM questions WHERE id = ?",
-                        (resultSet, rowNumber) -> resultSet.getInt(1), questionId)
-                .stream().findFirst()
-                .orElseThrow(() -> missing("Question", questionId));
-        return questions(quizId).stream()
-                .filter(question -> question.id() == questionId)
-                .findFirst()
-                .orElseThrow(() -> missing("Question", questionId));
+    private static QuizResponse toQuizResponse(Quiz quiz, long totalQuestions) {
+        return new QuizResponse(
+                quiz.getId(),
+                quiz.getName(),
+                quiz.getTimeToPass(),
+                quiz.getLevel().getId(),
+                quiz.getLevel().getLabel(),
+                quiz.getSubject().getId(),
+                quiz.getSubject().getName(),
+                (int) totalQuestions);
     }
 
-    private UserResponse user(int userId) {
-        return users().stream()
-                .filter(user -> user.id() == userId)
-                .findFirst()
-                .orElseThrow(() -> missing("User", userId));
+    private Subject requireSubject(int subjectId) {
+        return subjectRepository.findById(subjectId).orElseThrow(() -> missing("Subject", subjectId));
     }
 
-    private void validateQuizReferences(QuizRequest request) {
-        requireExists("subjects", request.subjectId(), "Subject");
-        requireExists("levels", request.levelId(), "Level");
+    private Level requireLevel(int levelId) {
+        return levelRepository.findById(levelId).orElseThrow(() -> missing("Level", levelId));
+    }
+
+    private Status requireStatus(String normalizedStatus) {
+        return statusRepository.findByNameIgnoreCase(normalizedStatus)
+                .orElseThrow(() -> new IllegalStateException("Status '" + normalizedStatus + "' is not configured"));
+    }
+
+    private void requireExistsQuiz(int quizId) {
+        if (!quizRepository.existsById(quizId)) {
+            throw missing("Quiz", quizId);
+        }
     }
 
     private static void validateAnswers(List<AnswerRequest> answers) {
@@ -345,28 +322,11 @@ public class AdminService {
         }
     }
 
-    private void insertAnswers(int questionId, List<AnswerRequest> answers) {
-        List<Object[]> rows = answers.stream()
-                .map(answer -> new Object[]{answer.text().trim(), answer.correct(), questionId})
+    private void insertAnswers(Question question, List<AnswerRequest> answers) {
+        List<Answer> rows = answers.stream()
+                .map(answer -> new Answer(answer.text().trim(), answer.correct(), question))
                 .toList();
-        jdbcTemplate.batchUpdate(
-                "INSERT INTO answers (answer, correct, question_id) VALUES (?, ?, ?)", rows);
-    }
-
-    private void requireExists(String table, int id, String resource) {
-        if (count("SELECT COUNT(*) FROM " + table + " WHERE id = ?", id) == 0) {
-            throw missing(resource, id);
-        }
-    }
-
-    private int count(String sql, int id) {
-        return jdbcTemplate.queryForObject(sql, Integer.class, id);
-    }
-
-    private static void requireUpdated(int count, String resource, int id) {
-        if (count == 0) {
-            throw missing(resource, id);
-        }
+        answerRepository.saveAll(rows);
     }
 
     private static ResourceNotFoundException missing(String resource, int id) {

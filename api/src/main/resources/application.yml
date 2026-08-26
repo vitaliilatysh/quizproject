@@ -20,6 +20,14 @@ spring:
   flyway:
     clean-disabled: true
     validate-on-migrate: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
 
 server:
   port: ${API_PORT:8081}
