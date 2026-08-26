@@ -154,7 +154,7 @@ Workflow **Backend container delivery** виконується для кожно
 
 - збирає production Docker image;
 - блокує зміни з виправними критичними вразливостями за допомогою Trivy;
-- використовує точні commit SHA для сторонніх GitHub Actions;
+- використовує точні commit SHA для сторонніх GitHub Actions, звірені з immutable release tags;
 - запускає image від непривілейованого користувача з read-only filesystem разом із MySQL 8.4 і
   Redis 8.2 та перевіряє readiness, liveness і OpenAPI;
 - рендерить local і production Kustomize overlays.
