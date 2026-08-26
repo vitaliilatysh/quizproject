@@ -34,7 +34,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: never
@@ -43,6 +43,17 @@ management:
       group:
         readiness:
           include: ${READINESS_HEALTH_INDICATORS:readinessState,db,redis}
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:logstash}
 
 springdoc:
   swagger-ui:

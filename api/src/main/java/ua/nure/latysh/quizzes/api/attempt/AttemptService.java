@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ua.nure.latysh.quizzes.api.observability.QuizMetrics;
 import ua.nure.latysh.quizzes.api.support.InvalidRequestException;
 import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
 import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
@@ -47,16 +48,18 @@ public class AttemptService {
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
     private final Clock clock;
+    private final QuizMetrics metrics;
 
     @Autowired
-    public AttemptService(JdbcTemplate jdbcTemplate) {
-        this(jdbcTemplate, Clock.systemUTC());
+    public AttemptService(JdbcTemplate jdbcTemplate, QuizMetrics metrics) {
+        this(jdbcTemplate, Clock.systemUTC(), metrics);
     }
 
-    AttemptService(JdbcTemplate jdbcTemplate, Clock clock) {
+    AttemptService(JdbcTemplate jdbcTemplate, Clock clock, QuizMetrics metrics) {
         this.jdbcTemplate = jdbcTemplate;
         this.namedJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -79,7 +82,9 @@ public class AttemptService {
             return statement;
         }, keyHolder);
         long attemptId = keyHolder.getKey().longValue();
-        return findOwned(attemptId, username);
+        AttemptResponse response = findOwned(attemptId, username);
+        metrics.recordStartedAttempt();
+        return response;
     }
 
     public AttemptResponse findOwned(long attemptId, String username) {
@@ -117,6 +122,7 @@ public class AttemptService {
                         WHERE id = ? AND completed = FALSE
                         """,
                 score, Timestamp.from(completedAt), attemptId);
+        metrics.recordCompletedAttempt(score);
         return new AttemptCompletionResponse(attemptId, attempt.quizId(), score, completedAt);
     }
 

@@ -14,6 +14,7 @@ Legacy JSP/Servlet WAR більше не є частиною backend.
 - Spring Security і короткоживучі JWT
 - Spring JDBC та MySQL 8
 - Spring Data Redis і атомарні distributed rate limits
+- Micrometer і Prometheus
 - Flyway
 - Gradle 9.6.1
 - JUnit 6, Testcontainers і JaCoCo
@@ -80,6 +81,7 @@ Flyway автоматично перевіряє та застосовує мі�
 - `/api/v1/admin/**` — адміністративні операції;
 - `/actuator/health` — стан застосунку;
 - `/actuator/metrics` — метрики, доступні лише адміністратору;
+- `/actuator/prometheus` — endpoint для Prometheus scrape;
 - `/swagger-ui.html` — інтерактивна OpenAPI-документація.
 
 Захищені маршрути приймають `Authorization: Bearer <token>`. Адміністративні операції
@@ -125,6 +127,18 @@ docker run --rm -p 8081:8081 \
 - non-root контейнери з read-only root filesystem;
 - NetworkPolicy, яка дозволяє доступ до Redis лише pod-ам API.
 
+Pod template має стандартні `prometheus.io/*` annotations. Якщо в кластері встановлений
+[Prometheus Operator](https://prometheus-operator.dev/), додатково застосуйте готові
+`ServiceMonitor` і `PrometheusRule`:
+
+~~~bash
+kubectl apply -k deploy/kubernetes/monitoring
+~~~
+
+Monitoring bundle додає alerts для недоступності API, високої частки `5xx`, p95 latency понад
+одну секунду та відмов Redis-backed rate limiter. Він не входить до основного overlay, тому
+звичайний Kubernetes-кластер без Prometheus CRD продовжує приймати backend manifests.
+
 Для локального кластера спочатку зберіть образ, створіть Secret із `DB_URL`, `DB_USERNAME`,
 `DB_PASSWORD`, `JWT_SECRET` і `REDIS_PASSWORD`, після чого застосуйте local overlay:
 
@@ -166,6 +180,24 @@ Workflow **Backend container delivery** виконується для кожно
 
 До образу додаються SBOM і build provenance. Готовий production manifest з immutable image digest
 зберігається в GitHub Actions artifact `kubernetes-manifest-<commit>` протягом 30 днів.
+
+## Спостережуваність
+
+Production console logs мають структурований Logstash JSON-формат. Кожна HTTP-відповідь містить
+`X-Correlation-ID`; безпечне значення клієнта зберігається, а відсутнє або некоректне замінюється
+UUID. Те саме значення потрапляє до MDC та completion log разом із методом, шляхом, статусом і
+тривалістю запиту. Формат можна змінити змінною `LOG_FORMAT`.
+
+Prometheus endpoint містить стандартні HTTP, JVM, HikariCP і Redis client metrics, а також
+низькокардинальні бізнес-метрики:
+
+- `quiz_authentication_attempts_total{outcome=...}`;
+- `quiz_account_registrations_total`;
+- `quiz_attempts_total{state=...}`;
+- `quiz_attempt_score_*`;
+- `quiz_rate_limit_requests_total{scope=...,outcome=...}`.
+
+Не використовуйте username, IP, attempt ID або інші необмежені значення як metric labels.
 
 ## Безпека
 
