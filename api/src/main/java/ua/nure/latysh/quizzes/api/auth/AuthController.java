@@ -1,6 +1,7 @@
 package ua.nure.latysh.quizzes.api.auth;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -61,6 +62,14 @@ public class AuthController {
         metrics.recordRegistration();
         var authentication = authenticationManager.authenticate(
                 UsernamePasswordAuthenticationToken.unauthenticated(request.username(), request.password()));
+        return tokenService.issue(authentication);
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Exchange a still-valid JWT for a new one with a fresh expiry")
+    @SecurityRequirement(name = "bearerAuth")
+    public TokenResponse refresh(Authentication authentication) {
+        metrics.recordTokenRefresh();
         return tokenService.issue(authentication);
     }
 }

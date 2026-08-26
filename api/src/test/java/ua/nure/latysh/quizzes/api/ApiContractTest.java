@@ -1,5 +1,6 @@
 package ua.nure.latysh.quizzes.api;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -99,6 +100,29 @@ class ApiContractTest {
         mockMvc.perform(get("/api/v1/results/me").header(HttpHeaders.AUTHORIZATION, bearer(emptyToken)))
                 .andExpect(status().isOk())
                 .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void exchangesAStillValidTokenForAFreshOneOnRefresh() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh").header(HttpHeaders.AUTHORIZATION, "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+
+        String originalToken = login("student", "secret123", "192.0.2.12");
+        MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(originalToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").value(900))
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andReturn();
+        String refreshedToken = objectMapper.readTree(refreshed.getResponse().getContentAsString())
+                .get("accessToken").asString();
+        Assertions.assertNotEquals(originalToken, refreshedToken);
+
+        mockMvc.perform(get("/api/v1/results/me").header(HttpHeaders.AUTHORIZATION, bearer(refreshedToken)))
+                .andExpect(status().isOk());
     }
 
     @Test

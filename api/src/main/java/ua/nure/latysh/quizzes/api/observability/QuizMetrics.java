@@ -10,6 +10,7 @@ public class QuizMetrics {
     private final Counter successfulLogins;
     private final Counter failedLogins;
     private final Counter registrations;
+    private final Counter tokenRefreshes;
     private final Counter startedAttempts;
     private final Counter completedAttempts;
     private final DistributionSummary attemptScores;
@@ -20,6 +21,7 @@ public class QuizMetrics {
         failedLogins = meterRegistry.counter(
                 "quiz.authentication.attempts", "outcome", "failure");
         registrations = meterRegistry.counter("quiz.account.registrations");
+        tokenRefreshes = meterRegistry.counter("quiz.token.refreshes");
         startedAttempts = meterRegistry.counter("quiz.attempts", "state", "started");
         completedAttempts = meterRegistry.counter("quiz.attempts", "state", "completed");
         attemptScores = DistributionSummary.builder("quiz.attempt.score")
@@ -40,6 +42,10 @@ public class QuizMetrics {
 
     public void recordRegistration() {
         registrations.increment();
+    }
+
+    public void recordTokenRefresh() {
+        tokenRefreshes.increment();
     }
 
     public void recordStartedAttempt() {
