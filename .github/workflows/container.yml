@@ -104,18 +104,23 @@ jobs:
             | grep --quiet '"status":"UP"'
           curl --silent --fail http://127.0.0.1:8081/v3/api-docs \
             | grep --quiet '"title":"Quiz REST API"'
+          curl --silent --fail http://127.0.0.1:8081/actuator/prometheus \
+            | grep --quiet '^jvm_memory_used_bytes'
 
       - name: Render Kubernetes overlays
         shell: bash
         run: |
           kubectl kustomize deploy/kubernetes/overlays/local > local.yaml
           kubectl kustomize deploy/kubernetes/overlays/production > production.yaml
+          kubectl kustomize deploy/kubernetes/monitoring > monitoring.yaml
 
           grep --quiet 'image: quizproject-api:local' local.yaml
           grep --quiet 'CORS_ALLOWED_ORIGINS: http://localhost:4173' local.yaml
           grep --quiet 'image: ghcr.io/vitaliilatysh/quizproject:master' production.yaml
           grep --quiet 'imagePullPolicy: Always' production.yaml
           grep --quiet 'kind: NetworkPolicy' production.yaml
+          grep --quiet 'kind: ServiceMonitor' monitoring.yaml
+          grep --quiet 'alert: QuizApiUnavailable' monitoring.yaml
 
       - name: Stop smoke environment
         if: always()

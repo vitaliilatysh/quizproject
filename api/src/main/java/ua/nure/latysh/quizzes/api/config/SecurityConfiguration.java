@@ -15,9 +15,11 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 import ua.nure.latysh.quizzes.api.security.JsonAccessDeniedHandler;
 import ua.nure.latysh.quizzes.api.security.JsonAuthenticationEntryPoint;
 import ua.nure.latysh.quizzes.api.security.RateLimitFilter;
+import ua.nure.latysh.quizzes.api.observability.CorrelationIdFilter;
 
 import java.util.List;
 
@@ -30,6 +32,7 @@ public class SecurityConfiguration {
     @SuppressWarnings("java:S4502") // Bearer-only auth never relies on automatically submitted cookies.
     SecurityFilterChain apiSecurity(
             HttpSecurity http,
+            CorrelationIdFilter correlationIdFilter,
             RateLimitFilter rateLimitFilter,
             JsonAuthenticationEntryPoint authenticationEntryPoint,
             JsonAccessDeniedHandler accessDeniedHandler,
@@ -41,7 +44,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register",
                                 "/actuator/health", "/actuator/health/**",
-                                "/actuator/info",
+                                "/actuator/info", "/actuator/prometheus",
                                 "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
                         .permitAll()
                         .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole(ADMIN_ROLE)
@@ -57,6 +60,7 @@ public class SecurityConfiguration {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+                .addFilterBefore(correlationIdFilter, CorsFilter.class)
                 .addFilterBefore(rateLimitFilter, BearerTokenAuthenticationFilter.class)
                 .build();
     }
@@ -71,7 +75,10 @@ public class SecurityConfiguration {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type",
+                CorrelationIdFilter.HEADER_NAME));
+        configuration.setExposedHeaders(List.of(CorrelationIdFilter.HEADER_NAME,
+                "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After"));
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);

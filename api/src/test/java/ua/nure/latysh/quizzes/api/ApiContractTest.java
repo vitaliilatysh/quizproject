@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.ObjectMapper;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -618,6 +619,8 @@ class ApiContractTest {
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://app.example.test"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                        containsString("X-Correlation-ID")))
                 .andExpect(header().doesNotExist("X-RateLimit-Limit"));
 
         mockMvc.perform(options("/api/v1/results/me")
@@ -642,8 +645,10 @@ class ApiContractTest {
 
     @Test
     void healthAndApiDocumentationArePublic() throws Exception {
-        mockMvc.perform(get("/actuator/health"))
+        mockMvc.perform(get("/actuator/health")
+                        .header("X-Correlation-ID", "contract-request-123"))
                 .andExpect(status().isOk())
+                .andExpect(header().string("X-Correlation-ID", "contract-request-123"))
                 .andExpect(header().doesNotExist("X-RateLimit-Limit"))
                 .andExpect(jsonPath("$.status").value("UP"));
 
@@ -666,6 +671,12 @@ class ApiContractTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("quiz.rate.limit.requests"));
+
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("quiz_authentication_attempts_total")))
+                .andExpect(content().string(containsString("quiz_rate_limit_requests_total")))
+                .andExpect(content().string(containsString("http_server_requests_seconds")));
 
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
