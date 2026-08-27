@@ -5,6 +5,7 @@ on:
     branches:
       - master
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,17 +24,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Java 25
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        with:
-          distribution: temurin
-          java-version: '25'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
-        with:
-          cache-provider: basic
-          validate-wrappers: true
+      - name: Set up Java and Gradle
+        uses: ./.github/actions/setup-java-gradle
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
@@ -62,7 +54,11 @@ jobs:
           grep --quiet 'name: quiz-redis' backend.yaml
           grep --quiet 'kind: NetworkPolicy' backend.yaml
           grep --quiet 'prometheus.io/scrape: "true"' backend.yaml
+          grep --quiet 'topologySpreadConstraints:' backend.yaml
+          grep --quiet 'preStop:' backend.yaml
           grep --quiet 'image: quizproject-api:local' local.yaml
           grep --quiet 'image: ghcr.io/vitaliilatysh/quizproject:master' production.yaml
+          grep --quiet 'kind: HorizontalPodAutoscaler' production.yaml
+          grep --quiet 'averageUtilization: 70' production.yaml
           grep --quiet 'kind: ServiceMonitor' monitoring.yaml
           grep --quiet 'alert: QuizApiUnavailable' monitoring.yaml

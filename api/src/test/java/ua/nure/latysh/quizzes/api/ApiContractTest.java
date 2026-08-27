@@ -45,6 +45,8 @@ class ApiContractTest {
         mockMvc.perform(get("/api/v1/quizzes"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-RateLimit-Limit", "100"))
+                .andExpect(header().string("X-Page-Number", "0"))
+                .andExpect(header().string("X-Total-Count", "2"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$[0].id").value(1))
                 .andExpect(jsonPath("$[0].name").value("Java syntax"))
@@ -57,6 +59,54 @@ class ApiContractTest {
         mockMvc.perform(get("/api/v1/quizzes/2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Lists"));
+    }
+
+    @Test
+    void paginatesCollectionEndpointsWithoutChangingTheirArrayShape() throws Exception {
+        mockMvc.perform(get("/api/v1/quizzes").param("page", "1").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Page-Number", "1"))
+                .andExpect(header().string("X-Page-Size", "1"))
+                .andExpect(header().string("X-Total-Count", "2"))
+                .andExpect(header().string("X-Total-Pages", "2"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(2));
+        mockMvc.perform(get("/api/v1/quizzes").param("page", "99").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "2"))
+                .andExpect(content().json("[]"));
+        mockMvc.perform(get("/api/v1/quizzes").param("page", "-1"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/quizzes").param("size", "101"))
+                .andExpect(status().isBadRequest());
+
+        String studentToken = login("student", "secret123", "192.0.2.13");
+        mockMvc.perform(get("/api/v1/results/me")
+                        .param("page", "0").param("size", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(studentToken)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Page-Size", "1"))
+                .andExpect(jsonPath("$.length()").value(1));
+
+        String adminToken = login("admin", "secret123", "192.0.2.14");
+        mockMvc.perform(get("/api/v1/admin/users")
+                        .param("size", "2")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Page-Number", "0"))
+                .andExpect(header().string("X-Page-Size", "2"))
+                .andExpect(jsonPath("$.length()").value(2));
+        mockMvc.perform(get("/api/v1/admin/results")
+                        .param("page", "0")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Page-Size", "20"))
+                .andExpect(header().exists("X-Total-Count"));
+        mockMvc.perform(get("/api/v1/admin/quizzes")
+                        .param("page", "99").param("size", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
     }
 
     @Test
@@ -645,6 +695,8 @@ class ApiContractTest {
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://app.example.test"))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
                         containsString("X-Correlation-ID")))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                        containsString("X-Total-Count")))
                 .andExpect(header().doesNotExist("X-RateLimit-Limit"));
 
         mockMvc.perform(options("/api/v1/results/me")
