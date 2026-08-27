@@ -159,6 +159,10 @@ jobs:
           grep --quiet 'image: ghcr.io/vitaliilatysh/quizproject:master' production.yaml
           grep --quiet 'imagePullPolicy: Always' production.yaml
           grep --quiet 'kind: NetworkPolicy' production.yaml
+          grep --quiet 'kind: HorizontalPodAutoscaler' production.yaml
+          grep --quiet 'averageUtilization: 70' production.yaml
+          grep --quiet 'topologySpreadConstraints:' production.yaml
+          grep --quiet 'preStop:' production.yaml
           grep --quiet 'kind: ServiceMonitor' monitoring.yaml
           grep --quiet 'alert: QuizApiUnavailable' monitoring.yaml
 
