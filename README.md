@@ -61,6 +61,10 @@ export CORS_ALLOWED_ORIGINS="http://localhost:4173"
 `READINESS_HEALTH_INDICATORS=readinessState,db`, але цей режим не можна використовувати з кількома
 екземплярами API.
 
+Великі JSON, HTML, JavaScript, CSS і текстові відповіді стискаються gzip, якщо клієнт передає
+`Accept-Encoding: gzip`. Типовий поріг — 1 KiB; його можна змінити через
+`HTTP_COMPRESSION_MIN_RESPONSE_SIZE` або вимкнути компресію через `HTTP_COMPRESSION_ENABLED=false`.
+
 Flyway автоматично перевіряє та застосовує міграції під час запуску API. Окремий ручний крок
 перед стартом застосунку більше не потрібний.
 
