@@ -1,0 +1,42 @@
+version: 2
+
+updates:
+  # Keeps the SHA-pinned third-party actions current. Dependabot rewrites both
+  # the SHA and the trailing version comment, so pinning stays maintainable.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+
+  # Gradle dependencies are locked (see ci.yml). Dependabot updates the version
+  # in build.gradle but cannot regenerate gradle.lockfile, so these pull
+  # requests start red on purpose: run `./gradlew :api:dependencies --write-locks`
+  # locally and commit the refreshed lockfiles to turn one green. Grouped to
+  # keep that manual step rare.
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build"
+    groups:
+      spring:
+        patterns:
+          - "org.springframework*"
+          - "io.micrometer:*"
+      test-tooling:
+        patterns:
+          - "org.testcontainers:*"
+          - "org.junit*"

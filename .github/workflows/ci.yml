@@ -21,28 +21,32 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Java 25
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '25'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-provider: basic
           validate-wrappers: true
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
         with:
           version: v1.36.1
 
-      - name: Refresh dependency lock state
-        run: ./gradlew dependencies :api:dependencies --write-locks --no-daemon && cat gradle.lockfile && cat api/gradle.lockfile
-
+      # Do NOT add a `--write-locks` step here. Gradle enforces the committed
+      # lockfiles while resolving a locked configuration, so the build below
+      # fails when a dependency resolves to anything other than what is locked.
+      # Regenerating the locks in CI would silently accept whatever upstream
+      # currently serves, which is exactly what the lockfiles exist to prevent.
+      # Changing a dependency means running `./gradlew --write-locks` locally
+      # and committing the updated lockfiles.
       - name: Build, test, and package
         run: ./gradlew clean :api:check :api:integrationTest :api:bootJar --no-daemon
 
