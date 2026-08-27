@@ -10,6 +10,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
@@ -35,9 +37,9 @@ class MySqlMigrationIntegrationTest {
 
     @Test
     void startsOnlyAfterApplyingTheCompleteProductionSchema() {
-        assertThat(flyway.info().current().getVersion()).hasToString("2");
+        assertThat(flyway.info().current().getVersion()).hasToString("3");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class))
-                .isEqualTo(2);
+                .isEqualTo(3);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class)).isEqualTo(2);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM quizzes", Integer.class)).isEqualTo(4);
 
@@ -59,5 +61,22 @@ class MySqlMigrationIntegrationTest {
                   AND referenced_table_name = 'answers'
                 """, Integer.class);
         assertThat(answerForeignKeys).isEqualTo(1);
+
+        List<String> paginatedQueryIndexes = jdbcTemplate.query("""
+                SELECT CONCAT(index_name, ':', GROUP_CONCAT(
+                    CONCAT(column_name, ':', collation)
+                    ORDER BY seq_in_index SEPARATOR ','))
+                FROM information_schema.statistics
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'attempts'
+                  AND index_name IN (
+                    'idx_attempts_user_completed_end_time',
+                    'idx_attempts_completed_end_time')
+                GROUP BY index_name
+                ORDER BY index_name
+                """, (resultSet, rowNumber) -> resultSet.getString(1));
+        assertThat(paginatedQueryIndexes).containsExactly(
+                "idx_attempts_completed_end_time:completed:A,end_time:D,id:D",
+                "idx_attempts_user_completed_end_time:user_id:A,completed:A,end_time:D,id:D");
     }
 }
