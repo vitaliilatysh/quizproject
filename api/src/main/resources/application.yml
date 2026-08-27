@@ -32,6 +32,10 @@ spring:
 server:
   port: ${API_PORT:8081}
   shutdown: graceful
+  compression:
+    enabled: ${HTTP_COMPRESSION_ENABLED:true}
+    min-response-size: ${HTTP_COMPRESSION_MIN_RESPONSE_SIZE:1KB}
+    mime-types: application/json,application/problem+json,application/javascript,text/css,text/html,text/plain
   error:
     include-message: never
 
