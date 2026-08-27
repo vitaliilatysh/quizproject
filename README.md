@@ -65,6 +65,11 @@ export CORS_ALLOWED_ORIGINS="http://localhost:4173"
 `Accept-Encoding: gzip`. Типовий поріг — 1 KiB; його можна змінити через
 `HTTP_COMPRESSION_MIN_RESPONSE_SIZE` або вимкнути компресію через `HTTP_COMPRESSION_ENABLED=false`.
 
+Публічний каталог `GET /api/v1/quizzes` і окремі тести повертають weak `ETag` та можуть
+кешуватися браузером або proxy протягом однієї хвилини з обов'язковою подальшою перевіркою.
+TTL задається через `PUBLIC_QUIZ_CACHE_MAX_AGE`; умовний запит з `If-None-Match` отримує
+`304 Not Modified`, якщо представлення не змінилося.
+
 Flyway автоматично перевіряє та застосовує міграції під час запуску API. Окремий ручний крок
 перед стартом застосунку більше не потрібний.
 

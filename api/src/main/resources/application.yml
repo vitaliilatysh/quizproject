@@ -76,6 +76,8 @@ springdoc:
     path: /v3/api-docs
 
 quiz:
+  http:
+    public-cache-max-age: ${PUBLIC_QUIZ_CACHE_MAX_AGE:PT1M}
   security:
     jwt-secret: ${JWT_SECRET}
     issuer: quiz-api
