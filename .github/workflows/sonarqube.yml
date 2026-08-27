@@ -41,8 +41,14 @@ jobs:
 
       # See ci.yml: the committed lockfiles are enforced by the build itself.
       # Never regenerate them here.
+      # Deliberately does NOT run :api:integrationTest. Sonar reads coverage
+      # from build/reports/jacoco/test/jacocoTestReport.xml, and
+      # jacocoTestReport depends only on :api:test — the integrationTest task
+      # writes separate execution data that never reaches the report. Running
+      # it here spun up a second MySQL + Redis Testcontainers stack per pull
+      # request for no analysis benefit; ci.yml still runs it.
       - name: Test and collect coverage
-        run: ./gradlew clean :api:test :api:jacocoTestReport :api:integrationTest --no-daemon
+        run: ./gradlew clean :api:test :api:jacocoTestReport --no-daemon
 
       - name: Upload coverage diagnostics
         if: always()

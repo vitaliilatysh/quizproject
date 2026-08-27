@@ -172,7 +172,8 @@ Spring Boot запускає Flyway до переходу readiness probe у с�
 Workflow **Backend container delivery** виконується для кожного pull request:
 
 - збирає production Docker image;
-- блокує зміни з виправними критичними вразливостями за допомогою Trivy;
+- блокує зміни з виправними критичними та високими вразливостями за допомогою Trivy
+  (сканування образу також включає пошук секретів у шарах);
 - використовує точні commit SHA для сторонніх GitHub Actions, звірені з immutable release tags;
 - запускає image від непривілейованого користувача з read-only filesystem разом із MySQL 8.4 і
   Redis 8.2 та перевіряє readiness, liveness і OpenAPI;
@@ -183,8 +184,20 @@ Workflow **Backend container delivery** виконується для кожно
 - `ghcr.io/vitaliilatysh/quizproject:master`;
 - `ghcr.io/vitaliilatysh/quizproject:sha-<commit>`.
 
-До образу додаються SBOM і build provenance. Готовий production manifest з immutable image digest
-зберігається в GitHub Actions artifact `kubernetes-manifest-<commit>` протягом 30 днів.
+До образу додаються SBOM і build provenance. Опублікований digest підписується keyless-режимом
+cosign (OIDC-токен GitHub Actions обмінюється на короткоживучий сертифікат Fulcio, тож ключі ніде
+не зберігаються) і одразу перевіряється в тому ж прогоні — зламане підписування завалить реліз,
+а не опублікує непідписаний образ. Перевірити опублікований образ самостійно:
+
+~~~bash
+cosign verify \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/vitaliilatysh/quizproject/\.github/workflows/container\.yml@' \
+  ghcr.io/vitaliilatysh/quizproject@sha256:...
+~~~
+
+Готовий production manifest з immutable image digest зберігається в GitHub Actions artifact
+`kubernetes-manifest-<commit>` протягом 30 днів.
 
 ## Спостережуваність
 
