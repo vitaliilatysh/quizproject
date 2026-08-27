@@ -31,8 +31,23 @@ jobs:
         with:
           version: v1.36.1
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      # `docker build` here shared no layers with the publish job, so every run
+      # rebuilt the image from scratch. Building through buildx against the same
+      # GitHub Actions cache the publish job already uses lets the two reuse each
+      # other's amd64 layers. `load` puts the result in the local daemon so the
+      # Trivy scan and the smoke test below still see a normal local image.
       - name: Build test image
-        run: docker build --tag "${TEST_IMAGE}" .
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.TEST_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # ignore-unfixed keeps this actionable: only vulnerabilities that have a
       # published fix can fail the build, so going red always means there is a
