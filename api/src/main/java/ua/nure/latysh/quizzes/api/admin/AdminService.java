@@ -1,6 +1,8 @@
 package ua.nure.latysh.quizzes.api.admin;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.AnswerRequest;
@@ -86,11 +88,10 @@ public class AdminService {
                 .toList();
     }
 
-    public List<QuizResponse> quizzes() {
-        Map<Integer, Long> questionCounts = questionCountsByQuizId();
-        return quizRepository.findAllFetchingSubjectAndLevel().stream()
-                .map(quiz -> toQuizResponse(quiz, questionCounts.getOrDefault(quiz.getId(), 0L)))
-                .toList();
+    public Page<QuizResponse> quizzes(Pageable pageable) {
+        Page<Quiz> quizzes = quizRepository.findAllFetchingSubjectAndLevel(pageable);
+        Map<Integer, Long> questionCounts = questionCountsByQuizId(quizzes.getContent());
+        return quizzes.map(quiz -> toQuizResponse(quiz, questionCounts.getOrDefault(quiz.getId(), 0L)));
     }
 
     public List<QuestionResponse> questions(int quizId) {
@@ -227,11 +228,10 @@ public class AdminService {
         questionRepository.deleteById(questionId);
     }
 
-    public List<UserResponse> users() {
-        return userRepository.findAllByOrderByLoginAsc().stream()
+    public Page<UserResponse> users(Pageable pageable) {
+        return userRepository.findAllByOrderByLoginAsc(pageable)
                 .map(user -> new UserResponse(
-                        user.getId(), user.getLogin(), user.getRole().getName(), user.getStatus().getName()))
-                .toList();
+                        user.getId(), user.getLogin(), user.getRole().getName(), user.getStatus().getName()));
     }
 
     @Transactional
@@ -246,19 +246,18 @@ public class AdminService {
         return new UserResponse(user.getId(), user.getLogin(), user.getRole().getName(), user.getStatus().getName());
     }
 
-    public List<ResultResponse> results(Instant from, Instant to) {
+    public Page<ResultResponse> results(Instant from, Instant to, Pageable pageable) {
         if (from != null && to != null && from.isAfter(to)) {
             throw new InvalidRequestException("Result range start must not be after its end");
         }
-        return attemptRepository.findCompletedInRange(from, to).stream()
+        return attemptRepository.findCompletedInRange(from, to, pageable)
                 .map(attempt -> new ResultResponse(
                         attempt.getId(),
                         attempt.getUser().getLogin(),
                         attempt.getQuiz().getId(),
                         attempt.getQuiz().getName(),
                         attempt.getScore(),
-                        attempt.getEndTime()))
-                .toList();
+                        attempt.getEndTime()));
     }
 
     private List<QuestionResponse> questionsWithAnswers(int quizId) {
@@ -278,8 +277,12 @@ public class AdminService {
                 .toList();
     }
 
-    private Map<Integer, Long> questionCountsByQuizId() {
-        return questionRepository.countAllGroupedByQuiz().stream()
+    private Map<Integer, Long> questionCountsByQuizId(List<Quiz> quizzes) {
+        if (quizzes.isEmpty()) {
+            return Map.of();
+        }
+        List<Integer> quizIds = quizzes.stream().map(Quiz::getId).toList();
+        return questionRepository.countAllGroupedByQuizIds(quizIds).stream()
                 .collect(Collectors.toMap(
                         QuestionRepository.QuizQuestionCount::getQuizId,
                         QuestionRepository.QuizQuestionCount::getTotal));

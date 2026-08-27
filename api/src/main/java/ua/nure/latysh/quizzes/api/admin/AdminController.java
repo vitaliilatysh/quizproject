@@ -4,9 +4,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -30,6 +33,7 @@ import ua.nure.latysh.quizzes.api.admin.AdminModels.SubjectRequest;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.SubjectResponse;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.UserResponse;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.UserStatusRequest;
+import ua.nure.latysh.quizzes.api.support.PaginationSupport;
 
 import java.time.Instant;
 import java.util.List;
@@ -40,9 +44,11 @@ import java.util.List;
 @Tag(name = "Administration")
 public class AdminController {
     private final AdminService adminService;
+    private final PaginationSupport pagination;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService, PaginationSupport pagination) {
         this.adminService = adminService;
+        this.pagination = pagination;
     }
 
     @GetMapping("/status")
@@ -82,8 +88,10 @@ public class AdminController {
     }
 
     @GetMapping("/quizzes")
-    public List<QuizResponse> quizzes() {
-        return adminService.quizzes();
+    public ResponseEntity<List<QuizResponse>> quizzes(
+            @RequestParam(required = false) @Min(0) Integer page,
+            @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
+        return pagination.response(adminService.quizzes(pagination.pageable(page, size)));
     }
 
     @PostMapping("/quizzes")
@@ -132,8 +140,10 @@ public class AdminController {
     }
 
     @GetMapping("/users")
-    public List<UserResponse> users() {
-        return adminService.users();
+    public ResponseEntity<List<UserResponse>> users(
+            @RequestParam(required = false) @Min(0) Integer page,
+            @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
+        return pagination.response(adminService.users(pagination.pageable(page, size)));
     }
 
     @PatchMapping("/users/{userId}/status")
@@ -145,11 +155,13 @@ public class AdminController {
     }
 
     @GetMapping("/results")
-    public List<ResultResponse> results(
+    public ResponseEntity<List<ResultResponse>> results(
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        return adminService.results(from, to);
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestParam(required = false) @Min(0) Integer page,
+            @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
+        return pagination.response(adminService.results(from, to, pagination.pageable(page, size)));
     }
 }
