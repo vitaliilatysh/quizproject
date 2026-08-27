@@ -19,11 +19,19 @@ updates:
     commit-message:
       prefix: "build"
 
-  # Gradle dependencies are locked (see ci.yml). Dependabot updates the version
-  # in build.gradle but cannot regenerate gradle.lockfile, so these pull
-  # requests start red on purpose: run `./gradlew :api:dependencies --write-locks`
-  # locally and commit the refreshed lockfiles to turn one green. Grouped to
-  # keep that manual step rare.
+  # Gradle dependencies are locked (see ci.yml), and Dependabot regenerates
+  # gradle.lockfile along with the version in build.gradle — including
+  # transitive changes. #36, for example, bumped springdoc 3.0.3 -> 3.1.0 and
+  # carried swagger-annotations 2.2.47 -> 2.2.52 and swagger-ui 5.32.2 ->
+  # 5.32.11 through the lockfile with it. No manual `--write-locks` step is
+  # needed to turn one of these green.
+  #
+  # (An earlier version of this comment claimed the opposite and told you to
+  # regenerate the locks by hand. That was wrong. The real reason the first
+  # batch of these pull requests went red was SONAR_TOKEN being unavailable to
+  # Dependabot runs, fixed in #41 — nothing to do with locking.)
+  #
+  # Grouping is for review volume, not for any manual step.
   - package-ecosystem: gradle
     directory: /
     schedule:
