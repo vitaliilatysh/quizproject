@@ -1,5 +1,7 @@
 package ua.nure.latysh.quizzes.api.quiz;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import ua.nure.latysh.quizzes.api.domain.Quiz;
 import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
@@ -20,11 +22,10 @@ public class QuizQueryService {
         this.questionRepository = questionRepository;
     }
 
-    public List<QuizResponse> findAll() {
-        Map<Integer, Long> questionCounts = questionCountsByQuizId();
-        return quizRepository.findAllFetchingSubjectAndLevel().stream()
-                .map(quiz -> toResponse(quiz, questionCounts.getOrDefault(quiz.getId(), 0L)))
-                .toList();
+    public Page<QuizResponse> findAll(Pageable pageable) {
+        Page<Quiz> quizzes = quizRepository.findAllFetchingSubjectAndLevel(pageable);
+        Map<Integer, Long> questionCounts = questionCountsByQuizId(quizzes.getContent());
+        return quizzes.map(quiz -> toResponse(quiz, questionCounts.getOrDefault(quiz.getId(), 0L)));
     }
 
     public QuizResponse findById(int quizId) {
@@ -33,8 +34,12 @@ public class QuizQueryService {
         return toResponse(quiz, questionRepository.countByQuiz_Id(quizId));
     }
 
-    private Map<Integer, Long> questionCountsByQuizId() {
-        return questionRepository.countAllGroupedByQuiz().stream()
+    private Map<Integer, Long> questionCountsByQuizId(List<Quiz> quizzes) {
+        if (quizzes.isEmpty()) {
+            return Map.of();
+        }
+        List<Integer> quizIds = quizzes.stream().map(Quiz::getId).toList();
+        return questionRepository.countAllGroupedByQuizIds(quizIds).stream()
                 .collect(Collectors.toMap(
                         QuestionRepository.QuizQuestionCount::getQuizId,
                         QuestionRepository.QuizQuestionCount::getTotal));

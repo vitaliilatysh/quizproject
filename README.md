@@ -61,6 +61,15 @@ export CORS_ALLOWED_ORIGINS="http://localhost:4173"
 `READINESS_HEALTH_INDICATORS=readinessState,db`, але цей режим не можна використовувати з кількома
 екземплярами API.
 
+Великі JSON, HTML, JavaScript, CSS і текстові відповіді стискаються gzip, якщо клієнт передає
+`Accept-Encoding: gzip`. Типовий поріг — 1 KiB; його можна змінити через
+`HTTP_COMPRESSION_MIN_RESPONSE_SIZE` або вимкнути компресію через `HTTP_COMPRESSION_ENABLED=false`.
+
+Публічний каталог `GET /api/v1/quizzes` і окремі тести повертають weak `ETag` та можуть
+кешуватися браузером або proxy протягом однієї хвилини з обов'язковою подальшою перевіркою.
+TTL задається через `PUBLIC_QUIZ_CACHE_MAX_AGE`; умовний запит з `If-None-Match` отримує
+`304 Not Modified`, якщо представлення не змінилося.
+
 Flyway автоматично перевіряє та застосовує міграції під час запуску API. Окремий ручний крок
 перед стартом застосунку більше не потрібний.
 
@@ -92,12 +101,20 @@ Flyway автоматично перевіряє та застосовує мі�
 Захищені маршрути приймають `Authorization: Bearer <token>`. Адміністративні операції
 доступні лише ролі `ADMIN`.
 
+Колекції тестів, власних результатів та адміністративних тестів, користувачів і результатів
+підтримують необов'язкові zero-based параметри `page` і `size` (`size` від 1 до 100, типово 20,
+коли пагінацію ввімкнено). Без цих параметрів зберігається попередня поведінка з повним JSON-масивом.
+Відповідь залишається масивом, а metadata повертається в `X-Page-Number`, `X-Page-Size`,
+`X-Total-Count` і `X-Total-Pages`, тому наявний React-клієнт не потребує одночасного оновлення.
+
 ## Міграції бази даних
 
 Production-міграції знаходяться в `api/src/main/resources/db/migration` і входять до JAR:
 
 - `V1__baseline.sql` створює початкову схему та довідники;
-- `V2__secure_attempts.sql` посилює зберігання паролів, спроб і відповідей.
+- `V2__secure_attempts.sql` посилює зберігання паролів, спроб і відповідей;
+- `V3__index_paginated_queries.sql` додає складені індекси для швидких сторінок власних та
+  адміністративних результатів у порядку від найновіших.
 
 Для наявної бази без `flyway_schema_history` спочатку створіть резервну копію та позначте
 поточну схему як baseline версії 1 перед запуском нової версії API.
@@ -129,8 +146,16 @@ docker run --rm -p 8081:8081 \
 - startup, liveness і readiness probes;
 - resource requests/limits;
 - `PodDisruptionBudget`;
+- розподіл API pod-ів між Kubernetes nodes;
+- безпечне завершення трафіку через `preStop` і Spring graceful shutdown;
 - non-root контейнери з read-only root filesystem;
 - NetworkPolicy, яка дозволяє доступ до Redis лише pod-ам API.
+
+Production overlay також додає `HorizontalPodAutoscaler`: API масштабується від 2 до 6 pod-ів,
+коли середнє використання CPU перевищує 70%. Для роботи HPA кластер повинен надавати resource
+metrics через [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) або сумісний
+metrics API. Scale-down стабілізується протягом п'яти хвилин, щоб уникнути коливань кількості
+pod-ів під нерівномірним навантаженням.
 
 Pod template має стандартні `prometheus.io/*` annotations. Якщо в кластері встановлений
 [Prometheus Operator](https://prometheus-operator.dev/), додатково застосуйте готові
@@ -172,7 +197,8 @@ Spring Boot запускає Flyway до переходу readiness probe у с�
 Workflow **Backend container delivery** виконується для кожного pull request:
 
 - збирає production Docker image;
-- блокує зміни з виправними критичними вразливостями за допомогою Trivy;
+- блокує зміни з виправними критичними та високими вразливостями за допомогою Trivy
+  (сканування образу також включає пошук секретів у шарах);
 - використовує точні commit SHA для сторонніх GitHub Actions, звірені з immutable release tags;
 - запускає image від непривілейованого користувача з read-only filesystem разом із MySQL 8.4 і
   Redis 8.2 та перевіряє readiness, liveness і OpenAPI;
@@ -183,8 +209,20 @@ Workflow **Backend container delivery** виконується для кожно
 - `ghcr.io/vitaliilatysh/quizproject:master`;
 - `ghcr.io/vitaliilatysh/quizproject:sha-<commit>`.
 
-До образу додаються SBOM і build provenance. Готовий production manifest з immutable image digest
-зберігається в GitHub Actions artifact `kubernetes-manifest-<commit>` протягом 30 днів.
+До образу додаються SBOM і build provenance. Опублікований digest підписується keyless-режимом
+cosign (OIDC-токен GitHub Actions обмінюється на короткоживучий сертифікат Fulcio, тож ключі ніде
+не зберігаються) і одразу перевіряється в тому ж прогоні — зламане підписування завалить реліз,
+а не опублікує непідписаний образ. Перевірити опублікований образ самостійно:
+
+~~~bash
+cosign verify \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/vitaliilatysh/quizproject/\.github/workflows/container\.yml@' \
+  ghcr.io/vitaliilatysh/quizproject@sha256:...
+~~~
+
+Готовий production manifest з immutable image digest зберігається в GitHub Actions artifact
+`kubernetes-manifest-<commit>` протягом 30 днів.
 
 ## Спостережуваність
 
