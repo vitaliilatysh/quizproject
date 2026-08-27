@@ -3,6 +3,7 @@ package ua.nure.latysh.quizzes.api.support;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
@@ -24,11 +25,18 @@ public class PaginationSupport {
     }
 
     public <T> ResponseEntity<List<T>> response(Page<T> result) {
+        return responseBuilder(result).body(result.getContent());
+    }
+
+    public <T> ResponseEntity<List<T>> response(Page<T> result, CacheControl cacheControl) {
+        return responseBuilder(result).cacheControl(cacheControl).body(result.getContent());
+    }
+
+    private static ResponseEntity.BodyBuilder responseBuilder(Page<?> result) {
         return ResponseEntity.ok()
                 .header(PAGE_NUMBER_HEADER, Integer.toString(result.getNumber()))
                 .header(PAGE_SIZE_HEADER, Integer.toString(result.getSize()))
                 .header(TOTAL_COUNT_HEADER, Long.toString(result.getTotalElements()))
-                .header(TOTAL_PAGES_HEADER, Integer.toString(result.getTotalPages()))
-                .body(result.getContent());
+                .header(TOTAL_PAGES_HEADER, Integer.toString(result.getTotalPages()));
     }
 }
