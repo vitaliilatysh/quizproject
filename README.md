@@ -16,7 +16,7 @@ Legacy JSP/Servlet WAR більше не є частиною backend.
 - Spring Data Redis і атомарні distributed rate limits
 - Micrometer і Prometheus
 - Flyway
-- Gradle 9.6.1
+- Gradle 9.7.1
 - JUnit 6, Testcontainers і JaCoCo
 - OpenAPI / Swagger UI
 
