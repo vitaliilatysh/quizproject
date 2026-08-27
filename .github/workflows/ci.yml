@@ -54,7 +54,11 @@ jobs:
           grep --quiet 'name: quiz-redis' backend.yaml
           grep --quiet 'kind: NetworkPolicy' backend.yaml
           grep --quiet 'prometheus.io/scrape: "true"' backend.yaml
+          grep --quiet 'topologySpreadConstraints:' backend.yaml
+          grep --quiet 'preStop:' backend.yaml
           grep --quiet 'image: quizproject-api:local' local.yaml
           grep --quiet 'image: ghcr.io/vitaliilatysh/quizproject:master' production.yaml
+          grep --quiet 'kind: HorizontalPodAutoscaler' production.yaml
+          grep --quiet 'averageUtilization: 70' production.yaml
           grep --quiet 'kind: ServiceMonitor' monitoring.yaml
           grep --quiet 'alert: QuizApiUnavailable' monitoring.yaml
