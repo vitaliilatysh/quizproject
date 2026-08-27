@@ -129,8 +129,16 @@ docker run --rm -p 8081:8081 \
 - startup, liveness і readiness probes;
 - resource requests/limits;
 - `PodDisruptionBudget`;
+- розподіл API pod-ів між Kubernetes nodes;
+- безпечне завершення трафіку через `preStop` і Spring graceful shutdown;
 - non-root контейнери з read-only root filesystem;
 - NetworkPolicy, яка дозволяє доступ до Redis лише pod-ам API.
+
+Production overlay також додає `HorizontalPodAutoscaler`: API масштабується від 2 до 6 pod-ів,
+коли середнє використання CPU перевищує 70%. Для роботи HPA кластер повинен надавати resource
+metrics через [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) або сумісний
+metrics API. Scale-down стабілізується протягом п'яти хвилин, щоб уникнути коливань кількості
+pod-ів під нерівномірним навантаженням.
 
 Pod template має стандартні `prometheus.io/*` annotations. Якщо в кластері встановлений
 [Prometheus Operator](https://prometheus-operator.dev/), додатково застосуйте готові
