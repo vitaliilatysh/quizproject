@@ -91,9 +91,22 @@ jobs:
             --env CORS_ALLOWED_ORIGINS=http://localhost:4173 \
             "${TEST_IMAGE}"
 
+          # Fetch into a variable rather than piping curl into `grep --quiet`.
+          # grep exits the moment it matches, closing the pipe while curl is
+          # still writing; curl then exits 23 (CURLE_WRITE_ERROR) and, because
+          # Actions runs bash with -o pipefail, that sinks the whole step even
+          # though the assertion passed. The larger the body the likelier it
+          # is, which is why /actuator/prometheus flaked most. Splitting the
+          # two also separates "request failed" from "pattern not found".
+          assert_body_contains() {
+            local url="$1" pattern="$2" body
+            body="$(curl --silent --fail "${url}")"
+            grep --quiet "${pattern}" <<<"${body}"
+          }
+
           for attempt in {1..60}; do
-            if curl --silent --fail http://127.0.0.1:8081/actuator/health/readiness \
-              | grep --quiet '"status":"UP"'; then
+            if assert_body_contains \
+              http://127.0.0.1:8081/actuator/health/readiness '"status":"UP"'; then
               break
             fi
             if [ "${attempt}" -eq 60 ]; then
@@ -104,12 +117,9 @@ jobs:
           done
 
           test "$(docker inspect --format '{{.Config.User}}' quiz-api-test)" = '10001:10001'
-          curl --silent --fail http://127.0.0.1:8081/actuator/health/liveness \
-            | grep --quiet '"status":"UP"'
-          curl --silent --fail http://127.0.0.1:8081/v3/api-docs \
-            | grep --quiet '"title":"Quiz REST API"'
-          curl --silent --fail http://127.0.0.1:8081/actuator/prometheus \
-            | grep --quiet '^jvm_memory_used_bytes'
+          assert_body_contains http://127.0.0.1:8081/actuator/health/liveness '"status":"UP"'
+          assert_body_contains http://127.0.0.1:8081/v3/api-docs '"title":"Quiz REST API"'
+          assert_body_contains http://127.0.0.1:8081/actuator/prometheus '^jvm_memory_used_bytes'
 
       - name: Render Kubernetes overlays
         shell: bash
