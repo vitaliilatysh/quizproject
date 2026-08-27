@@ -20,6 +20,7 @@ import ua.nure.latysh.quizzes.api.security.JsonAccessDeniedHandler;
 import ua.nure.latysh.quizzes.api.security.JsonAuthenticationEntryPoint;
 import ua.nure.latysh.quizzes.api.security.RateLimitFilter;
 import ua.nure.latysh.quizzes.api.observability.CorrelationIdFilter;
+import ua.nure.latysh.quizzes.api.support.PaginationSupport;
 
 import java.util.List;
 
@@ -79,7 +80,9 @@ public class SecurityConfiguration {
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type",
                 CorrelationIdFilter.HEADER_NAME));
         configuration.setExposedHeaders(List.of(CorrelationIdFilter.HEADER_NAME,
-                "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After"));
+                "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After",
+                PaginationSupport.PAGE_NUMBER_HEADER, PaginationSupport.PAGE_SIZE_HEADER,
+                PaginationSupport.TOTAL_COUNT_HEADER, PaginationSupport.TOTAL_PAGES_HEADER));
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);

@@ -1,9 +1,9 @@
 package ua.nure.latysh.quizzes.api.result;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
-
-import java.util.List;
 
 @Service
 public class ResultQueryService {
@@ -13,14 +13,13 @@ public class ResultQueryService {
         this.attemptRepository = attemptRepository;
     }
 
-    public List<ResultResponse> findCompletedByUsername(String username) {
-        return attemptRepository.findCompletedByUsername(username).stream()
+    public Page<ResultResponse> findCompletedByUsername(String username, Pageable pageable) {
+        return attemptRepository.findCompletedByUsername(username, pageable)
                 .map(attempt -> new ResultResponse(
                         attempt.getId(),
                         attempt.getQuiz().getId(),
                         attempt.getQuiz().getName(),
                         attempt.getScore(),
-                        attempt.getEndTime()))
-                .toList();
+                        attempt.getEndTime()));
     }
 }
