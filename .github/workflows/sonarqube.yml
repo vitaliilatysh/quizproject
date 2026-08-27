@@ -20,6 +20,24 @@ jobs:
     name: Build and analyze
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Dependabot pull requests run with a restricted token and are not given
+    # repository secrets, so SONAR_TOKEN is empty and `sonar` fails with
+    # "Not authorized or project not found" on every bump — including ones
+    # that change no dependency at all, which is why the upload-artifact bump
+    # failed here too.
+    #
+    # Skipping the whole job rather than muting the failing step: this workflow
+    # exists to run SonarCloud analysis, and without a token there is no
+    # analysis to run. The coverage gate is not lost with it — ci.yml runs
+    # `:api:check`, which depends on :api:jacocoTestCoverageVerification, on
+    # every pull request including these. Keeping the job alive just to run
+    # tests again would duplicate that, which is the same waste removed from
+    # this file when :api:integrationTest was dropped.
+    #
+    # The alternative is storing SONAR_TOKEN as a Dependabot secret, which
+    # hands the token to bot-triggered runs in order to analyze dependency
+    # bumps. Not worth it.
+    if: github.actor != 'dependabot[bot]'
 
     steps:
       - name: Check out repository
