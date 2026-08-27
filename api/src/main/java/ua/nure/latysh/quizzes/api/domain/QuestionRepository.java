@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface QuestionRepository extends JpaRepository<Question, Integer> {
@@ -15,9 +16,10 @@ public interface QuestionRepository extends JpaRepository<Question, Integer> {
     @Query("""
             SELECT q.quiz.id AS quizId, COUNT(q) AS total
             FROM Question q
+            WHERE q.quiz.id IN :quizIds
             GROUP BY q.quiz.id
             """)
-    List<QuizQuestionCount> countAllGroupedByQuiz();
+    List<QuizQuestionCount> countAllGroupedByQuizIds(@Param("quizIds") Collection<Integer> quizIds);
 
     @Query("""
             SELECT COUNT(q)
