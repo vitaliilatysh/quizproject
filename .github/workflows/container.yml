@@ -34,12 +34,16 @@ jobs:
       - name: Build test image
         run: docker build --tag "${TEST_IMAGE}" .
 
-      - name: Reject fixed critical vulnerabilities
+      # ignore-unfixed keeps this actionable: only vulnerabilities that have a
+      # published fix can fail the build, so going red always means there is a
+      # base image or dependency bump to take. Trivy's image scan also runs its
+      # secret scanner over the layers by default.
+      - name: Reject fixed critical and high vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.TEST_IMAGE }}
           format: table
-          severity: CRITICAL
+          severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
 
@@ -138,9 +142,15 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless cosign signing exchanges this OIDC token for a short-lived
+      # Fulcio certificate, so no signing key is stored anywhere.
+      id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
@@ -179,6 +189,28 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
+
+      # The image already carried an SBOM and build provenance, but nothing
+      # attested that GHCR is serving the artifact this workflow produced.
+      # Sign the digest (not a tag, which can be repointed) and immediately
+      # verify it, so a broken signing setup fails the release rather than
+      # publishing a silently unsigned image.
+      - name: Sign the published image
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_NAME}@${IMAGE_DIGEST}"
+
+      - name: Verify the signature
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp \
+              "^https://github.com/${{ github.repository }}/\.github/workflows/container\.yml@" \
+            "${IMAGE_NAME}@${IMAGE_DIGEST}" > /dev/null
 
       - name: Render immutable production manifest
         shell: bash
