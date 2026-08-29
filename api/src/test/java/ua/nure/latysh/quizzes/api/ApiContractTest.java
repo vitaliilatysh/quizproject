@@ -18,6 +18,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -798,6 +799,18 @@ class ApiContractTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    /**
+     * Sends the request from a given address. The rate limiter buckets by
+     * client address, so a test that issues extra requests from the default one
+     * spends budget the other tests are counting on.
+     */
+    private static RequestPostProcessor from(String remoteAddress) {
+        return request -> {
+            request.setRemoteAddr(remoteAddress);
+            return request;
+        };
+    }
+
     private String login(String username, String password, String remoteAddress) throws Exception {
         MvcResult result = performLogin(username, password, remoteAddress)
                 .andExpect(status().isOk())
@@ -1150,6 +1163,54 @@ class ApiContractTest {
         } finally {
             writer.shutdown();
             jdbcTemplate.update("UPDATE subjects SET name = ? WHERE id = 1", original);
+        }
+    }
+
+    @Test
+    void refusesToBlockTheLastActiveAdministrator() throws Exception {
+        // Blocking someone does not revoke the token they already hold: this is
+        // a stateless resource server, so authorities come from the token's
+        // claims and the account is never re-read per request. A blocked
+        // administrator therefore keeps full rights until the token expires,
+        // which is the window this test walks through — and the reason
+        // refusing to block *the current account* is not enough on its own.
+        jdbcTemplate.update("""
+                INSERT INTO users (id, login, password, first_name, last_name,
+                                   register_date, login_date, status_id, role_id)
+                VALUES (200, 'admin2', 'secret123', 'Second', 'Admin',
+                        TIMESTAMP '2025-01-08 09:00:00', NULL, 1, 1)
+                """);
+        try {
+            String adminToken = login("admin", "secret123", "192.0.2.94");
+            String secondAdminToken = login("admin2", "secret123", "192.0.2.95");
+
+            // Two administrators are active, so blocking one leaves cover.
+            mockMvc.perform(patch("/api/v1/admin/users/200/status")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"blocked\"}")
+                            .with(from("192.0.2.96")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("blocked"));
+
+            // admin2 is blocked, yet the token minted a moment ago still works.
+            // Without the guard this call succeeds and the installation is left
+            // with nobody who can unblock anybody.
+            mockMvc.perform(patch("/api/v1/admin/users/5/status")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(secondAdminToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"blocked\"}")
+                            .with(from("192.0.2.96")))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.message")
+                            .value("Blocking user 5 would leave no active administrator"));
+
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT status_id FROM users WHERE id = 5", Integer.class))
+                    .as("the remaining administrator is untouched")
+                    .isEqualTo(1);
+        } finally {
+            jdbcTemplate.update("DELETE FROM users WHERE id = 200");
         }
     }
 }

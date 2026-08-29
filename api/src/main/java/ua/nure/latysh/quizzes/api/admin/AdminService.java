@@ -265,6 +265,10 @@ public class AdminService {
         if (user.getLogin().equals(currentUsername) && "blocked".equals(normalizedStatus)) {
             throw new ResourceConflictException("An administrator cannot block the current account");
         }
+        if ("blocked".equals(normalizedStatus) && isLastActiveAdministrator(userId)) {
+            throw new ResourceConflictException(
+                    "Blocking user " + userId + " would leave no active administrator");
+        }
         user.setStatus(requireStatus(normalizedStatus));
         return new UserResponse(user.getId(), user.getLogin(), user.getRole().getName(), user.getStatus().getName());
     }
@@ -329,6 +333,25 @@ public class AdminService {
 
     private Level requireLevel(int levelId) {
         return levelRepository.findById(levelId).orElseThrow(() -> missing("Level", levelId));
+    }
+
+    /**
+     * Whether blocking this account would leave nobody able to administer the
+     * system.
+     *
+     * <p>Refusing to block the caller's own account is not enough. The API is a
+     * stateless JWT resource server: authorities come from the token's claims
+     * and the account is not re-read per request, so blocking someone does not
+     * revoke the token they already hold. For the length of its time to live a
+     * blocked administrator keeps full rights, which is long enough to block
+     * the administrator who just blocked them. That leaves an installation with
+     * no active administrator and no way back, because unblocking anyone needs
+     * the role nobody holds any more.
+     */
+    private boolean isLastActiveAdministrator(int userId) {
+        List<UserAccount> activeAdministrators = userRepository.lockActiveAdministrators();
+        return activeAdministrators.size() == 1
+                && activeAdministrators.getFirst().getId() == userId;
     }
 
     private Status requireStatus(String normalizedStatus) {
