@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.hamcrest.Matchers.containsString;
@@ -805,5 +806,128 @@ class ApiContractTest {
     private static String bearer(String token) {
         return "Bearer " + token;
     }
-}
 
+    // Each of these takes its own client address: the catalogue shares one
+    // rate-limit bucket per IP, and draining the default one fails whichever
+    // test happens to run afterwards.
+    private MockHttpServletRequestBuilder catalogue(String remoteAddress) {
+        return get("/api/v1/quizzes").with(request -> {
+            request.setRemoteAddr(remoteAddress);
+            return request;
+        });
+    }
+
+    @Test
+    void searchesQuizzesByNameAndSubjectInTheDatabase() throws Exception {
+        // "Java syntax" sits under subject "Java Basics", so it would match on
+        // either column. "Lists" and "Collections" separate the two cleanly.
+        mockMvc.perform(catalogue("192.0.2.80").param("search", "lists"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "1"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Lists"));
+
+        mockMvc.perform(catalogue("192.0.2.80").param("search", "collections"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "1"))
+                .andExpect(jsonPath("$[0].subject").value("Collections"));
+
+        mockMvc.perform(catalogue("192.0.2.80").param("search", "JAVA"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "1"))
+                .andExpect(jsonPath("$[0].name").value("Java syntax"));
+
+        mockMvc.perform(catalogue("192.0.2.80").param("search", "nothing matches this"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "0"))
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void treatsWildcardsInTheSearchTermAsLiteralText() throws Exception {
+        // Without ESCAPE the pattern "%%%" matches every row, so a broken escape
+        // shows up here as two results instead of none.
+        mockMvc.perform(catalogue("192.0.2.81").param("search", "%"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "0"));
+
+        mockMvc.perform(catalogue("192.0.2.81").param("search", "_"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "0"));
+    }
+
+    @Test
+    void filtersQuizzesByStoredLevelLabel() throws Exception {
+        mockMvc.perform(catalogue("192.0.2.82").param("complexity", "low"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "1"))
+                .andExpect(jsonPath("$[0].complexity").value("low"));
+
+        mockMvc.perform(catalogue("192.0.2.82").param("complexity", "MEDIUM"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].complexity").value("medium"));
+
+        // Repeating the parameter is how a client groups several stored labels
+        // under one control without the API hard-coding that grouping.
+        mockMvc.perform(catalogue("192.0.2.82")
+                        .param("complexity", "low")
+                        .param("complexity", "medium"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "2"));
+
+        mockMvc.perform(catalogue("192.0.2.82").param("complexity", "advanced"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "0"));
+    }
+
+    @Test
+    void treatsBlankFilterValuesAsAbsent() throws Exception {
+        // A blank arrives as a non-empty list that normalises to nothing. Reading
+        // emptiness off the raw list would send an empty IN clause and fail.
+        mockMvc.perform(catalogue("192.0.2.83").param("complexity", ""))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "2"));
+
+        mockMvc.perform(catalogue("192.0.2.83").param("search", "   "))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "2"));
+    }
+
+    @Test
+    void combinesSearchComplexityAndPagingInOneQuery() throws Exception {
+        mockMvc.perform(catalogue("192.0.2.84")
+                        .param("search", "java")
+                        .param("complexity", "low"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "1"))
+                .andExpect(jsonPath("$[0].name").value("Java syntax"));
+
+        // Contradictory filters must narrow, not fall back to everything.
+        mockMvc.perform(catalogue("192.0.2.84")
+                        .param("search", "java")
+                        .param("complexity", "medium"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "0"));
+
+        // The count header reports matches, not the page, so a filtered result
+        // set still pages correctly.
+        mockMvc.perform(catalogue("192.0.2.84")
+                        .param("complexity", "low")
+                        .param("complexity", "medium")
+                        .param("page", "1")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "2"))
+                .andExpect(header().string("X-Total-Pages", "2"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(2));
+    }
+
+    @Test
+    void rejectsOversizedFilterValues() throws Exception {
+        mockMvc.perform(catalogue("192.0.2.85").param("search", "x".repeat(51)))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(catalogue("192.0.2.85").param("complexity", "x".repeat(26)))
+                .andExpect(status().isBadRequest());
+    }
+}

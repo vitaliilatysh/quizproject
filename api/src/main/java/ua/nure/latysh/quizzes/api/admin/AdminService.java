@@ -89,7 +89,10 @@ public class AdminService {
     }
 
     public Page<QuizResponse> quizzes(Pageable pageable) {
-        Page<Quiz> quizzes = quizRepository.findAllFetchingSubjectAndLevel(pageable);
+        // The admin listing has no search or level filter of its own, so it asks
+        // for every quiz through the same query the public catalogue uses.
+        Page<Quiz> quizzes = quizRepository.search(
+                null, true, QuizRepository.ANY_COMPLEXITY, pageable);
         Map<Integer, Long> questionCounts = questionCountsByQuizId(quizzes.getContent());
         return quizzes.map(quiz -> toQuizResponse(quiz, questionCounts.getOrDefault(quiz.getId(), 0L)));
     }

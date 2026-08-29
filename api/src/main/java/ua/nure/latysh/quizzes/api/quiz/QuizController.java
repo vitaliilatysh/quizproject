@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -39,12 +40,20 @@ public class QuizController {
     }
 
     @GetMapping
-    @Operation(summary = "List quizzes")
+    @Operation(summary = "List quizzes",
+            description = "Optional `search` matches a substring of the quiz name or its "
+                    + "subject, case-insensitively. Optional `complexity` narrows by level "
+                    + "label as stored (`low`, `medium`, `high`, `advanced`) and may be "
+                    + "repeated to accept several. Both are applied by the database, so they "
+                    + "narrow the whole collection rather than the page being returned.")
     public ResponseEntity<List<QuizResponse>> getQuizzes(
+            @RequestParam(required = false) @Size(max = 50) String search,
+            @RequestParam(required = false) List<@Size(max = 25) String> complexity,
             @RequestParam(required = false) @Min(0) Integer page,
             @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
         return pagination.response(
-                quizQueryService.findAll(pagination.pageable(page, size)), publicCacheControl);
+                quizQueryService.findAll(search, complexity, pagination.pageable(page, size)),
+                publicCacheControl);
     }
 
     @GetMapping("/{quizId}")
