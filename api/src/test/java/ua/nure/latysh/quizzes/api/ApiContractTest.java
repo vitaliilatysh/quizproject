@@ -16,6 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -966,6 +967,67 @@ class ApiContractTest {
                     request.setRemoteAddr("192.0.2.87");
                     return request;
                 }))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void rehashesLegacyPlainTextPasswordsOnSuccessfulLogin() throws Exception {
+        // The legacy schema stored passwords in plain text (VARCHAR(15) could
+        // hold nothing else) and V2 only widened the column, so migrated rows
+        // stay readable until something re-encodes them. This fixture is in
+        // exactly that state, which is why every other login test works.
+        jdbcTemplate.update("""
+                INSERT INTO users VALUES (
+                    50, 'legacyuser', 'secret123', 'Legacy', 'User',
+                    TIMESTAMP '2025-01-08 09:00:00', NULL, 1, 2
+                )
+                """);
+        try {
+            assertThat(storedPassword("legacyuser")).isEqualTo("secret123");
+
+            login("legacyuser", "secret123", "192.0.2.90");
+
+            String upgraded = storedPassword("legacyuser");
+            assertThat(upgraded).startsWith("pbkdf2-sha256$");
+            assertThat(upgraded).doesNotContain("secret123");
+
+            // The account still works, and a second login must not re-encode
+            // what is already in the current format.
+            login("legacyuser", "secret123", "192.0.2.91");
+            assertThat(storedPassword("legacyuser")).isEqualTo(upgraded);
+
+            performLogin("legacyuser", "wrong-password", "192.0.2.92")
+                    .andExpect(status().isUnauthorized());
+        } finally {
+            jdbcTemplate.update("DELETE FROM users WHERE id = 50");
+        }
+    }
+
+    private String storedPassword(String login) {
+        return jdbcTemplate.queryForObject(
+                "SELECT password FROM users WHERE login = ?", String.class, login);
+    }
+
+    @Test
+    void rejectsAttemptIdsOutsideTheRangeInsteadOfWrappingThemOntoRealOnes() throws Exception {
+        String token = login("student", "secret123", "192.0.2.93");
+
+        // 2^32 + 1 narrows to 1 when cast to int, which used to resolve to the
+        // caller's attempt 1 — reading, and worse completing, an attempt other
+        // than the one addressed.
+        mockMvc.perform(get("/api/v1/attempts/4294967297")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/v1/attempts/4294967297/complete")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[1]}"))
+                .andExpect(status().isBadRequest());
+
+        // An id that fits but does not exist still reads as missing, not invalid.
+        mockMvc.perform(get("/api/v1/attempts/999999")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
                 .andExpect(status().isNotFound());
     }
 }

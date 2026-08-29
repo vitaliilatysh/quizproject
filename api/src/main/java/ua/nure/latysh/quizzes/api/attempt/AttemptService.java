@@ -92,15 +92,15 @@ public class AttemptService {
         return response;
     }
 
-    public AttemptResponse findOwned(long attemptId, String username) {
-        Attempt attempt = attemptRepository.findByIdAndUserLogin((int) attemptId, username)
+    public AttemptResponse findOwned(int attemptId, String username) {
+        Attempt attempt = attemptRepository.findByIdAndUserLogin(attemptId, username)
                 .orElseThrow(() -> missingAttempt(attemptId));
         return toResponse(attempt);
     }
 
     @Transactional
-    public AttemptCompletionResponse complete(long attemptId, String username, Set<Integer> answerIds) {
-        Attempt attempt = attemptRepository.findByIdAndUserLoginForUpdate((int) attemptId, username)
+    public AttemptCompletionResponse complete(int attemptId, String username, Set<Integer> answerIds) {
+        Attempt attempt = attemptRepository.findByIdAndUserLoginForUpdate(attemptId, username)
                 .orElseThrow(() -> missingAttempt(attemptId));
         if (attempt.isCompleted()) {
             throw new ResourceConflictException("Attempt " + attemptId + " was already completed");
@@ -214,7 +214,7 @@ public class AttemptService {
         resultRepository.saveAll(results);
     }
 
-    private static ResourceNotFoundException missingAttempt(long attemptId) {
+    private static ResourceNotFoundException missingAttempt(int attemptId) {
         return new ResourceNotFoundException("Attempt " + attemptId + " was not found");
     }
 

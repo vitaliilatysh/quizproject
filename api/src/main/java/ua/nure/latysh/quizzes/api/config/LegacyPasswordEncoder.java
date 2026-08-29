@@ -41,6 +41,21 @@ public class LegacyPasswordEncoder implements PasswordEncoder {
                 Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
     }
 
+    /**
+     * Reports a stored value that is not in this encoder's format, so Spring
+     * Security re-encodes it after a successful login.
+     *
+     * <p>The legacy schema stored passwords in plain text — {@code VARCHAR(15)}
+     * could hold nothing else — and V2 only widened the column, leaving every
+     * migrated row as it was. Without this, {@link #matches} keeps accepting
+     * those values verbatim and they stay in plain text forever, however often
+     * the account signs in. Upgrading on login drains them as people return.
+     */
+    @Override
+    public boolean upgradeEncoding(String encodedPassword) {
+        return encodedPassword != null && !encodedPassword.startsWith(PREFIX + "$");
+    }
+
     @Override
     public boolean matches(CharSequence rawPassword, String encodedPassword) {
         if (rawPassword == null || encodedPassword == null) {

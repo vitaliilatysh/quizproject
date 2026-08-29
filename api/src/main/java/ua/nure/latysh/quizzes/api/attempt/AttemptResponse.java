@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 public record AttemptResponse(
-        long attemptId,
+        int attemptId,
         int quizId,
         Instant startedAt,
         Instant expiresAt,

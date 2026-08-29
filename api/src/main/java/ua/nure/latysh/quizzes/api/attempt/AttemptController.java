@@ -40,7 +40,7 @@ public class AttemptController {
     @GetMapping("/attempts/{attemptId}")
     @Operation(summary = "Read an owned quiz attempt without exposing correct answers")
     public AttemptResponse get(
-            @PathVariable @Positive long attemptId,
+            @PathVariable @Positive int attemptId,
             Authentication authentication) {
         return attemptService.findOwned(attemptId, authentication.getName());
     }
@@ -48,7 +48,7 @@ public class AttemptController {
     @PostMapping("/attempts/{attemptId}/complete")
     @Operation(summary = "Submit selected answers and complete an owned attempt once")
     public AttemptCompletionResponse complete(
-            @PathVariable @Positive long attemptId,
+            @PathVariable @Positive int attemptId,
             @Valid @RequestBody CompleteAttemptRequest request,
             Authentication authentication) {
         return attemptService.complete(attemptId, authentication.getName(), request.answerIds());
