@@ -50,6 +50,15 @@ public interface QuizRepository extends JpaRepository<Quiz, Integer> {
     /** Placeholder that keeps the {@code IN} clause valid when no level filter applies. */
     Collection<String> ANY_COMPLEXITY = List.of("");
 
+    /**
+     * Counts subjects that actually carry a quiz, which is not the same as the
+     * number of rows in {@code subjects}. The home page derived this figure
+     * from the quiz list, so a subject with no quizzes has never been included;
+     * counting the table instead would silently inflate the number shown.
+     */
+    @Query("SELECT COUNT(DISTINCT q.subject.id) FROM Quiz q")
+    long countDistinctSubjects();
+
     @Query("SELECT q FROM Quiz q JOIN FETCH q.subject JOIN FETCH q.level WHERE q.id = :quizId")
     Optional<Quiz> findByIdFetchingSubjectAndLevel(@Param("quizId") int quizId);
 
