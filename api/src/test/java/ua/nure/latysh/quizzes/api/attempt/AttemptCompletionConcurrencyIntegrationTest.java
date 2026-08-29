@@ -78,7 +78,7 @@ class AttemptCompletionConcurrencyIntegrationTest {
                 .findFirst().orElseThrow().getId();
         int questionId = questionRepository.findAllByQuiz_IdOrderByIdAsc(quizId).get(0).getId();
         int answerId = answerRepository.findAllByQuestion_IdOrderByIdAsc(questionId).get(0).getId();
-        long attemptId = attemptService.start(quizId, username).attemptId();
+        int attemptId = attemptService.start(quizId, username).attemptId();
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch bothReady = new CountDownLatch(2);
@@ -108,7 +108,7 @@ class AttemptCompletionConcurrencyIntegrationTest {
             pool.shutdown();
         }
 
-        assertThat(attemptRepository.findById((int) attemptId).orElseThrow().isCompleted()).isTrue();
+        assertThat(attemptRepository.findById(attemptId).orElseThrow().isCompleted()).isTrue();
         assertThat(resultRepository.count()).isEqualTo(1);
     }
 }
