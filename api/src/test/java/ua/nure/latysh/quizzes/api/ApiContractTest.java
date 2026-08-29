@@ -1122,7 +1122,9 @@ class ApiContractTest {
         // and the test above would pass anyway. This asserts the property that
         // one actually depends on, which is why the read transactions pin
         // REPEATABLE_READ instead of inheriting whatever the database defaults
-        // to. It runs against H2 here and MySQL in the integration suite.
+        // to. Whether a level really holds a snapshot is the database's answer,
+        // not Spring's, so ReadIsolationIntegrationTest asks MySQL the same
+        // question; this covers the H2 datasource the rest of the suite uses.
         String original = jdbcTemplate.queryForObject(
                 "SELECT name FROM subjects WHERE id = 1", String.class);
         var writer = Executors.newSingleThreadExecutor();
