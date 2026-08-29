@@ -8,6 +8,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -41,6 +44,9 @@ class ApiContractTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private UserDetailsService userDetailsService;
 
     @Test
     void listsQuizzesAndReturnsOneById() throws Exception {
@@ -1029,5 +1035,28 @@ class ApiContractTest {
         mockMvc.perform(get("/api/v1/attempts/999999")
                         .header(HttpHeaders.AUTHORIZATION, bearer(token)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void resolvesRoleAndStatusWithoutAnOpenTransaction() {
+        // Role and status are lazy, and Spring Security looks users up outside a
+        // transaction during login. If the fetch join is ever dropped from
+        // findByLogin, touching them here throws and the only symptom callers
+        // see is a 401, which says nothing about the cause. This asserts the
+        // associations are usable on a detached account.
+        UserDetails student = userDetailsService.loadUserByUsername("student");
+        assertThat(student.isEnabled()).isTrue();
+        assertThat(student.getAuthorities())
+                .extracting(GrantedAuthority::getAuthority)
+                .containsExactly("ROLE_USER");
+
+        UserDetails admin = userDetailsService.loadUserByUsername("admin");
+        assertThat(admin.getAuthorities())
+                .extracting(GrantedAuthority::getAuthority)
+                .containsExactly("ROLE_ADMIN");
+
+        // Status drives this flag, so a lazy status that failed to load would
+        // not simply throw — it would silently mis-report the account.
+        assertThat(userDetailsService.loadUserByUsername("blocked").isEnabled()).isFalse();
     }
 }
