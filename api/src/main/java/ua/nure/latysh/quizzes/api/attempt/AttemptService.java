@@ -3,6 +3,7 @@ package ua.nure.latysh.quizzes.api.attempt;
 import jakarta.persistence.EntityManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import ua.nure.latysh.quizzes.api.domain.Answer;
 import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
@@ -31,7 +32,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Reads run in one read-only transaction so that every statement a request
+ * issues sees the same snapshot. Without this each repository call opened its
+ * own session on its own connection, so a multi-query read could observe a
+ * database that changed underneath it.
+ *
+ * <p>The isolation level is pinned rather than inherited because sharing a
+ * transaction is not by itself enough: under {@code READ COMMITTED} every
+ * statement takes a fresh snapshot, so a concurrent commit is still visible
+ * between two queries of the same read. MySQL defaults to repeatable read and
+ * would behave correctly by accident; stating it here keeps the guarantee from
+ * depending on how a given database happens to be configured.
+ *
+ * <p>The write methods below override this with their own
+ * {@code @Transactional}. A new method that writes must do the same: under a
+ * read-only transaction Hibernate never flushes, so a modified entity is
+ * discarded without an error.
+ */
 @Service
+@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class AttemptService {
     private final QuizRepository quizRepository;
     private final UserRepository userRepository;

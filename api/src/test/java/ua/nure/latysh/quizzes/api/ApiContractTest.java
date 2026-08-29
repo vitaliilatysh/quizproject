@@ -1,5 +1,8 @@
 package ua.nure.latysh.quizzes.api;
 
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +18,17 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
+import ua.nure.latysh.quizzes.api.attempt.AttemptService;
+
+import java.util.concurrent.Executors;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -47,6 +60,15 @@ class ApiContractTest {
 
     @Autowired
     private UserDetailsService userDetailsService;
+
+    @Autowired
+    private AttemptService attemptService;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @Test
     void listsQuizzesAndReturnsOneById() throws Exception {
@@ -1058,5 +1080,76 @@ class ApiContractTest {
         // Status drives this flag, so a lazy status that failed to load would
         // not simply throw — it would silently mis-report the account.
         assertThat(userDetailsService.loadUserByUsername("blocked").isEnabled()).isFalse();
+    }
+
+    @Test
+    void readsAnAttemptInASingleTransaction() {
+        // findOwned issues three queries: the attempt, its questions, and their
+        // answers. Without a read-only transaction around the method each one
+        // ran in its own session on its own connection, so the three could see
+        // three different states of the database — an answer added between the
+        // second and third query would appear under a question that the same
+        // response says does not have it.
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        attemptService.findOwned(1, "student");   // warm up: first call loads classes and metadata
+        statistics.clear();
+
+        attemptService.findOwned(1, "student");
+
+        assertThat(statistics.getPrepareStatementCount())
+                .as("the read still issues its three queries")
+                .isEqualTo(3);
+        assertThat(statistics.getSessionOpenCount())
+                .as("but they share one session, and so one transaction")
+                .isEqualTo(1);
+
+        // The session count alone does not say which isolation that transaction
+        // asked for, and the snapshot guarantee below is worthless without it,
+        // so check that the service still requests it.
+        Transactional declared = AnnotationUtils.findAnnotation(
+                AopUtils.getTargetClass(attemptService), Transactional.class);
+        assertThat(declared).isNotNull();
+        assertThat(declared.readOnly()).isTrue();
+        assertThat(declared.isolation()).isEqualTo(Isolation.REPEATABLE_READ);
+    }
+
+    @Test
+    void holdsOneSnapshotForTheLengthOfARead() throws Exception {
+        // Sharing a transaction is necessary but not sufficient: under READ
+        // COMMITTED every statement takes its own snapshot, so a concurrent
+        // commit would still be visible between two queries of the same read
+        // and the test above would pass anyway. This asserts the property that
+        // one actually depends on, which is why the read transactions pin
+        // REPEATABLE_READ instead of inheriting whatever the database defaults
+        // to. Whether a level really holds a snapshot is the database's answer,
+        // not Spring's, so ReadIsolationIntegrationTest asks MySQL the same
+        // question; this covers the H2 datasource the rest of the suite uses.
+        String original = jdbcTemplate.queryForObject(
+                "SELECT name FROM subjects WHERE id = 1", String.class);
+        var writer = Executors.newSingleThreadExecutor();
+        var template = new TransactionTemplate(transactionManager);
+        template.setReadOnly(true);
+        template.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        try {
+            String secondRead = template.execute(status -> {
+                jdbcTemplate.queryForObject("SELECT name FROM subjects WHERE id = 1", String.class);
+                try {
+                    // a different connection commits while this read is open
+                    writer.submit(() -> jdbcTemplate.update(
+                            "UPDATE subjects SET name = ? WHERE id = 1", "Renamed Mid-Read")).get();
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+                return jdbcTemplate.queryForObject(
+                        "SELECT name FROM subjects WHERE id = 1", String.class);
+            });
+            assertThat(secondRead)
+                    .as("a commit landing mid-read must not change what the read sees")
+                    .isEqualTo(original);
+        } finally {
+            writer.shutdown();
+            jdbcTemplate.update("UPDATE subjects SET name = ? WHERE id = 1", original);
+        }
     }
 }
