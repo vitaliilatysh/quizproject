@@ -1,5 +1,8 @@
 package ua.nure.latysh.quizzes.api;
 
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.ObjectMapper;
+import ua.nure.latysh.quizzes.api.attempt.AttemptService;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -47,6 +51,12 @@ class ApiContractTest {
 
     @Autowired
     private UserDetailsService userDetailsService;
+
+    @Autowired
+    private AttemptService attemptService;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     @Test
     void listsQuizzesAndReturnsOneById() throws Exception {
@@ -1058,5 +1068,28 @@ class ApiContractTest {
         // Status drives this flag, so a lazy status that failed to load would
         // not simply throw — it would silently mis-report the account.
         assertThat(userDetailsService.loadUserByUsername("blocked").isEnabled()).isFalse();
+    }
+
+    @Test
+    void readsAnAttemptInASingleTransaction() {
+        // findOwned issues three queries: the attempt, its questions, and their
+        // answers. Without a read-only transaction around the method each one
+        // ran in its own session on its own connection, so the three could see
+        // three different states of the database — an answer added between the
+        // second and third query would appear under a question that the same
+        // response says does not have it.
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        attemptService.findOwned(1, "student");   // warm up: first call loads classes and metadata
+        statistics.clear();
+
+        attemptService.findOwned(1, "student");
+
+        assertThat(statistics.getPrepareStatementCount())
+                .as("the read still issues its three queries")
+                .isEqualTo(3);
+        assertThat(statistics.getSessionOpenCount())
+                .as("but they share one session, so they share one snapshot")
+                .isEqualTo(1);
     }
 }

@@ -43,7 +43,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Reads run in one read-only transaction so that every statement a request
+ * issues sees the same snapshot. Without this each repository call opened its
+ * own session on its own connection, so a multi-query read could observe a
+ * database that changed underneath it.
+ *
+ * <p>The write methods below override this with their own
+ * {@code @Transactional}. A new method that writes must do the same: under a
+ * read-only transaction Hibernate never flushes, so a modified entity is
+ * discarded without an error.
+ */
 @Service
+@Transactional(readOnly = true)
 public class AdminService {
     private final SubjectRepository subjectRepository;
     private final LevelRepository levelRepository;

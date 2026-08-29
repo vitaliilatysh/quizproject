@@ -3,6 +3,7 @@ package ua.nure.latysh.quizzes.api.quiz;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ua.nure.latysh.quizzes.api.domain.Quiz;
 import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
 import ua.nure.latysh.quizzes.api.domain.QuizRepository;
@@ -14,7 +15,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Reads run in one read-only transaction so that every statement a request
+ * issues sees the same snapshot. Without this each repository call opened its
+ * own session on its own connection, so a multi-query read could observe a
+ * database that changed underneath it.
+ *
+ * <p>This service only reads. A method that writes must override the class
+ * annotation with its own {@code @Transactional}: under a read-only
+ * transaction Hibernate never flushes, so a modified entity is discarded
+ * without an error.
+ */
 @Service
+@Transactional(readOnly = true)
 public class QuizQueryService {
     private final QuizRepository quizRepository;
     private final QuestionRepository questionRepository;
