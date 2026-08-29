@@ -56,6 +56,20 @@ public class QuizController {
                 publicCacheControl);
     }
 
+    // Declared before the /{quizId} mapping so the literal segment is the one
+    // that reads naturally here; Spring ranks it above the path variable either
+    // way, and a contract test pins that so a future rename cannot turn this
+    // into a 400 from int binding.
+    @GetMapping("/summary")
+    @Operation(summary = "Catalogue totals",
+            description = "Total quizzes and the number of subjects that carry at least one, "
+                    + "for callers that show a summary without fetching the whole catalogue.")
+    public ResponseEntity<QuizCatalogueSummary> getSummary() {
+        return ResponseEntity.ok()
+                .cacheControl(publicCacheControl)
+                .body(quizQueryService.summary());
+    }
+
     @GetMapping("/{quizId}")
     @Operation(summary = "Get a quiz", responses = @ApiResponse(responseCode = "404", description = "Quiz not found"))
     public ResponseEntity<QuizResponse> getQuiz(@PathVariable @Positive int quizId) {

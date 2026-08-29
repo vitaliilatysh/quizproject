@@ -930,4 +930,42 @@ class ApiContractTest {
         mockMvc.perform(catalogue("192.0.2.85").param("complexity", "x".repeat(26)))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void reportsCatalogueTotalsWithoutFetchingTheCatalogue() throws Exception {
+        // The fixture holds two quizzes across two subjects.
+        mockMvc.perform(get("/api/v1/quizzes/summary").with(request -> {
+                    request.setRemoteAddr("192.0.2.86");
+                    return request;
+                }))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("public")))
+                .andExpect(jsonPath("$.totalQuizzes").value(2))
+                .andExpect(jsonPath("$.totalSubjects").value(2));
+    }
+
+    @Test
+    void routesSummaryAheadOfTheQuizIdPathVariable() throws Exception {
+        // /summary must not be bound as {quizId}; if it ever is, int binding
+        // rejects it and this turns into a 400 rather than a summary.
+        mockMvc.perform(get("/api/v1/quizzes/summary").with(request -> {
+                    request.setRemoteAddr("192.0.2.87");
+                    return request;
+                }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalQuizzes").isNumber());
+
+        // A real id still resolves, and a missing one still 404s.
+        mockMvc.perform(get("/api/v1/quizzes/1").with(request -> {
+                    request.setRemoteAddr("192.0.2.87");
+                    return request;
+                }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Java syntax"));
+        mockMvc.perform(get("/api/v1/quizzes/9999").with(request -> {
+                    request.setRemoteAddr("192.0.2.87");
+                    return request;
+                }))
+                .andExpect(status().isNotFound());
+    }
 }

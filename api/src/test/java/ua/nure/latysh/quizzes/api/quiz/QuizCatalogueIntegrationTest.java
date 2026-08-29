@@ -8,6 +8,7 @@ import org.springframework.data.domain.PageRequest;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
+import ua.nure.latysh.quizzes.api.domain.SubjectRepository;
 
 import java.util.List;
 import java.util.Locale;
@@ -27,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "quiz.security.jwt-secret=cXVpei1zZWFyY2gtaW50ZWdyYXRpb24tc2VjcmV0LTMyLWJ5dGVz",
         "quiz.security.allowed-origins=https://app.example.test"
 })
-class QuizSearchIntegrationTest {
+class QuizCatalogueIntegrationTest {
     @Container
     @ServiceConnection
     private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4")
@@ -37,6 +38,9 @@ class QuizSearchIntegrationTest {
 
     @Autowired
     private QuizQueryService quizQueryService;
+
+    @Autowired
+    private SubjectRepository subjectRepository;
 
     @Test
     void listsEverythingWhenNoFilterIsGiven() {
@@ -50,6 +54,22 @@ class QuizSearchIntegrationTest {
         assertThat(quizQueryService.findAll("  ", List.of("", "   "), PageRequest.of(0, 50))
                 .getTotalElements())
                 .isEqualTo(total);
+    }
+
+    @Test
+    void countsOnlySubjectsThatCarryAQuiz() {
+        // The production seed has four subjects but only three of them are used
+        // by a quiz — 'Java Array' has none. The home page derived this figure
+        // from the quiz list, so counting the subjects table instead would show
+        // a larger number than the catalogue actually offers to browse.
+        QuizCatalogueSummary summary = quizQueryService.summary();
+
+        assertThat(summary.totalQuizzes())
+                .isEqualTo(quizQueryService.findAll(null, null, PageRequest.of(0, 100))
+                        .getTotalElements());
+        assertThat(summary.totalSubjects())
+                .isPositive()
+                .isLessThan(subjectRepository.count());
     }
 
     @Test

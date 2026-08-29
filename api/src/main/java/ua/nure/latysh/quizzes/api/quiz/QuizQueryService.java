@@ -78,6 +78,16 @@ public class QuizQueryService {
                 .toList();
     }
 
+    /**
+     * Totals for the whole catalogue, for callers that show a summary without
+     * loading every quiz to compute one. A paginated list cannot answer this:
+     * X-Total-Count reports how many quizzes match, never how many distinct
+     * subjects they span.
+     */
+    public QuizCatalogueSummary summary() {
+        return new QuizCatalogueSummary(quizRepository.count(), quizRepository.countDistinctSubjects());
+    }
+
     public QuizResponse findById(int quizId) {
         Quiz quiz = quizRepository.findByIdFetchingSubjectAndLevel(quizId)
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz " + quizId + " was not found"));
