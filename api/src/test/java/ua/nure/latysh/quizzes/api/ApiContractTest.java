@@ -18,8 +18,17 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 import ua.nure.latysh.quizzes.api.attempt.AttemptService;
+
+import java.util.concurrent.Executors;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -57,6 +66,9 @@ class ApiContractTest {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @Test
     void listsQuizzesAndReturnsOneById() throws Exception {
@@ -1089,7 +1101,53 @@ class ApiContractTest {
                 .as("the read still issues its three queries")
                 .isEqualTo(3);
         assertThat(statistics.getSessionOpenCount())
-                .as("but they share one session, so they share one snapshot")
+                .as("but they share one session, and so one transaction")
                 .isEqualTo(1);
+
+        // The session count alone does not say which isolation that transaction
+        // asked for, and the snapshot guarantee below is worthless without it,
+        // so check that the service still requests it.
+        Transactional declared = AnnotationUtils.findAnnotation(
+                AopUtils.getTargetClass(attemptService), Transactional.class);
+        assertThat(declared).isNotNull();
+        assertThat(declared.readOnly()).isTrue();
+        assertThat(declared.isolation()).isEqualTo(Isolation.REPEATABLE_READ);
+    }
+
+    @Test
+    void holdsOneSnapshotForTheLengthOfARead() throws Exception {
+        // Sharing a transaction is necessary but not sufficient: under READ
+        // COMMITTED every statement takes its own snapshot, so a concurrent
+        // commit would still be visible between two queries of the same read
+        // and the test above would pass anyway. This asserts the property that
+        // one actually depends on, which is why the read transactions pin
+        // REPEATABLE_READ instead of inheriting whatever the database defaults
+        // to. It runs against H2 here and MySQL in the integration suite.
+        String original = jdbcTemplate.queryForObject(
+                "SELECT name FROM subjects WHERE id = 1", String.class);
+        var writer = Executors.newSingleThreadExecutor();
+        var template = new TransactionTemplate(transactionManager);
+        template.setReadOnly(true);
+        template.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        try {
+            String secondRead = template.execute(status -> {
+                jdbcTemplate.queryForObject("SELECT name FROM subjects WHERE id = 1", String.class);
+                try {
+                    // a different connection commits while this read is open
+                    writer.submit(() -> jdbcTemplate.update(
+                            "UPDATE subjects SET name = ? WHERE id = 1", "Renamed Mid-Read")).get();
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+                return jdbcTemplate.queryForObject(
+                        "SELECT name FROM subjects WHERE id = 1", String.class);
+            });
+            assertThat(secondRead)
+                    .as("a commit landing mid-read must not change what the read sees")
+                    .isEqualTo(original);
+        } finally {
+            writer.shutdown();
+            jdbcTemplate.update("UPDATE subjects SET name = ? WHERE id = 1", original);
+        }
     }
 }
