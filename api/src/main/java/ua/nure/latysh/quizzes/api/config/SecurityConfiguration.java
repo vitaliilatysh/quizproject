@@ -79,8 +79,14 @@ public class SecurityConfiguration {
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type",
                 CorrelationIdFilter.HEADER_NAME));
+        // Date is exposed so a browser can tell how far its own clock is from this
+        // server's. The web client schedules an attempt's automatic submission
+        // against the deadline this API issued, and a device clock minutes ahead
+        // of it would end the attempt early. Every response already carries the
+        // header; it is simply unreadable cross-origin unless it is listed here,
+        // and it is not one that browsers expose by default.
         configuration.setExposedHeaders(List.of(CorrelationIdFilter.HEADER_NAME,
-                "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After",
+                "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After", "Date",
                 PaginationSupport.PAGE_NUMBER_HEADER, PaginationSupport.PAGE_SIZE_HEADER,
                 PaginationSupport.TOTAL_COUNT_HEADER, PaginationSupport.TOTAL_PAGES_HEADER));
         configuration.setMaxAge(3600L);
