@@ -10,7 +10,7 @@ name: Deploy
 
 on:
   workflow_run:
-    workflows: ["Container delivery"]
+    workflows: ["Backend container delivery"]
     types: [completed]
     branches: [master]
   workflow_dispatch:
