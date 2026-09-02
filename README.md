@@ -245,6 +245,59 @@ cosign verify \
 Готовий production manifest з immutable image digest зберігається в GitHub Actions artifact
 `kubernetes-manifest-<commit>` протягом 30 днів.
 
+## Розгортання
+
+Workflow **Deploy** застосовує те, що опублікував container delivery. Він запускається сам після
+успішної публікації образу з `master` і розгортає у `staging`; production розгортається лише
+вручну (`workflow_dispatch`) і через protected environment, тобто з підтвердженням людини.
+
+Розгортається **digest, а не тег**. Тег `sha-<commit>` резолвиться в digest один раз, підпис
+cosign перевіряється саме над цим digest, і всі подальші кроки посилаються тільки на нього —
+переспрямований тег не може підмінити образ між перевіркою підпису й `kubectl apply`. Підпис,
+який ніхто не перевіряє в момент розгортання, був би декоративним.
+
+Порядок кроків: перевірка готовності namespace → резолв digest → перевірка підпису →
+`kubectl apply --dry-run=server` проти живого кластера → `apply` → `rollout status` →
+перевірка, що Service має готовий endpoint. Якщо rollout не піднявся, workflow друкує події та
+логи подів і робить `rollout undo` (за наявності попередньої ревізії).
+
+### Що потрібно налаштувати один раз
+
+GitHub secrets (значення не зберігаються в репозиторії й не потрапляють у логи):
+
+| Secret | Що це |
+| --- | --- |
+| `OCI_CLI_USER` | OCID користувача OCI |
+| `OCI_CLI_TENANCY` | OCID тенансі |
+| `OCI_CLI_FINGERPRINT` | fingerprint API-ключа |
+| `OCI_CLI_KEY_CONTENT` | приватний API-ключ у PEM |
+| `OCI_CLI_REGION` | регіон, наприклад `eu-frankfurt-1` |
+| `OKE_CLUSTER_OCID` | OCID кластера OKE |
+
+GitHub environments: `staging` (без обмежень) і `production` (required reviewers — саме це
+робить розгортання в production свідомою дією).
+
+Namespace і секрети додатків створюються **руками, один раз**, і workflow відмовляється
+розгортати, доки їх немає — краще зупинитися з поясненням, ніж підняти поди, що падатимуть на
+відсутньому секреті. Тримати пароль бази в GitHub і переливати його в кластер щопрогону було б
+гіршим компромісом:
+
+~~~bash
+kubectl create namespace quizproject-staging
+cp deploy/kubernetes/backend/secret.env.example deploy/kubernetes/backend/secret.env
+# замініть кожен плейсхолдер, потім:
+kubectl create secret generic quiz-api-secrets \
+  --namespace quizproject-staging \
+  --from-env-file=deploy/kubernetes/backend/secret.env
+~~~
+
+Staging живе в тому ж кластері, що й production, в окремому namespace `quizproject-staging`.
+Від production він відрізняється лише там, де мусить: одна репліка, без HorizontalPodAutoscaler,
+власний CORS-хост і PodDisruptionBudget із `maxUnavailable: 1` замість `minAvailable: 1` —
+останнє при одній репліці назавжди заблокувало б drain вузла, а вузли тут спільні з production.
+Проби, ресурси й security context навмисно однакові: інакше staging перестає передбачати
+production.
+
 ## Спостережуваність
 
 Production console logs мають структурований Logstash JSON-формат. Кожна HTTP-відповідь містить

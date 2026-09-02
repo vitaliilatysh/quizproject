@@ -1,0 +1,66 @@
+# Staging shares the production cluster and differs from it only where it must.
+#
+# A separate namespace rather than a separate cluster, which is what exists: the
+# namespace transformer renames the Namespace object itself as well as every
+# reference to it, so nothing here can touch quizproject.
+#
+# What differs, and why:
+#   - one replica, because staging exists to answer "does this roll out and
+#     serve traffic", not "does it survive a node loss";
+#   - no HorizontalPodAutoscaler, for the same reason;
+#   - CORS names the staging host, since the production one is not this.
+# Everything else — probes, resources, the Redis it talks to, the security
+# context — is deliberately identical, or staging stops predicting production.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: quizproject-staging
+
+resources:
+  - ../../backend
+
+images:
+  - name: quiz-api
+    newName: ghcr.io/vitaliilatysh/quizproject
+    # Overwritten by the deploy workflow with the immutable sha- tag of the
+    # commit being deployed. The moving tag is the fallback for a hand-run
+    # kubectl, not what CI ships.
+    newTag: master
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: quiz-api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  # minAvailable: 1 against a single replica means no voluntary eviction can
+  # ever proceed: a node drain or a cluster upgrade would block on this pod
+  # forever. Harmless at two replicas, which is why production keeps it — but
+  # this namespace shares a cluster with production, and staging must not be
+  # able to hold up maintenance that production needs.
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: quiz-api
+    patch: |-
+      - op: remove
+        path: /spec/minAvailable
+      - op: add
+        path: /spec/maxUnavailable
+        value: 1
+  - target:
+      version: v1
+      kind: ConfigMap
+      name: quiz-api-config
+    patch: |-
+      - op: replace
+        path: /data/CORS_ALLOWED_ORIGINS
+        value: https://staging.quiz.example.com
