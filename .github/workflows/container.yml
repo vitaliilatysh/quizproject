@@ -147,15 +147,38 @@ jobs:
           assert_body_contains http://127.0.0.1:8081/v3/api-docs '"title":"Quiz REST API"'
           assert_body_contains http://127.0.0.1:8081/actuator/prometheus '^jvm_memory_used_bytes'
 
+      # A workflow_run trigger matches the upstream workflow's declared name,
+      # and a mismatch does not error — the deploy simply never fires, silently.
+      # That is exactly what shipped: this file was named "Backend container
+      # delivery" while deploy.yml waited for "Container delivery", so the
+      # automatic staging deploy was dead on arrival and nothing said so.
+      - name: Check the deploy workflow waits for this one's real name
+        shell: bash
+        run: |
+          AWAITED="$(sed -n 's/^    workflows: \["\(.*\)"\]$/\1/p' .github/workflows/deploy.yml)"
+          test -n "${AWAITED}"
+          grep --quiet "^name: ${AWAITED}$" .github/workflows/container.yml \
+            || { echo "::error::deploy.yml waits for '${AWAITED}', which no workflow declares"; exit 1; }
+
       - name: Render Kubernetes overlays
         shell: bash
         run: |
           kubectl kustomize deploy/kubernetes/overlays/local > local.yaml
+          kubectl kustomize deploy/kubernetes/overlays/staging > staging.yaml
           kubectl kustomize deploy/kubernetes/overlays/production > production.yaml
           kubectl kustomize deploy/kubernetes/monitoring > monitoring.yaml
 
           grep --quiet 'image: quizproject-api:local' local.yaml
           grep --quiet 'CORS_ALLOWED_ORIGINS: http://localhost:4173' local.yaml
+          # Staging shares the cluster with production, so what keeps them apart
+          # is worth asserting rather than assuming: its own namespace, and a
+          # disruption budget that cannot block a node drain at one replica.
+          grep --quiet 'name: quizproject-staging' staging.yaml
+          grep --quiet 'namespace: quizproject-staging' staging.yaml
+          grep --quiet 'maxUnavailable: 1' staging.yaml
+          ! grep --quiet 'kind: HorizontalPodAutoscaler' staging.yaml
+          ! grep --quiet 'namespace: quizproject$' staging.yaml
+
           grep --quiet 'image: ghcr.io/vitaliilatysh/quizproject:master' production.yaml
           grep --quiet 'imagePullPolicy: Always' production.yaml
           grep --quiet 'kind: NetworkPolicy' production.yaml
