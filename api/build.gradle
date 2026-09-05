@@ -18,6 +18,20 @@ repositories {
     mavenCentral()
 }
 
+// Spring Boot 4.1.1 manages tomcat-embed-core 11.0.24, and 4.1.1 is the latest
+// release on that line — so there is no Boot version to upgrade to. Three
+// CRITICAL advisories land on 11.0.24, all of them authentication or access
+// control bypasses in the server this API is served by:
+//
+//   CVE-2026-65182  security constraint bypass through improper access control
+//   CVE-2026-65905  authentication bypass by replay in the DIGEST authenticator
+//   CVE-2026-68525  unauthorized resource access via FORM authentication bypass
+//
+// Overriding the managed version is Boot's own supported mechanism for exactly
+// this gap. Remove this once a Boot release manages 11.0.25 or later; the
+// Trivy scan in container.yml is what will notice if it is removed too early.
+ext['tomcat.version'] = '11.0.25'
+
 dependencyLocking {
     lockAllConfigurations()
 }
