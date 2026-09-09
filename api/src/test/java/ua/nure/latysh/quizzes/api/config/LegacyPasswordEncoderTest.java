@@ -26,6 +26,22 @@ class LegacyPasswordEncoderTest {
         assertFalse(encoder.matches("secret123", "pbkdf2-sha256$x$salt$hash"));
     }
 
+    // The upgrade signal is what drains the plain-text rows the legacy schema
+    // left behind: Spring Security re-encodes a password on a successful login
+    // only when this says the stored value is not in the current format.
+    @Test
+    void asksForAnUpgradeOnlyForAPasswordThatIsNotAlreadyEncoded() {
+        LegacyPasswordEncoder encoder = new LegacyPasswordEncoder(new SecureRandom(),
+                "PBKDF2WithHmacSHA256", 1_000);
+
+        assertTrue(encoder.upgradeEncoding("legacy"), "a plain-text row was left in plain text");
+        assertTrue(encoder.upgradeEncoding("pbkdf2-sha256"), "a prefix without its separator is not this format");
+        assertFalse(encoder.upgradeEncoding(encoder.encode("secret123")));
+        // A user row with no password at all: nothing to upgrade, and asking for
+        // one would re-encode an empty credential into a valid-looking hash.
+        assertFalse(encoder.upgradeEncoding(null));
+    }
+
     @Test
     void reportsUnavailableHashingAlgorithm() {
         LegacyPasswordEncoder encoder = new LegacyPasswordEncoder(

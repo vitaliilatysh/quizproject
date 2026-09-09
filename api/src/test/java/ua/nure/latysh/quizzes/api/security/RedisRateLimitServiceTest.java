@@ -37,17 +37,33 @@ class RedisRateLimitServiceTest {
         assertEquals(1, blocked.retryAfterSeconds());
     }
 
+    // Every shape the script cannot have returned. The service reads two numbers
+    // out of the reply and uses them to decide whether a request is allowed, so
+    // anything else has to stop the request rather than be coerced: a bad reply
+    // silently read as "0 requests" would turn the rate limiter off.
     @Test
     @SuppressWarnings("unchecked")
     void rejectsAnInvalidRedisResult() {
-        StringRedisTemplate template = mock(StringRedisTemplate.class);
-        doReturn(null)
-                .when(template)
-                .execute(any(RedisScript.class), any(List.class), any());
-        RedisRateLimitService service = new RedisRateLimitService(template);
-        Duration window = Duration.ofMinutes(1);
+        List<?>[] invalid = {
+                null,
+                List.of(1L),
+                List.of(1L, 2L, 3L),
+                List.of("one", 2_000L),
+                List.of(1L, "two")
+        };
 
-        assertThrows(IllegalStateException.class,
-                () -> service.acquire("api:client", 10, window));
+        for (List<?> reply : invalid) {
+            StringRedisTemplate template = mock(StringRedisTemplate.class);
+            doReturn(reply)
+                    .when(template)
+                    .execute(any(RedisScript.class), any(List.class), any());
+            RedisRateLimitService service = new RedisRateLimitService(template);
+            Duration window = Duration.ofMinutes(1);
+
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                    () -> service.acquire("api:client", 10, window),
+                    "accepted " + reply);
+            assertEquals("Redis returned an invalid rate limit result", failure.getMessage());
+        }
     }
 }
