@@ -6,6 +6,7 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -28,7 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 import ua.nure.latysh.quizzes.api.attempt.AttemptService;
+import ua.nure.latysh.quizzes.api.quiz.QuizQueryService;
 
+import java.util.Arrays;
 import java.util.concurrent.Executors;
 
 import static org.hamcrest.Matchers.containsString;
@@ -64,6 +67,9 @@ class ApiContractTest {
 
     @Autowired
     private AttemptService attemptService;
+
+    @Autowired
+    private QuizQueryService quizQueryService;
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
@@ -811,6 +817,147 @@ class ApiContractTest {
         };
     }
 
+    // Three administrative outcomes the walkthrough above cannot also carry.
+    //
+    // Not because they do not belong with it, but because the rate limit is
+    // real and this class shares one bucket: MockMvc defaults every request to
+    // 127.0.0.1, so only the login helper sets an address of its own and every
+    // other request in the file counts against the same hundred a minute.
+    // These carry their own address for that reason, which is also the only
+    // honest way to add requests to this file without moving another test
+    // closer to a 429 it has nothing to do with.
+    @Test
+    void coversTheAdministrativeOutcomesTheWalkthroughHasNoBudgetFor() throws Exception {
+        String adminToken = login("admin", "secret123", "192.0.2.72");
+
+        int subjectId = responseId(mockMvc.perform(post("/api/v1/admin/subjects")
+                        .with(from("192.0.2.72"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Concurrency\"}"))
+                .andExpect(status().isCreated())
+                .andReturn());
+        int quizId = responseId(mockMvc.perform(post("/api/v1/admin/quizzes")
+                        .with(from("192.0.2.72"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Threads","subjectId":%d,"levelId":1,"timeToPassMinutes":15}
+                                """.formatted(subjectId)))
+                .andExpect(status().isCreated())
+                .andReturn());
+
+        String questionRequest = """
+                {"text":"%s","answers":[
+                  {"text":"One","correct":true},{"text":"Two","correct":false},
+                  {"text":"Three","correct":false},{"text":"Four","correct":false}]}
+                """;
+        try {
+            // Two questions on one quiz. Each is written and then read back out
+            // of the quiz's whole list, so until there were two, the filter that
+            // picks the right one out of that list never had to reject anything.
+            int first = responseId(mockMvc.perform(post("/api/v1/admin/quizzes/{quizId}/questions", quizId)
+                            .with(from("192.0.2.72"))
+                            .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(questionRequest.formatted("What is a thread?")))
+                    .andExpect(status().isCreated())
+                    .andReturn());
+            int second = responseId(mockMvc.perform(post("/api/v1/admin/quizzes/{quizId}/questions", quizId)
+                            .with(from("192.0.2.72"))
+                            .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(questionRequest.formatted("What is a lock?")))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.text").value("What is a lock?"))
+                    .andReturn());
+            assertThat(second).as("the second question came back as the first").isNotEqualTo(first);
+
+            mockMvc.perform(put("/api/v1/admin/questions/{questionId}", first)
+                            .with(from("192.0.2.72"))
+                            .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(questionRequest.formatted("What is a daemon thread?")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(first))
+                    .andExpect(jsonPath("$.text").value("What is a daemon thread?"));
+
+            // An administrator setting their own account to active. The refusal
+            // this service has is about locking the last administrator out, not
+            // about touching one's own row at all — and only the blocked half of
+            // that pair was ever exercised.
+            mockMvc.perform(patch("/api/v1/admin/users/5/status")
+                            .with(from("192.0.2.72"))
+                            .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"active\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.username").value("admin"))
+                    .andExpect(jsonPath("$.status").value("active"));
+
+            // Both ends of the range, in the right order: the case the check has
+            // to let through. Either end alone, and the pair reversed, were
+            // already covered; the ordinary one was not.
+            mockMvc.perform(get("/api/v1/admin/results")
+                            .param("from", "2026-01-01T00:00:00Z")
+                            .param("to", "2026-12-31T23:59:59Z")
+                            .with(from("192.0.2.72"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[*].username")
+                            .value(org.hamcrest.Matchers.hasItem("student")));
+        } finally {
+            jdbcTemplate.update("DELETE FROM answers WHERE question_id IN "
+                    + "(SELECT id FROM questions WHERE quiz_id = ?)", quizId);
+            jdbcTemplate.update("DELETE FROM questions WHERE quiz_id = ?", quizId);
+            jdbcTemplate.update("DELETE FROM quizzes WHERE id = ?", quizId);
+            jdbcTemplate.update("DELETE FROM subjects WHERE id = ?", subjectId);
+        }
+    }
+
+    // A quiz that has questions and still cannot be attempted. "Not ready" has
+    // two causes and they are not the same: no questions at all, which quiz 2
+    // covers, and questions that are there but incomplete — a question with no
+    // answers, or none marked correct — which nothing covered. Starting an
+    // attempt on one of those would hand the reader a quiz they cannot score.
+    @Test
+    void refusesAnAttemptOnAQuizWhoseQuestionsAreIncomplete() throws Exception {
+        String token = login("student", "secret123", "192.0.2.71");
+        jdbcTemplate.update(
+                "INSERT INTO quizzes (id, name, time_to_pass, level_id, subject_id) VALUES (900, 'Half built', 5, 1, 1)");
+        jdbcTemplate.update(
+                "INSERT INTO questions (id, question, quiz_id) VALUES (900, 'No answers', 900)");
+        try {
+            mockMvc.perform(post("/api/v1/quizzes/900/attempts")
+                            .with(from("192.0.2.71"))
+                            .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.message").value("Quiz 900 is not ready for attempts"));
+        } finally {
+            jdbcTemplate.update("DELETE FROM questions WHERE id = 900");
+            jdbcTemplate.update("DELETE FROM quizzes WHERE id = 900");
+        }
+    }
+
+    // The level filter is a list, and a list can hold entries no level ever
+    // matches. Over HTTP `?complexity=` arrives as one blank string; a caller
+    // inside the process can pass a null just as easily, and both have to drop
+    // out before the query is built — an empty IN clause fails outright.
+    @Test
+    void ignoresLevelLabelsThatAreBlankOrAbsent() {
+        var everything = quizQueryService.findAll(null, null, PageRequest.of(0, 20));
+        var withJunk = quizQueryService.findAll(
+                null, Arrays.asList(null, "   ", ""), PageRequest.of(0, 20));
+        var lowOnly = quizQueryService.findAll(
+                null, Arrays.asList(null, "  ", " LOW "), PageRequest.of(0, 20));
+
+        assertThat(withJunk.getTotalElements())
+                .as("a list of blanks narrowed the catalogue instead of being ignored")
+                .isEqualTo(everything.getTotalElements());
+        assertThat(lowOnly.getContent()).extracting("complexity").containsOnly("low");
+        assertThat(lowOnly.getTotalElements()).isLessThan(everything.getTotalElements());
+    }
+
     private String login(String username, String password, String remoteAddress) throws Exception {
         MvcResult result = performLogin(username, password, remoteAddress)
                 .andExpect(status().isOk())
@@ -1070,6 +1217,15 @@ class ApiContractTest {
         mockMvc.perform(get("/api/v1/attempts/999999")
                         .header(HttpHeaders.AUTHORIZATION, bearer(token)))
                 .andExpect(status().isNotFound());
+
+        // And completing one is the same answer. It is a different query — the
+        // completion locks the row it loads — so it needs saying separately.
+        mockMvc.perform(post("/api/v1/attempts/999999/complete")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[]}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Attempt 999999 was not found"));
     }
 
     @Test

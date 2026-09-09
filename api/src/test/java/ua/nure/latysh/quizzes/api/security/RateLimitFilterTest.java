@@ -13,6 +13,8 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -43,6 +45,28 @@ class RateLimitFilterTest {
                 .tags("scope", "auth", "outcome", "unavailable")
                 .counter()
                 .count());
+    }
+
+    // Which requests the limiter looks at at all. A CORS preflight is the
+    // browser asking permission before the real request, and the real request
+    // is counted a moment later — counting both would halve every caller's
+    // budget for no reason, and a blocked preflight fails the request that
+    // follows it with a CORS error that names nothing.
+    @Test
+    void countsApiRequestsAndSkipsEverythingElse() {
+        RateLimitFilter filter = new RateLimitFilter(mock(RateLimitService.class),
+                mock(ClientIpResolver.class), mock(ApiErrorWriter.class), properties(),
+                new SimpleMeterRegistry());
+
+        assertFalse(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/api/v1/quizzes")),
+                "an API request went uncounted");
+        assertTrue(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/actuator/health")),
+                "the health probe was counted against a caller's budget");
+
+        MockHttpServletRequest preflight = new MockHttpServletRequest("OPTIONS", "/api/v1/quizzes");
+        preflight.addHeader("Origin", "https://example.test");
+        preflight.addHeader("Access-Control-Request-Method", "GET");
+        assertTrue(filter.shouldNotFilter(preflight), "a preflight was counted as a request of its own");
     }
 
     private static SecurityProperties properties() {

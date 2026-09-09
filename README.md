@@ -26,7 +26,26 @@ Legacy JSP/Servlet WAR більше не є частиною backend.
 ./gradlew clean :api:check :api:integrationTest :api:bootJar
 ~~~
 
-`:api:check` запускає unit та contract-тести й перевіряє 100% line coverage.
+`:api:check` запускає unit та contract-тести й перевіряє покриття:
+
+```
+INSTRUCTION  100.00%
+BRANCH        98.88%   (2 гілки з 178)
+LINE         100.00%
+METHOD       100.00%
+CLASS        100.00%
+```
+
+`jacocoTestCoverageVerification` тримає рядки й методи на 100%, а гілки — за **кількістю**
+непокритих, не за часткою: `MISSEDCOUNT` максимум 2. Рівно дві гілки в модулі не покриє
+жоден тест — охоронці `question != null` у `AdminService.questionsWithAnswers` та
+`AttemptService.loadQuestions`. Обидва місця будують мапу запитань тесту, а потім проходять
+відповіді того самого тесту; це два запити з однаковим `quizId` в одній read-only
+REPEATABLE_READ транзакції, тож запитання кожної відповіді вже в мапі й `null` прийти не
+може. Частка дозволила б цим двом непомітно стати п'ятьма; кількість каже, скільки саме
+недосяжних відомо, і валить збірку на третій.
+
+Ті самі три лічильники гейтить і `quizproject-web` через `npm run coverage:check`.
 `:api:integrationTest` піднімає чисті MySQL 8.4 і Redis 8.2 через Testcontainers. Перевірки
 застосовують production Flyway-міграції, доводять, що різні екземпляри API використовують один
 атомарний rate limit, і що одночасне завершення однієї спроби двома запитами не може подвоїти
