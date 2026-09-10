@@ -38,4 +38,27 @@ INSERT INTO attempts VALUES
   (3, 0, TIMESTAMP '2099-01-01 00:00:00', TIMESTAMP '2099-01-01 00:05:00',
    NULL, FALSE, 2, 6);
 ALTER TABLE attempts ALTER COLUMN id RESTART WITH 4;
+-- What attempts 1 and 2 were shown, as quiz 1 stood when they started. Every
+-- attempt the API issues now carries one of these; seeding them is what makes
+-- the seeded attempts look like the ones production has.
+--
+-- Attempt 3 deliberately has none: its quiz has no questions, and it is the
+-- fixture the "not ready" and "no longer contains valid questions" cases use.
+INSERT INTO attempt_questions (attempt_id, question_id, question_text, answer_id, answer_text, correct) VALUES
+  (1, 1, 'Question 1', 1, 'Answer 1.1', TRUE),
+  (1, 1, 'Question 1', 2, 'Answer 1.2', FALSE),
+  (1, 1, 'Question 1', 3, 'Answer 1.3', FALSE),
+  (1, 1, 'Question 1', 4, 'Answer 1.4', FALSE),
+  (1, 2, 'Question 2', 5, 'Answer 2.1', TRUE),
+  (1, 2, 'Question 2', 6, 'Answer 2.2', TRUE),
+  (1, 2, 'Question 2', 7, 'Answer 2.3', FALSE),
+  (1, 2, 'Question 2', 8, 'Answer 2.4', FALSE),
+  (2, 1, 'Question 1', 1, 'Answer 1.1', TRUE),
+  (2, 1, 'Question 1', 2, 'Answer 1.2', FALSE),
+  (2, 1, 'Question 1', 3, 'Answer 1.3', FALSE),
+  (2, 1, 'Question 1', 4, 'Answer 1.4', FALSE),
+  (2, 2, 'Question 2', 5, 'Answer 2.1', TRUE),
+  (2, 2, 'Question 2', 6, 'Answer 2.2', TRUE),
+  (2, 2, 'Question 2', 7, 'Answer 2.3', FALSE),
+  (2, 2, 'Question 2', 8, 'Answer 2.4', FALSE);
 

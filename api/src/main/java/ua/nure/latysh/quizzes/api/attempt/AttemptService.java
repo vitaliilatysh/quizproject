@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import ua.nure.latysh.quizzes.api.domain.Answer;
 import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
 import ua.nure.latysh.quizzes.api.domain.Attempt;
+import ua.nure.latysh.quizzes.api.domain.AttemptQuestion;
+import ua.nure.latysh.quizzes.api.domain.AttemptQuestionRepository;
 import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
 import ua.nure.latysh.quizzes.api.domain.Question;
 import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
@@ -56,6 +58,7 @@ public class AttemptService {
     private final QuizRepository quizRepository;
     private final UserRepository userRepository;
     private final AttemptRepository attemptRepository;
+    private final AttemptQuestionRepository attemptQuestionRepository;
     private final QuestionRepository questionRepository;
     private final AnswerRepository answerRepository;
     private final ResultRepository resultRepository;
@@ -68,19 +71,21 @@ public class AttemptService {
             QuizRepository quizRepository,
             UserRepository userRepository,
             AttemptRepository attemptRepository,
+            AttemptQuestionRepository attemptQuestionRepository,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             ResultRepository resultRepository,
             EntityManager entityManager,
             QuizMetrics metrics) {
-        this(quizRepository, userRepository, attemptRepository, questionRepository, answerRepository,
-                resultRepository, entityManager, Clock.systemUTC(), metrics);
+        this(quizRepository, userRepository, attemptRepository, attemptQuestionRepository, questionRepository,
+                answerRepository, resultRepository, entityManager, Clock.systemUTC(), metrics);
     }
 
     AttemptService(
             QuizRepository quizRepository,
             UserRepository userRepository,
             AttemptRepository attemptRepository,
+            AttemptQuestionRepository attemptQuestionRepository,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             ResultRepository resultRepository,
@@ -90,6 +95,7 @@ public class AttemptService {
         this.quizRepository = quizRepository;
         this.userRepository = userRepository;
         this.attemptRepository = attemptRepository;
+        this.attemptQuestionRepository = attemptQuestionRepository;
         this.questionRepository = questionRepository;
         this.answerRepository = answerRepository;
         this.resultRepository = resultRepository;
@@ -107,7 +113,11 @@ public class AttemptService {
         Instant expiresAt = startedAt.plus(quiz.getTimeToPass(), ChronoUnit.MINUTES);
         var attempt = new Attempt(startedAt, expiresAt, quiz, user);
         attemptRepository.saveAndFlush(attempt);
-        AttemptResponse response = toResponse(attempt);
+        // Written before the response is built, and the response is built from
+        // it: what the reader is handed and what they will be scored against
+        // are then the same list by construction, not by two reads agreeing.
+        List<AttemptQuestion> snapshot = attemptQuestionRepository.saveAll(copyOfQuiz(attempt, quiz.getId()));
+        AttemptResponse response = toResponse(attempt, snapshot);
         metrics.recordStartedAttempt();
         return response;
     }
@@ -115,7 +125,7 @@ public class AttemptService {
     public AttemptResponse findOwned(int attemptId, String username) {
         Attempt attempt = attemptRepository.findByIdAndUserLogin(attemptId, username)
                 .orElseThrow(() -> missingAttempt(attemptId));
-        return toResponse(attempt);
+        return toResponse(attempt, snapshotOf(attempt));
     }
 
     @Transactional
@@ -130,7 +140,7 @@ public class AttemptService {
             throw new ResourceConflictException("Attempt " + attemptId + " has expired");
         }
 
-        AnswerKey answerKey = loadAnswerKey(attempt.getQuiz().getId());
+        AnswerKey answerKey = answerKeyOf(snapshotOf(attempt));
         if (answerKey.correctByQuestion().isEmpty()) {
             throw new ResourceConflictException("The attempted quiz no longer contains valid questions");
         }
@@ -159,7 +169,40 @@ public class AttemptService {
         return quiz;
     }
 
-    private AttemptResponse toResponse(Attempt attempt) {
+    /**
+     * The snapshot this attempt was issued with.
+     *
+     * <p>The fallback covers exactly one window: a rolling deployment, where an
+     * attempt started by a pod that had not yet migrated is completed by one
+     * that has. Copying the quiz as it stands is what this service did for
+     * every attempt before the snapshot existed, so an attempt from that window
+     * is no worse off than it was — and every attempt started since has rows of
+     * its own, including the ones the migration backfilled.
+     */
+    private List<AttemptQuestion> snapshotOf(Attempt attempt) {
+        List<AttemptQuestion> stored =
+                attemptQuestionRepository.findAllByAttempt_IdOrderByQuestionIdAscAnswerIdAsc(attempt.getId());
+        return stored.isEmpty() ? copyOfQuiz(attempt, attempt.getQuiz().getId()) : stored;
+    }
+
+    /** The quiz as it stands, in the shape the snapshot stores it. */
+    private List<AttemptQuestion> copyOfQuiz(Attempt attempt, int quizId) {
+        var questionTexts = new LinkedHashMap<Integer, String>();
+        for (Question question : questionRepository.findAllByQuiz_IdOrderByIdAsc(quizId)) {
+            questionTexts.put(question.getId(), question.getQuestion());
+        }
+        return answerRepository.findAllByQuestionQuizIdOrderByQuestionIdAndId(quizId).stream()
+                .map(answer -> new AttemptQuestion(
+                        attempt,
+                        answer.getQuestion().getId(),
+                        questionTexts.get(answer.getQuestion().getId()),
+                        answer.getId(),
+                        answer.getAnswer(),
+                        answer.isCorrect()))
+                .toList();
+    }
+
+    private AttemptResponse toResponse(Attempt attempt, List<AttemptQuestion> snapshot) {
         return new AttemptResponse(
                 attempt.getId(),
                 attempt.getQuiz().getId(),
@@ -168,19 +211,16 @@ public class AttemptService {
                 attempt.isCompleted(),
                 attempt.isCompleted() ? attempt.getScore() : null,
                 attempt.getEndTime(),
-                loadQuestions(attempt.getQuiz().getId()));
+                questionsOf(snapshot));
     }
 
-    private List<AttemptQuestionResponse> loadQuestions(int quizId) {
+    private static List<AttemptQuestionResponse> questionsOf(List<AttemptQuestion> snapshot) {
         var questions = new LinkedHashMap<Integer, MutableQuestion>();
-        for (Question question : questionRepository.findAllByQuiz_IdOrderByIdAsc(quizId)) {
-            questions.put(question.getId(), new MutableQuestion(question.getQuestion()));
-        }
-        for (Answer answer : answerRepository.findAllByQuestionQuizIdOrderByQuestionIdAndId(quizId)) {
-            var question = questions.get(answer.getQuestion().getId());
-            if (question != null) {
-                question.answers().add(new AnswerOptionResponse(answer.getId(), answer.getAnswer()));
-            }
+        for (AttemptQuestion option : snapshot) {
+            questions
+                    .computeIfAbsent(option.getQuestionId(), ignored -> new MutableQuestion(option.getQuestionText()))
+                    .answers()
+                    .add(new AnswerOptionResponse(option.getAnswerId(), option.getAnswerText()));
         }
         return questions.entrySet().stream()
                 .map(entry -> new AttemptQuestionResponse(
@@ -188,20 +228,20 @@ public class AttemptService {
                 .toList();
     }
 
-    private AnswerKey loadAnswerKey(int quizId) {
+    // Which answers this attempt may carry, and which of them were the correct
+    // ones — both as of the moment it started, whatever the quiz says now.
+    private static AnswerKey answerKeyOf(List<AttemptQuestion> snapshot) {
         var knownAnswerIds = new HashSet<Integer>();
         var correctByQuestion = new LinkedHashMap<Integer, Set<Integer>>();
         var answerToQuestion = new HashMap<Integer, Integer>();
-        for (Question question : questionRepository.findAllByQuiz_IdOrderByIdAsc(quizId)) {
-            correctByQuestion.put(question.getId(), new HashSet<>());
-        }
-        for (Answer answer : answerRepository.findAllByQuestionQuizIdOrderByQuestionIdAndId(quizId)) {
-            int questionId = answer.getQuestion().getId();
-            int answerId = answer.getId();
+        for (AttemptQuestion option : snapshot) {
+            int questionId = option.getQuestionId();
+            int answerId = option.getAnswerId();
             knownAnswerIds.add(answerId);
             answerToQuestion.put(answerId, questionId);
-            if (answer.isCorrect()) {
-                correctByQuestion.get(questionId).add(answerId);
+            Set<Integer> correct = correctByQuestion.computeIfAbsent(questionId, ignored -> new HashSet<>());
+            if (option.isCorrect()) {
+                correct.add(answerId);
             }
         }
         return new AnswerKey(

@@ -1253,12 +1253,16 @@ class ApiContractTest {
 
     @Test
     void readsAnAttemptInASingleTransaction() {
-        // findOwned issues three queries: the attempt, its questions, and their
-        // answers. Without a read-only transaction around the method each one
-        // ran in its own session on its own connection, so the three could see
-        // three different states of the database — an answer added between the
-        // second and third query would appear under a question that the same
-        // response says does not have it.
+        // findOwned issues two queries: the attempt, and the snapshot it was
+        // issued with. Without a read-only transaction around the method each
+        // one ran in its own session on its own connection, so the two could
+        // see two different states of the database.
+        //
+        // It used to be three — the attempt, its questions, and their answers —
+        // and the snapshot replaced the last two. The count is asserted rather
+        // than bounded because a fourth would mean the snapshot was missed and
+        // the quiz read live instead, which is the fallback for a rolling
+        // deployment and must not become the ordinary path.
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         statistics.setStatisticsEnabled(true);
         attemptService.findOwned(1, "student");   // warm up: first call loads classes and metadata
@@ -1267,8 +1271,8 @@ class ApiContractTest {
         attemptService.findOwned(1, "student");
 
         assertThat(statistics.getPrepareStatementCount())
-                .as("the read still issues its three queries")
-                .isEqualTo(3);
+                .as("the read still issues its two queries")
+                .isEqualTo(2);
         assertThat(statistics.getSessionOpenCount())
                 .as("but they share one session, and so one transaction")
                 .isEqualTo(1);
