@@ -347,6 +347,14 @@ public class AdminService {
      * the administrator who just blocked them. That leaves an installation with
      * no active administrator and no way back, because unblocking anyone needs
      * the role nobody holds any more.
+     *
+     * <p>"For the length of its time to live" is true only because
+     * {@code /api/v1/auth/refresh} re-reads the account before issuing a new
+     * token. It used to issue one from the presented token's own claims, which
+     * made the window unbounded: a blocked account refreshed itself for ever.
+     * A change there that stops re-reading brings this hole back, and this
+     * guard is the last thing standing between it and an installation nobody
+     * can administer.
      */
     private boolean isLastActiveAdministrator(int userId) {
         List<UserAccount> activeAdministrators = userRepository.lockActiveAdministrators();
