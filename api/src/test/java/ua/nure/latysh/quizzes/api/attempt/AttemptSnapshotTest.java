@@ -13,6 +13,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -88,6 +90,16 @@ class AttemptSnapshotTest {
             complete(reader, "198.51.100.33", attemptId, "[1,5,6]")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.score").value(100));
+
+            // The record of what was ticked keeps the options that still exist
+            // and leaves out the ones that do not. results.answer_id is a
+            // foreign key, so a row for a deleted answer is not something the
+            // database will hold — writing one rolls the whole completion back,
+            // which is the failure the snapshot exists to prevent.
+            List<Integer> recorded = jdbcTemplate.queryForList(
+                    "SELECT answer_id FROM results WHERE attempt_id = ? ORDER BY answer_id",
+                    Integer.class, attemptId);
+            assertThat(recorded).containsExactly(1);
         } finally {
             deleteAttempt(attemptId);
             jdbcTemplate.update("INSERT INTO questions VALUES (2, 'Question 2', 1)");

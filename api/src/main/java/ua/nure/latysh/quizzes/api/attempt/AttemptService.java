@@ -1,6 +1,5 @@
 package ua.nure.latysh.quizzes.api.attempt;
 
-import jakarta.persistence.EntityManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -62,7 +61,6 @@ public class AttemptService {
     private final QuestionRepository questionRepository;
     private final AnswerRepository answerRepository;
     private final ResultRepository resultRepository;
-    private final EntityManager entityManager;
     private final Clock clock;
     private final QuizMetrics metrics;
 
@@ -75,10 +73,9 @@ public class AttemptService {
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             ResultRepository resultRepository,
-            EntityManager entityManager,
             QuizMetrics metrics) {
         this(quizRepository, userRepository, attemptRepository, attemptQuestionRepository, questionRepository,
-                answerRepository, resultRepository, entityManager, Clock.systemUTC(), metrics);
+                answerRepository, resultRepository, Clock.systemUTC(), metrics);
     }
 
     AttemptService(
@@ -89,7 +86,6 @@ public class AttemptService {
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             ResultRepository resultRepository,
-            EntityManager entityManager,
             Clock clock,
             QuizMetrics metrics) {
         this.quizRepository = quizRepository;
@@ -99,7 +95,6 @@ public class AttemptService {
         this.questionRepository = questionRepository;
         this.answerRepository = answerRepository;
         this.resultRepository = resultRepository;
-        this.entityManager = entityManager;
         this.clock = clock;
         this.metrics = metrics;
     }
@@ -264,12 +259,29 @@ public class AttemptService {
         return (int) (correctQuestions * 100 / answerKey.correctByQuestion().size());
     }
 
+    /**
+     * Records which options the reader ticked, for the ones still on the quiz.
+     *
+     * <p>`results.answer_id` is a foreign key to `answers`, so a row can only be
+     * written for an answer that still exists. Since an attempt is now scored
+     * against the snapshot it was issued with, a submission may legitimately
+     * name an answer the administrator has deleted since — and inserting a
+     * result for it fails the constraint and rolls the whole completion back,
+     * which is the very thing the snapshot exists to prevent.
+     *
+     * <p>So the ones that are gone are left out rather than allowed to lose the
+     * attempt. Nothing is lost by that beyond what was already lost: the
+     * foreign key cascades, so a result for an answer deleted a moment later
+     * would have been removed anyway. The score does not come from here — it
+     * comes from the snapshot, which still holds every option and which of them
+     * were correct.
+     */
     private void saveAnswers(Attempt attempt, Set<Integer> selectedAnswers) {
         if (selectedAnswers.isEmpty()) {
             return;
         }
-        List<Result> results = selectedAnswers.stream()
-                .map(answerId -> new Result(entityManager.getReference(Answer.class, answerId), attempt))
+        List<Result> results = answerRepository.findAllById(selectedAnswers).stream()
+                .map(answer -> new Result(answer, attempt))
                 .toList();
         resultRepository.saveAll(results);
     }
