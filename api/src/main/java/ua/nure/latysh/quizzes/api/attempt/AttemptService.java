@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-import ua.nure.latysh.quizzes.api.domain.Answer;
 import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
 import ua.nure.latysh.quizzes.api.domain.Attempt;
 import ua.nure.latysh.quizzes.api.domain.AttemptQuestion;
