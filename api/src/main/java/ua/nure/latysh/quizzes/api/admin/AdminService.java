@@ -57,10 +57,14 @@ import java.util.stream.Collectors;
  * would behave correctly by accident; stating it here keeps the guarantee from
  * depending on how a given database happens to be configured.
  *
- * <p>The write methods below override this with their own
- * {@code @Transactional}. A new method that writes must do the same: under a
- * read-only transaction Hibernate never flushes, so a modified entity is
- * discarded without an error.
+ * <p>The write methods below carry their own {@code @Transactional}, because
+ * under a read-only transaction Hibernate never flushes and a modified entity
+ * is discarded without an error. Each one repeats the isolation level, and a
+ * new one must too: a method annotation replaces the class annotation rather
+ * than adding to it, so a bare {@code @Transactional} silently drops the pin
+ * above and leaves the write at whatever the database defaults to. That is the
+ * accident this class was written to avoid. ApiContractTest asserts it for
+ * every transactional method here, so the rule does not rest on this comment.
  */
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -122,7 +126,7 @@ public class AdminService {
         return questionsWithAnswers(quizId);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public SubjectResponse createSubject(String name) {
         String normalizedName = name.trim();
         var subject = new Subject(normalizedName);
@@ -134,7 +138,7 @@ public class AdminService {
         return new SubjectResponse(subject.getId(), normalizedName);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public SubjectResponse updateSubject(int subjectId, String name) {
         String normalizedName = name.trim();
         Subject subject = subjectRepository.findById(subjectId)
@@ -148,7 +152,7 @@ public class AdminService {
         return new SubjectResponse(subjectId, normalizedName);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void deleteSubject(int subjectId) {
         Subject subject = subjectRepository.findById(subjectId)
                 .orElseThrow(() -> missing("Subject", subjectId));
@@ -158,7 +162,7 @@ public class AdminService {
         subjectRepository.delete(subject);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public QuizResponse createQuiz(QuizRequest request) {
         Subject subject = requireSubject(request.subjectId());
         Level level = requireLevel(request.levelId());
@@ -176,7 +180,7 @@ public class AdminService {
         return toQuizResponse(quiz, 0);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public QuizResponse updateQuiz(int quizId, QuizRequest request) {
         Quiz quiz = quizRepository.findByIdFetchingSubjectAndLevel(quizId)
                 .orElseThrow(() -> missing("Quiz", quizId));
@@ -194,7 +198,7 @@ public class AdminService {
         return toQuizResponse(quiz, questionRepository.countByQuiz_Id(quizId));
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void deleteQuiz(int quizId) {
         requireExistsQuiz(quizId);
         resultRepository.deleteAllByQuizId(quizId);
@@ -204,7 +208,7 @@ public class AdminService {
         quizRepository.deleteById(quizId);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public QuestionResponse createQuestion(int quizId, QuestionRequest request) {
         Quiz quiz = quizRepository.findById(quizId)
                 .orElseThrow(() -> missing("Quiz", quizId));
@@ -218,7 +222,7 @@ public class AdminService {
                 .orElseThrow(() -> missing("Question", question.getId()));
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public QuestionResponse updateQuestion(int questionId, QuestionRequest request) {
         validateAnswers(request.answers());
         Question question = questionRepository.findById(questionId)
@@ -241,7 +245,7 @@ public class AdminService {
                 .orElseThrow(() -> missing("Question", questionId));
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void deleteQuestion(int questionId) {
         if (!questionRepository.existsById(questionId)) {
             throw missing("Question", questionId);
@@ -257,7 +261,7 @@ public class AdminService {
                         user.getId(), user.getLogin(), user.getRole().getName(), user.getStatus().getName()));
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public UserResponse updateUserStatus(int userId, String status, String currentUsername) {
         String normalizedStatus = status.toLowerCase(Locale.ROOT);
         UserAccount user = userRepository.findById(userId)
