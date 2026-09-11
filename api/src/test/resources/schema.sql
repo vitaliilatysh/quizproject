@@ -8,6 +8,7 @@ CREATE TABLE users (
   last_name VARCHAR(20) NOT NULL,
   register_date TIMESTAMP NOT NULL,
   login_date TIMESTAMP,
+  credentials_changed_at TIMESTAMP,
   status_id INTEGER NOT NULL,
   role_id INTEGER NOT NULL
 );

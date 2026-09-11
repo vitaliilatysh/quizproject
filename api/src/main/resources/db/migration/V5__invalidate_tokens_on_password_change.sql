@@ -1,0 +1,25 @@
+-- When the password changed, so that tokens issued before it can be refused.
+--
+-- This is a stateless resource server: the subject and roles come from claims
+-- nothing re-checks, and /api/v1/auth/refresh is the one place an account is
+-- read again. That endpoint already refuses a blocked or deleted account. It
+-- did not refuse a stolen token whose owner had since changed their password —
+-- and changing the password is exactly what somebody does when they believe
+-- their account is in someone else's hands. The thief kept refreshing.
+--
+-- Every token carries this value as a claim, and refresh compares the two for
+-- equality. So the column is not read as a date: any change to it is a change,
+-- and the tokens quoting the old value stop being renewed. It is a timestamp
+-- because that is also the answer to "when did this account's password last
+-- change", which nothing else records.
+--
+-- DATETIME(6) so that two changes in the same second are two different values.
+-- At second precision a password changed twice within one second would leave
+-- the second change looking identical to the first, and tokens minted between
+-- them would keep working.
+--
+-- Null means no change recorded, which is every row that exists when this runs.
+-- Tokens minted before the claim existed report the same, so they match and the
+-- migration signs nobody out.
+ALTER TABLE users
+  ADD COLUMN credentials_changed_at DATETIME(6) NULL;

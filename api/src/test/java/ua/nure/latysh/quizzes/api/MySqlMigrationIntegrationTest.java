@@ -37,9 +37,9 @@ class MySqlMigrationIntegrationTest {
 
     @Test
     void startsOnlyAfterApplyingTheCompleteProductionSchema() {
-        assertThat(flyway.info().current().getVersion()).hasToString("4");
+        assertThat(flyway.info().current().getVersion()).hasToString("5");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class))
-                .isEqualTo(4);
+                .isEqualTo(5);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class)).isEqualTo(2);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM quizzes", Integer.class)).isEqualTo(4);
 
@@ -104,5 +104,19 @@ class MySqlMigrationIntegrationTest {
                 ORDER BY column_name
                 """, (resultSet, rowNumber) -> resultSet.getString(1));
         assertThat(snapshotReferences).containsExactly("attempt_id->attempts");
+
+        // Microseconds, not seconds. A token's iat is truncated down to the
+        // second, so a column at second precision would round a password change
+        // back past a token issued earlier in the same second and renew it.
+        // MySQL reports the precision in datetime_precision; H2 does not model
+        // it, so this is the only place the choice can be checked.
+        Integer credentialsChangedPrecision = jdbcTemplate.queryForObject("""
+                SELECT datetime_precision
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'users'
+                  AND column_name = 'credentials_changed_at'
+                """, Integer.class);
+        assertThat(credentialsChangedPrecision).isEqualTo(6);
     }
 }
