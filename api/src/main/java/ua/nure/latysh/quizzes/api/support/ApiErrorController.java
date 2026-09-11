@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.regex.Pattern;
 
 /**
  * The one error response {@code ApiExceptionHandler} cannot produce.
@@ -31,6 +32,9 @@ import java.time.Instant;
  */
 @RestController
 public class ApiErrorController implements ErrorController {
+    /** RFC 3986 pchar, plus the separator, bounded. */
+    private static final Pattern PATH = Pattern.compile("/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{0,512}");
+
     private final Clock clock;
 
     public ApiErrorController() {
@@ -67,9 +71,21 @@ public class ApiErrorController implements ErrorController {
      * The path that failed, not {@code /error}. The container keeps the original
      * on the request; without it every fault would be reported against the same
      * URI, which is what made these indistinguishable in the logs.
+     *
+     * <p>Echoed only if it still looks like a path. It comes from the request
+     * line, so it is the caller's to choose, and this is the one field of the
+     * error body they control — a JSON response with nosniff is not somewhere an
+     * injected payload runs, but nothing is gained by reflecting arbitrary bytes
+     * to whatever reads the error, and a client that renders the field is not
+     * this API's to vouch for. Anything that fails the shape is reported against
+     * the dispatch's own URI instead, which is honest: the path could not be
+     * established.
      */
     private static String path(HttpServletRequest request) {
         Object original = request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);
-        return original instanceof String uri ? uri : request.getRequestURI();
+        if (original instanceof String uri && PATH.matcher(uri).matches()) {
+            return uri;
+        }
+        return request.getRequestURI();
     }
 }

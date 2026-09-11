@@ -67,6 +67,27 @@ class ApiErrorControllerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
     }
 
+    /**
+     * The one field of the error body the caller chooses.
+     *
+     * <p>It comes from the request line, so it is theirs; a JSON response with
+     * nosniff is not somewhere a payload runs, but reflecting arbitrary bytes to
+     * whatever reads the error buys nothing, and a client that renders the field
+     * is not this API's to vouch for. A path that does not look like one is
+     * reported against the dispatch's own URI instead.
+     */
+    @Test
+    void aPathThatIsNotOneIsNotReflectedBack() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI))
+                .thenReturn("/api/v1/<script>alert(1)</script>");
+        when(request.getRequestURI()).thenReturn("/error");
+
+        var response = new ApiErrorController(FIXED).handleError(request);
+
+        assertEquals("/error", response.getBody().path());
+    }
+
     private static HttpServletRequest errorRequest(int status, String path) {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE)).thenReturn(status);
