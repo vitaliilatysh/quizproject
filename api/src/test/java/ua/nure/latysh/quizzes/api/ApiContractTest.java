@@ -26,6 +26,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionAttribute;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 import ua.nure.latysh.quizzes.api.attempt.AttemptService;
@@ -1265,6 +1267,100 @@ class ApiContractTest {
         assertThat(declared).isNotNull();
         assertThat(declared.readOnly()).isTrue();
         assertThat(declared.isolation()).isEqualTo(Isolation.REPEATABLE_READ);
+    }
+
+    /**
+     * Every transactional method on the pinned services, not just the class.
+     *
+     * <p>The test above reads the class annotation, which is the one thing a
+     * write method does not use: Spring takes the most specific annotation and
+     * does not merge, so a method-level {@code @Transactional} replaces the
+     * class-level one outright — readOnly, isolation and all. Fifteen write
+     * methods were declared that way and ran at the database default.
+     *
+     * <p>This asks {@link AnnotationTransactionAttributeSource}, the same class
+     * the transaction interceptor consults at runtime, so it reports the
+     * attribute that will actually be applied rather than the annotation text.
+     */
+    @Test
+    void everyTransactionalMethodOnThePinnedServicesPinsTheIsolationLevel() {
+        var attributes = new AnnotationTransactionAttributeSource();
+        var unpinned = new java.util.ArrayList<String>();
+
+        for (Class<?> type : new Class<?>[]{
+                ua.nure.latysh.quizzes.api.attempt.AttemptService.class,
+                ua.nure.latysh.quizzes.api.account.AccountService.class,
+                ua.nure.latysh.quizzes.api.admin.AdminService.class,
+                ua.nure.latysh.quizzes.api.quiz.QuizQueryService.class,
+                ua.nure.latysh.quizzes.api.result.ResultQueryService.class}) {
+            for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isPublic(method.getModifiers())) {
+                    continue;
+                }
+                TransactionAttribute attribute = attributes.getTransactionAttribute(method, type);
+                if (attribute != null
+                        && attribute.getIsolationLevel() != TransactionDefinition.ISOLATION_REPEATABLE_READ) {
+                    unpinned.add(type.getSimpleName() + "." + method.getName());
+                }
+            }
+        }
+
+        assertThat(unpinned)
+                .as("a bare @Transactional drops the class-level isolation without saying so")
+                .isEmpty();
+    }
+
+    /**
+     * The property the pin buys, on a transaction that writes.
+     *
+     * <p>{@link #holdsOneSnapshotForTheLengthOfARead()} asserts this for the
+     * read-only transactions. A write method reads before it decides — start
+     * counts a quiz's questions twice before admitting an attempt — so it wants
+     * the same snapshot, and until now it did not ask for one. The test
+     * datasource makes the gap visible: H2 defaults to READ COMMITTED, so the
+     * write paths were exercised at a weaker level than MySQL gives them in
+     * production, and a race the pin prevents there would pass here unnoticed.
+     */
+    @Test
+    void aWritingTransactionHoldsOneSnapshotOnlyWhenItAsksFor() throws Exception {
+        String original = jdbcTemplate.queryForObject(
+                "SELECT name FROM subjects WHERE id = 1", String.class);
+
+        assertThat(readTwiceAcrossAConcurrentCommit(TransactionDefinition.ISOLATION_DEFAULT))
+                .as("H2's default is READ COMMITTED, which is the level the writes used to get")
+                .isEqualTo("Renamed Mid-Write");
+
+        assertThat(readTwiceAcrossAConcurrentCommit(TransactionDefinition.ISOLATION_REPEATABLE_READ))
+                .as("the level the write methods now pin holds the snapshot they decide on")
+                .isEqualTo(original);
+    }
+
+    /**
+     * Reads a row inside a read-write transaction, lets another connection
+     * commit a change to it, and returns what the second read sees.
+     */
+    private String readTwiceAcrossAConcurrentCommit(int isolationLevel) throws Exception {
+        String original = jdbcTemplate.queryForObject(
+                "SELECT name FROM subjects WHERE id = 1", String.class);
+        var writer = Executors.newSingleThreadExecutor();
+        var template = new TransactionTemplate(transactionManager);
+        template.setIsolationLevel(isolationLevel);
+        try {
+            return template.execute(status -> {
+                jdbcTemplate.queryForObject("SELECT name FROM subjects WHERE id = 1", String.class);
+                try {
+                    writer.submit(() -> jdbcTemplate.update(
+                            "UPDATE subjects SET name = ? WHERE id = 1", "Renamed Mid-Write")).get();
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+                return jdbcTemplate.queryForObject(
+                        "SELECT name FROM subjects WHERE id = 1", String.class);
+            });
+        } finally {
+            writer.shutdown();
+            jdbcTemplate.update("UPDATE subjects SET name = ? WHERE id = 1", original);
+        }
     }
 
     @Test

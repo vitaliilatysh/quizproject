@@ -30,10 +30,14 @@ import java.time.Instant;
  * would behave correctly by accident; stating it here keeps the guarantee from
  * depending on how a given database happens to be configured.
  *
- * <p>The write methods below override this with their own
- * {@code @Transactional}. A new method that writes must do the same: under a
- * read-only transaction Hibernate never flushes, so a modified entity is
- * discarded without an error.
+ * <p>The write methods below carry their own {@code @Transactional}, because
+ * under a read-only transaction Hibernate never flushes and a modified entity
+ * is discarded without an error. Each one repeats the isolation level, and a
+ * new one must too: a method annotation replaces the class annotation rather
+ * than adding to it, so a bare {@code @Transactional} silently drops the pin
+ * above and leaves the write at whatever the database defaults to. That is the
+ * accident this class was written to avoid. ApiContractTest asserts it for
+ * every transactional method here, so the rule does not rest on this comment.
  */
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -56,7 +60,7 @@ public class AccountService {
         this.clock = Clock.systemUTC();
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void register(RegisterRequest request) {
         Instant now = Instant.now(clock);
         var user = new UserAccount();
@@ -77,7 +81,7 @@ public class AccountService {
         }
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void recordLogin(String username) {
         userRepository.findByLogin(username)
                 .ifPresent(user -> user.setLoginDate(Instant.now(clock)));
@@ -96,7 +100,7 @@ public class AccountService {
                 user.getLoginDate());
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void changePassword(String username, ChangePasswordRequest request) {
         var user = userRepository.findByLogin(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Current user was not found"));

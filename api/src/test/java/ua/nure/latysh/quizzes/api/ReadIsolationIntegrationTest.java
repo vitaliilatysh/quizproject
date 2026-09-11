@@ -18,8 +18,9 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The read services declare {@code REPEATABLE_READ} so that the several queries
- * behind one response cannot each see a different state of the database. Whether
+ * The services declare {@code REPEATABLE_READ} so that the several queries
+ * behind one response cannot each see a different state of the database — the
+ * write methods included, since each of them reads before it decides. Whether
  * that holds is decided by the database, not by Spring, so asserting it on H2
  * would verify the wrong engine: this runs against the MySQL the API actually
  * ships against.

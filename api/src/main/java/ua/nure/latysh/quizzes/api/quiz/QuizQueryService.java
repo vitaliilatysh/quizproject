@@ -29,10 +29,12 @@ import java.util.stream.Collectors;
  * would behave correctly by accident; stating it here keeps the guarantee from
  * depending on how a given database happens to be configured.
  *
- * <p>This service only reads. A method that writes must override the class
- * annotation with its own {@code @Transactional}: under a read-only
- * transaction Hibernate never flushes, so a modified entity is discarded
- * without an error.
+ * <p>This service only reads. A method that writes needs its own
+ * {@code @Transactional}, because under a read-only transaction Hibernate
+ * never flushes and a modified entity is discarded without an error — and it
+ * must name the isolation level again. A method annotation replaces the class
+ * annotation rather than adding to it, so a bare {@code @Transactional} would
+ * drop the pin above without saying so.
  */
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
