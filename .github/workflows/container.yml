@@ -108,6 +108,7 @@ jobs:
             --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
             --cap-drop ALL --security-opt no-new-privileges \
             --publish 127.0.0.1:8081:8081 \
+            --publish 127.0.0.1:9081:9081 \
             --env 'DB_URL=jdbc:mysql://quiz-mysql:3306/tests_db?characterEncoding=UTF-8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false' \
             --env DB_USERNAME=quiz_app \
             --env DB_PASSWORD=container-db-password \
@@ -132,7 +133,7 @@ jobs:
 
           for attempt in {1..60}; do
             if assert_body_contains \
-              http://127.0.0.1:8081/actuator/health/readiness '"status":"UP"'; then
+              http://127.0.0.1:9081/actuator/health/readiness '"status":"UP"'; then
               break
             fi
             if [ "${attempt}" -eq 60 ]; then
@@ -143,9 +144,17 @@ jobs:
           done
 
           test "$(docker inspect --format '{{.Config.User}}' quiz-api-test)" = '10001:10001'
-          assert_body_contains http://127.0.0.1:8081/actuator/health/liveness '"status":"UP"'
+          assert_body_contains http://127.0.0.1:9081/actuator/health/liveness '"status":"UP"'
           assert_body_contains http://127.0.0.1:8081/v3/api-docs '"title":"Quiz REST API"'
-          assert_body_contains http://127.0.0.1:8081/actuator/prometheus '^jvm_memory_used_bytes'
+          assert_body_contains http://127.0.0.1:9081/actuator/prometheus '^jvm_memory_used_bytes'
+
+          # The other half of the same claim: the registry is on 9081 and only there.
+          # A test that just checks 9081 serves it would still pass if 8081 served it
+          # too, which is the arrangement this port split exists to end.
+          if curl --silent --fail http://127.0.0.1:8081/actuator/prometheus; then
+            echo "the API port is serving the metrics registry" >&2
+            exit 1
+          fi
 
       # A workflow_run trigger matches the upstream workflow's declared name,
       # and a mismatch does not error — the deploy simply never fires, silently.

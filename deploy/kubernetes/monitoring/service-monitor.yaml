@@ -14,9 +14,11 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: quiz-api
-      app.kubernetes.io/component: backend
+      app.kubernetes.io/component: management
   endpoints:
-    - port: http
+    # The management connector, not the API one. Actuator is not served on the
+    # port the quiz-api Service publishes, so scraping there now gets nothing.
+    - port: management
       path: /actuator/prometheus
       interval: 30s
       scrapeTimeout: 10s

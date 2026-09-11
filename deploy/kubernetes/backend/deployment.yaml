@@ -23,7 +23,7 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: /actuator/prometheus
-        prometheus.io/port: "8081"
+        prometheus.io/port: "9081"
       labels:
         app.kubernetes.io/name: quiz-api
         app.kubernetes.io/component: backend
@@ -54,6 +54,12 @@ spec:
             - name: http
               containerPort: 8081
               protocol: TCP
+            # Actuator only. Reached by the kubelet for the probes and by Prometheus
+            # through the quiz-api-management Service; deliberately absent from the
+            # quiz-api Service, which is what anything public is routed to.
+            - name: management
+              containerPort: 9081
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: quiz-api-config
@@ -69,21 +75,21 @@ spec:
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: http
+              port: management
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: http
+              port: management
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: http
+              port: management
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3

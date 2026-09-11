@@ -40,6 +40,15 @@ server:
     include-message: never
 
 management:
+  # Actuator is served on its own connector, not on the API port. /actuator/metrics
+  # is administrator-only, but /actuator/prometheus has to stay open for the scraper
+  # to reach it, and it publishes the same registry: every counter, the JVM build,
+  # the connection pool, and a tag per request URI. Sharing a port meant whatever
+  # reaches the API reaches those too. This port is not on the public Service, so
+  # the boundary is the connector rather than a list of paths that has to be kept
+  # right each time an endpoint is exposed.
+  server:
+    port: ${MANAGEMENT_PORT:9081}
   health:
     redis:
       enabled: ${REDIS_HEALTH_ENABLED:true}
