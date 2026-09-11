@@ -111,10 +111,18 @@ Flyway автоматично перевіряє та застосовує мі�
 - `POST /api/v1/attempts/{id}/complete` — завершення спроби;
 - `GET /api/v1/results/me` — результати користувача;
 - `/api/v1/admin/**` — адміністративні операції;
+- `/swagger-ui.html` — інтерактивна OpenAPI-документація.
+
+Actuator слухає окремий порт (`MANAGEMENT_PORT`, типово `9081`), а не порт API
+(`API_PORT`, типово `8081`). `/actuator/prometheus` мусить лишатися відкритим, бо
+scraper не має чим автентифікуватися, і віддає він весь реєстр — лічильники
+автентифікації, версію JVM, пул з'єднань, серію на кожен URI API. Тому цей порт не
+опублікований у Service `quiz-api`: до нього дістаються kubelet (проби), Prometheus
+(через headless Service `quiz-api-management`) і оператор через `kubectl port-forward`.
+
 - `/actuator/health` — стан застосунку;
 - `/actuator/metrics` — метрики, доступні лише адміністратору;
-- `/actuator/prometheus` — endpoint для Prometheus scrape;
-- `/swagger-ui.html` — інтерактивна OpenAPI-документація.
+- `/actuator/prometheus` — endpoint для Prometheus scrape.
 
 Захищені маршрути приймають `Authorization: Bearer <token>`. Адміністративні операції
 доступні лише ролі `ADMIN`.

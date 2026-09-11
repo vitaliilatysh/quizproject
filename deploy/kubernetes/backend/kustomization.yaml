@@ -6,6 +6,7 @@ resources:
   - config-map.yaml
   - deployment.yaml
   - service.yaml
+  - management-service.yaml
   - pod-disruption-budget.yaml
   - redis-deployment.yaml
   - redis-service.yaml

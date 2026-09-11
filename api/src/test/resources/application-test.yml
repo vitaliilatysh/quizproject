@@ -1,3 +1,9 @@
+# An ephemeral actuator port. application.yml reads MANAGEMENT_PORT, so overriding
+# the variable rather than management.server.port leaves the production wiring under
+# test: drop that line from application.yml and local.management.port stops resolving.
+# 0 rather than 9081 because two test JVMs on one CI runner would fight over a fixed one.
+MANAGEMENT_PORT: 0
+
 spring:
   flyway:
     enabled: false

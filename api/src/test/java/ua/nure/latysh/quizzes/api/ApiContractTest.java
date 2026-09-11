@@ -756,40 +756,20 @@ class ApiContractTest {
                 .andExpect(jsonPath("$.message").value("Rate limit exceeded"));
     }
 
+    /**
+     * Actuator moved to its own connector, so none of its paths are mapped here.
+     * What it does serve, and to whom, is asserted on real ports by
+     * {@link ActuatorPortIntegrationTest} — MockMvc cannot tell two connectors apart.
+     */
     @Test
-    void healthAndApiDocumentationArePublic() throws Exception {
-        mockMvc.perform(get("/actuator/health")
-                        .header("X-Correlation-ID", "contract-request-123"))
-                .andExpect(status().isOk())
-                .andExpect(header().string("X-Correlation-ID", "contract-request-123"))
-                .andExpect(header().doesNotExist("X-RateLimit-Limit"))
-                .andExpect(jsonPath("$.status").value("UP"));
-
-        mockMvc.perform(get("/actuator/health/liveness"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
-
-        mockMvc.perform(get("/actuator/health/readiness"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
-
-        mockMvc.perform(get("/actuator/metrics"))
-                .andExpect(status().isUnauthorized());
-        String adminToken = login("admin", "secret123", "192.0.2.90");
-        mockMvc.perform(get("/actuator/metrics")
-                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.names").isArray());
-        mockMvc.perform(get("/actuator/metrics/quiz.rate.limit.requests")
-                        .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("quiz.rate.limit.requests"));
-
-        mockMvc.perform(get("/actuator/prometheus"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("quiz_authentication_attempts_total")))
-                .andExpect(content().string(containsString("quiz_rate_limit_requests_total")))
-                .andExpect(content().string(containsString("http_server_requests_seconds")));
+    void apiDocumentationIsPublicAndActuatorIsNotServedOnTheApiPort() throws Exception {
+        // 404 where nothing is mapped, 401 where a security rule denies first
+        // (/actuator/metrics). Either way the API port does not answer with it.
+        for (String actuatorPath : new String[]{"/actuator/health", "/actuator/health/liveness",
+                "/actuator/health/readiness", "/actuator/metrics", "/actuator/prometheus"}) {
+            mockMvc.perform(get(actuatorPath))
+                    .andExpect(status().is4xxClientError());
+        }
 
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

@@ -34,6 +34,8 @@ COPY --from=builder --chown=10001:10001 /workspace/quiz-api.jar /app/quiz-api.ja
 
 USER 10001:10001
 
-EXPOSE 8081
+# 8081 is the API. 9081 is actuator, and it is a separate port so that publishing
+# the API does not publish the metrics registry along with it.
+EXPOSE 8081 9081
 
 ENTRYPOINT ["java", "-jar", "/app/quiz-api.jar"]

@@ -1,0 +1,31 @@
+# The actuator connector, separate from the quiz-api Service on purpose.
+#
+# quiz-api is what an Ingress or a gateway is pointed at, and every path it
+# carries is public. /actuator/prometheus cannot be one of them: the scraper has
+# no credential to present, so the endpoint has to stay open, and it publishes
+# the whole registry — the authentication counters, the JVM build, the connection
+# pool, a series per API URI. Keeping it on a Service nothing routes to from
+# outside is what makes "open" acceptable.
+#
+# Headless (clusterIP: None) because the only clients are Prometheus, which
+# scrapes pods individually, and an operator running kubectl port-forward. There
+# is nothing here to load balance.
+apiVersion: v1
+kind: Service
+metadata:
+  name: quiz-api-management
+  namespace: quizproject
+  labels:
+    app.kubernetes.io/name: quiz-api
+    app.kubernetes.io/component: management
+    app.kubernetes.io/part-of: quizproject
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: quiz-api
+  ports:
+    - name: management
+      port: 9081
+      targetPort: management
+      protocol: TCP

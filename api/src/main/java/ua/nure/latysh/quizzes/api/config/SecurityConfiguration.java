@@ -42,6 +42,11 @@ public class SecurityConfiguration {
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // One chain, two connectors: Spring applies this to the management
+                // server as well, and the /actuator rules below only ever match there
+                // now that actuator has its own port. permitAll on one of them means
+                // "open to anything that can reach the management port", which is the
+                // kubelet, Prometheus, and a port-forward — not the internet.
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register",
                                 "/actuator/health", "/actuator/health/**",
