@@ -106,17 +106,22 @@ tasks.named('jacocoTestReport') {
 // count rather than by ratio.
 //
 // A ratio would have been the obvious choice and it is the wrong one here.
-// Exactly two branches in this module cannot be covered by any test:
+// Exactly one branch in this module cannot be covered by any test:
 //
 //   AdminService.questionsWithAnswers   the `question != null` guard
-//   AttemptService.loadQuestions        the same guard
 //
-// Both build a map of a quiz's questions and then walk that quiz's answers,
+// It builds a map of a quiz's questions and then walks that quiz's answers,
 // from two queries scoped to the same quiz id inside one read-only
 // REPEATABLE_READ transaction. Every answer's question is therefore already in
 // the map, and the null the guard is written for cannot arrive. A ratio floor
-// would let those two grow into five without anyone noticing; a count says how
-// many are known to be unreachable, and fails the build on the third.
+// would let that one grow into five without anyone noticing; a count says how
+// many are known to be unreachable, and fails the build on the next.
+//
+// It was two until AttemptService stopped rebuilding a quiz's questions to
+// score an attempt and started reading the snapshot it was issued with. The
+// second guard went with the method that held it, which is the ordinary way a
+// number like this comes down: not by covering the branch, but by the code
+// that needed it going away.
 tasks.named('jacocoTestCoverageVerification') {
     dependsOn tasks.named('test')
     violationRules {
@@ -134,7 +139,7 @@ tasks.named('jacocoTestCoverageVerification') {
             limit {
                 counter = 'BRANCH'
                 value = 'MISSEDCOUNT'
-                maximum = 2
+                maximum = 1
             }
         }
     }

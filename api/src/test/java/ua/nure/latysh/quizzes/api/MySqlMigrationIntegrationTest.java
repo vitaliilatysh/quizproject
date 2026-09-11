@@ -37,9 +37,9 @@ class MySqlMigrationIntegrationTest {
 
     @Test
     void startsOnlyAfterApplyingTheCompleteProductionSchema() {
-        assertThat(flyway.info().current().getVersion()).hasToString("3");
+        assertThat(flyway.info().current().getVersion()).hasToString("4");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class))
-                .isEqualTo(3);
+                .isEqualTo(4);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class)).isEqualTo(2);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM quizzes", Integer.class)).isEqualTo(4);
 
@@ -78,5 +78,31 @@ class MySqlMigrationIntegrationTest {
         assertThat(paginatedQueryIndexes).containsExactly(
                 "idx_attempts_completed_end_time:completed:A,end_time:D,id:D",
                 "idx_attempts_user_completed_end_time:user_id:A,completed:A,end_time:D,id:D");
+
+        List<String> snapshotColumns = jdbcTemplate.query("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'attempt_questions'
+                ORDER BY ordinal_position
+                """, (resultSet, rowNumber) -> resultSet.getString(1));
+        assertThat(snapshotColumns).containsExactly(
+                "id", "attempt_id", "question_id", "question_text", "answer_id", "answer_text", "correct");
+
+        // The snapshot references the attempt and nothing else, and that is the
+        // design rather than an omission: a row here has to outlive the question
+        // it copied. A foreign key to questions or answers would either cascade
+        // the snapshot away with the row it describes — losing the reader's
+        // attempt, which is the bug this table exists to fix — or stop the
+        // administrator deleting it at all.
+        List<String> snapshotReferences = jdbcTemplate.query("""
+                SELECT CONCAT(column_name, '->', referenced_table_name)
+                FROM information_schema.key_column_usage
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'attempt_questions'
+                  AND referenced_table_name IS NOT NULL
+                ORDER BY column_name
+                """, (resultSet, rowNumber) -> resultSet.getString(1));
+        assertThat(snapshotReferences).containsExactly("attempt_id->attempts");
     }
 }
