@@ -40,6 +40,12 @@ public class ApiUserDetailsService implements UserDetailsService, UserDetailsPas
      * <p>Implementing this interface is what makes the upgrade happen at all:
      * DaoAuthenticationProvider consults the encoder either way, but only
      * rewrites the password when a UserDetailsPasswordService bean exists.
+     *
+     * <p>Deliberately does not stamp {@code credentialsChangedAt}. The password
+     * has not changed here — only its encoding — and stamping it would sign
+     * every other session out the first time its owner logged in after the
+     * upgrade, for no security gain. That column records a change the account
+     * holder asked for; see {@code AccountService.changePassword}.
      */
     @Override
     @Transactional

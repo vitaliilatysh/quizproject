@@ -716,11 +716,13 @@ class ApiContractTest {
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.message").value("Current user was not found"));
         } finally {
+            // Columns named rather than positional: a VALUES list matched to the
+            // table by position breaks silently the next time a column is added.
             jdbcTemplate.update("""
-                    INSERT INTO users VALUES (
-                        7, 'orphan', 'secret123', 'Orphan', 'User',
-                        TIMESTAMP '2025-01-07 09:00:00', NULL, 1, 2
-                    )
+                    INSERT INTO users
+                      (id, login, password, first_name, last_name, register_date, status_id, role_id)
+                    VALUES (7, 'orphan', 'secret123', 'Orphan', 'User',
+                            TIMESTAMP '2025-01-07 09:00:00', 1, 2)
                     """);
         }
     }
@@ -1147,10 +1149,10 @@ class ApiContractTest {
         // stay readable until something re-encodes them. This fixture is in
         // exactly that state, which is why every other login test works.
         jdbcTemplate.update("""
-                INSERT INTO users VALUES (
-                    50, 'legacyuser', 'secret123', 'Legacy', 'User',
-                    TIMESTAMP '2025-01-08 09:00:00', NULL, 1, 2
-                )
+                INSERT INTO users
+                  (id, login, password, first_name, last_name, register_date, status_id, role_id)
+                VALUES (50, 'legacyuser', 'secret123', 'Legacy', 'User',
+                        TIMESTAMP '2025-01-08 09:00:00', 1, 2)
                 """);
         try {
             assertThat(storedPassword("legacyuser")).isEqualTo("secret123");
