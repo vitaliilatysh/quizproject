@@ -1,5 +1,6 @@
 package ua.nure.latysh.quizzes.api.config;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,6 +49,15 @@ public class SecurityConfiguration {
                 // "open to anything that can reach the management port", which is the
                 // kubelet, Prometheus, and a port-forward — not the internet.
                 .authorizeHttpRequests(requests -> requests
+                        // The container's own error forward. Not a request anyone
+                        // made: the servlet re-dispatches to /error after a failure,
+                        // and anyRequest().denyAll() below was catching that forward
+                        // and answering 401 — so a failing database reached the
+                        // client as "authenticate", and nothing was recorded as 5xx.
+                        // The matcher is on the dispatcher type rather than the path,
+                        // so a request someone aims at /error themselves is still
+                        // denied like any other unmapped path.
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register",
                                 "/actuator/health", "/actuator/health/**",
                                 "/actuator/info", "/actuator/prometheus",
