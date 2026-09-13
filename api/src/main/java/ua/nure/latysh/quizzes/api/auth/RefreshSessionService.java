@@ -1,5 +1,6 @@
 package ua.nure.latysh.quizzes.api.auth;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ua.nure.latysh.quizzes.api.config.SecurityProperties;
@@ -25,6 +26,7 @@ public class RefreshSessionService {
     private final SecureRandom secureRandom;
     private final Clock clock;
 
+    @Autowired
     public RefreshSessionService(
             RefreshSessionRepository sessionRepository,
             UserRepository userRepository,
