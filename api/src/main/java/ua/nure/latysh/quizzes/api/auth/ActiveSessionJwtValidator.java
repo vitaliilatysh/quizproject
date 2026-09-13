@@ -1,5 +1,6 @@
 package ua.nure.latysh.quizzes.api.auth;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
@@ -18,6 +19,7 @@ public class ActiveSessionJwtValidator implements OAuth2TokenValidator<Jwt> {
     private final RefreshSessionRepository sessionRepository;
     private final Clock clock;
 
+    @Autowired
     public ActiveSessionJwtValidator(RefreshSessionRepository sessionRepository) {
         this(sessionRepository, Clock.systemUTC());
     }
