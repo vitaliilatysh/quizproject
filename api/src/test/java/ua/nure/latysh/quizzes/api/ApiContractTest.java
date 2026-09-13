@@ -767,11 +767,6 @@ class ApiContractTest {
     }
 
     /**
-     * Actuator moved to its own connector, so none of its paths are mapped here.
-     * What it does serve, and to whom, is asserted on real ports by
-     * {@link ActuatorPortIntegrationTest} — MockMvc cannot tell two connectors apart.
-     */
-    /**
      * The request-shape failures, each with its own status and the API's own body.
      *
      * <p>All four used to reach the client as 401. Spring raises them before a
@@ -847,6 +842,11 @@ class ApiContractTest {
                 .noneMatch(event -> event.getLevel() == Level.ERROR);
     }
 
+    /**
+     * Actuator moved to its own connector, so none of its paths are mapped here.
+     * What it does serve, and to whom, is asserted on real ports by
+     * {@link ActuatorPortIntegrationTest} — MockMvc cannot tell two connectors apart.
+     */
     @Test
     void apiDocumentationIsPublicAndActuatorIsNotServedOnTheApiPort() throws Exception {
         // 404 where nothing is mapped, 401 where a security rule denies first

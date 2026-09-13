@@ -25,6 +25,7 @@ import java.util.Set;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    private static final String REQUEST_VALIDATION_FAILED = "Request validation failed";
     private static final Logger LOGGER = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     private final Clock clock;
@@ -54,12 +55,12 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     ResponseEntity<ApiError> invalidRequest(ConstraintViolationException exception, HttpServletRequest request) {
-        return response(HttpStatus.BAD_REQUEST, "Request validation failed", request.getRequestURI());
+        return response(HttpStatus.BAD_REQUEST, REQUEST_VALIDATION_FAILED, request.getRequestURI());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> invalidBody(MethodArgumentNotValidException exception, HttpServletRequest request) {
-        return response(HttpStatus.BAD_REQUEST, "Request validation failed", request.getRequestURI());
+        return response(HttpStatus.BAD_REQUEST, REQUEST_VALIDATION_FAILED, request.getRequestURI());
     }
 
     @ExceptionHandler(AuthenticationException.class)
@@ -79,7 +80,7 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     ResponseEntity<ApiError> malformedRequest(Exception exception, HttpServletRequest request) {
-        return response(HttpStatus.BAD_REQUEST, "Request validation failed", request.getRequestURI());
+        return response(HttpStatus.BAD_REQUEST, REQUEST_VALIDATION_FAILED, request.getRequestURI());
     }
 
     /**
