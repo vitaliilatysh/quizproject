@@ -37,9 +37,9 @@ class MySqlMigrationIntegrationTest {
 
     @Test
     void startsOnlyAfterApplyingTheCompleteProductionSchema() {
-        assertThat(flyway.info().current().getVersion()).hasToString("5");
+        assertThat(flyway.info().current().getVersion()).hasToString("6");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class))
-                .isEqualTo(5);
+                .isEqualTo(6);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles", Integer.class)).isEqualTo(2);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM quizzes", Integer.class)).isEqualTo(4);
 
@@ -118,5 +118,24 @@ class MySqlMigrationIntegrationTest {
                   AND column_name = 'credentials_changed_at'
                 """, Integer.class);
         assertThat(credentialsChangedPrecision).isEqualTo(6);
+
+        List<String> refreshSessionColumns = jdbcTemplate.query("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'refresh_sessions'
+                ORDER BY ordinal_position
+                """, (resultSet, rowNumber) -> resultSet.getString(1));
+        assertThat(refreshSessionColumns).containsExactly(
+                "id", "user_id", "token_hash", "created_at", "last_used_at", "expires_at", "revoked_at");
+
+        String deleteRule = jdbcTemplate.queryForObject("""
+                SELECT delete_rule
+                FROM information_schema.referential_constraints
+                WHERE constraint_schema = DATABASE()
+                  AND table_name = 'refresh_sessions'
+                  AND constraint_name = 'fk_refresh_sessions_user'
+                """, String.class);
+        assertThat(deleteRule).isEqualTo("CASCADE");
     }
 }

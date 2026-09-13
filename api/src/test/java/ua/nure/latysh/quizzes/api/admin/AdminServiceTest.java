@@ -3,6 +3,7 @@ package ua.nure.latysh.quizzes.api.admin;
 import org.junit.jupiter.api.Test;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.AnswerRequest;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.QuestionRequest;
+import ua.nure.latysh.quizzes.api.auth.RefreshSessionService;
 import ua.nure.latysh.quizzes.api.domain.Answer;
 import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
 import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
@@ -52,10 +53,12 @@ class AdminServiceTest {
     private final ResultRepository resultRepository = mock(ResultRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final StatusRepository statusRepository = mock(StatusRepository.class);
+    private final RefreshSessionService refreshSessions = mock(RefreshSessionService.class);
 
     private final AdminService service = new AdminService(
             subjectRepository, levelRepository, quizRepository, questionRepository,
-            answerRepository, attemptRepository, resultRepository, userRepository, statusRepository);
+            answerRepository, attemptRepository, resultRepository, userRepository, statusRepository,
+            refreshSessions);
 
     private static final QuestionRequest QUESTION = new QuestionRequest("Що таке JVM?", List.of(
             new AnswerRequest("Віртуальна машина", true),

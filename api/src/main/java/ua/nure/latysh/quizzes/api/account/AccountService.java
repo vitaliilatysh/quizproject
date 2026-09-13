@@ -5,6 +5,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import ua.nure.latysh.quizzes.api.auth.RefreshSessionService;
 import ua.nure.latysh.quizzes.api.auth.RegisterRequest;
 import ua.nure.latysh.quizzes.api.domain.RoleRepository;
 import ua.nure.latysh.quizzes.api.domain.StatusRepository;
@@ -46,17 +47,20 @@ public class AccountService {
     private final RoleRepository roleRepository;
     private final StatusRepository statusRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshSessionService refreshSessions;
     private final Clock clock;
 
     public AccountService(
             UserRepository userRepository,
             RoleRepository roleRepository,
             StatusRepository statusRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            RefreshSessionService refreshSessions) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.statusRepository = statusRepository;
         this.passwordEncoder = passwordEncoder;
+        this.refreshSessions = refreshSessions;
         this.clock = Clock.systemUTC();
     }
 
@@ -112,35 +116,7 @@ public class AccountService {
             throw new ResourceConflictException("New password must differ from the current password");
         }
         user.setPassword(passwordEncoder.encode(request.newPassword()));
-        // Moving this is what invalidates the tokens already out there. Changing
-        // a password is what somebody does when they think their account is in
-        // someone else's hands, and without this it did nothing to them: a thief
-        // holding one kept renewing it indefinitely.
         user.setCredentialsChangedAt(Instant.now(clock));
-    }
-
-    /**
-     * A token-sized description of this account's current credentials.
-     *
-     * <p>Goes into every token as the {@code cca} claim and is compared for
-     * equality on refresh. Equality rather than "is the token older than the
-     * change" on purpose: a token's {@code iat} is stamped after the check that
-     * authorised it, so an ordering comparison lost a race. A refresh could read
-     * the pre-change value, the change could commit, and the token issued a
-     * moment later carried an {@code iat} newer than the change — renewable for
-     * ever, which is the state this whole mechanism exists to end. A token
-     * carrying the value its own authorising read saw cannot do that: once the
-     * stored value moves, every token still quoting the old one is refused,
-     * whenever they were minted.
-     *
-     * <p>The empty string means no password change is recorded — every account
-     * that existed before the column did, and every token minted before this
-     * claim did, which is why they keep working across the deployment.
-     */
-    public String credentialsStamp(String username) {
-        return userRepository.findByLogin(username)
-                .map(UserAccount::getCredentialsChangedAt)
-                .map(Instant::toString)
-                .orElse("");
+        refreshSessions.revokeAll(username);
     }
 }

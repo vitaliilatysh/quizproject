@@ -11,6 +11,7 @@ data:
   API_PORT: "8081"
   MANAGEMENT_PORT: "9081"
   JWT_TTL: "PT15M"
+  REFRESH_TOKEN_TTL: "P7D"
   CORS_ALLOWED_ORIGINS: "https://quiz.example.com"
   RATE_LIMIT_BACKEND: "redis"
   REDIS_HOST: "quiz-redis"

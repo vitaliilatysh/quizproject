@@ -48,7 +48,8 @@ class ClientIpResolverTest {
     }
 
     private static SecurityProperties properties() {
-        return new SecurityProperties("secret", "issuer", Duration.ofMinutes(15), List.of("https://example.test"),
+        return new SecurityProperties("secret", "issuer", Duration.ofMinutes(15), Duration.ofDays(7),
+                List.of("https://example.test"),
                 new SecurityProperties.RateLimitProperties(
                         MEMORY, 100, 3, Duration.ofMinutes(1), 100,
                         List.of("10.0.0.0/8", "127.0.0.1/32")));

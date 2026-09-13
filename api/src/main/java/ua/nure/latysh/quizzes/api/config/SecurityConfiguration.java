@@ -58,14 +58,14 @@ public class SecurityConfiguration {
                         // so a request someone aims at /error themselves is still
                         // denied like any other unmapped path.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register",
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh",
                                 "/actuator/health", "/actuator/health/**",
                                 "/actuator/info", "/actuator/prometheus",
                                 "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
                         .permitAll()
                         .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole(ADMIN_ROLE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/quizzes/**").permitAll()
-                        .requestMatchers("/api/v1/auth/refresh",
+                        .requestMatchers("/api/v1/auth/logout",
                                 "/api/v1/results/me", "/api/v1/users/me", "/api/v1/users/me/**",
                                 "/api/v1/attempts/**",
                                 "/api/v1/quizzes/*/attempts").hasAnyRole("USER", ADMIN_ROLE)

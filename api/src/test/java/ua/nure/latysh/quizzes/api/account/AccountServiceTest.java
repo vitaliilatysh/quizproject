@@ -2,6 +2,7 @@ package ua.nure.latysh.quizzes.api.account;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import ua.nure.latysh.quizzes.api.auth.RefreshSessionService;
 import ua.nure.latysh.quizzes.api.auth.RegisterRequest;
 import ua.nure.latysh.quizzes.api.domain.Role;
 import ua.nure.latysh.quizzes.api.domain.RoleRepository;
@@ -33,8 +34,9 @@ class AccountServiceTest {
     private final RoleRepository roleRepository = mock(RoleRepository.class);
     private final StatusRepository statusRepository = mock(StatusRepository.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
+    private final RefreshSessionService refreshSessions = mock(RefreshSessionService.class);
     private final AccountService service =
-            new AccountService(userRepository, roleRepository, statusRepository, passwordEncoder);
+            new AccountService(userRepository, roleRepository, statusRepository, passwordEncoder, refreshSessions);
 
     private static final RegisterRequest REQUEST =
             new RegisterRequest("olena", "Olena", "Kovalchuk", "Password1!");

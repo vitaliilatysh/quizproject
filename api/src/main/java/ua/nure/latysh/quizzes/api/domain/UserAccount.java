@@ -35,13 +35,7 @@ public class UserAccount {
     @Column(name = "login_date")
     private Instant loginDate;
 
-    /**
-     * When this account's password last changed, or null if it never has.
-     *
-     * <p>Every token carries it as a claim and {@code /api/v1/auth/refresh}
-     * compares the two: a token quoting a value other than the current one is
-     * not renewed. Moving this is what ends the sessions already out there.
-     */
+    /** When this account's password last changed, or null if it never has. */
     @Column(name = "credentials_changed_at")
     private Instant credentialsChangedAt;
 
@@ -103,10 +97,6 @@ public class UserAccount {
 
     public void setLoginDate(Instant loginDate) {
         this.loginDate = loginDate;
-    }
-
-    public Instant getCredentialsChangedAt() {
-        return credentialsChangedAt;
     }
 
     public void setCredentialsChangedAt(Instant credentialsChangedAt) {
