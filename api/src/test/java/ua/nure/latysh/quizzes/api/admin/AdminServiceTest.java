@@ -1,6 +1,7 @@
 package ua.nure.latysh.quizzes.api.admin;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.AnswerRequest;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.QuestionRequest;
 import ua.nure.latysh.quizzes.api.auth.RefreshSessionService;
@@ -19,8 +20,8 @@ import ua.nure.latysh.quizzes.api.domain.StatusRepository;
 import ua.nure.latysh.quizzes.api.domain.SubjectRepository;
 import ua.nure.latysh.quizzes.api.domain.UserAccount;
 import ua.nure.latysh.quizzes.api.domain.UserRepository;
+import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
 import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -97,6 +98,18 @@ class AdminServiceTest {
                 () -> service.updateUserStatus(3, "ACTIVE", "admin"));
 
         assertEquals("Status 'active' is not configured", failure.getMessage());
+    }
+
+    @Test
+    void refusesToBlockTheLastActiveAdministrator() {
+        UserAccount administrator = withId(user("sole-admin"), 5);
+        when(userRepository.findById(5)).thenReturn(Optional.of(administrator));
+        when(userRepository.lockActiveAdministrators()).thenReturn(List.of(administrator));
+
+        ResourceConflictException failure = assertThrows(ResourceConflictException.class,
+                () -> service.updateUserStatus(5, "blocked", "another-admin"));
+
+        assertEquals("Blocking user 5 would leave no active administrator", failure.getMessage());
     }
 
     // A question written and then not found when it is read back. Only a delete

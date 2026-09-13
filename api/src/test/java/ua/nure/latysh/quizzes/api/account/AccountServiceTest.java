@@ -9,6 +9,7 @@ import ua.nure.latysh.quizzes.api.domain.RoleRepository;
 import ua.nure.latysh.quizzes.api.domain.Status;
 import ua.nure.latysh.quizzes.api.domain.StatusRepository;
 import ua.nure.latysh.quizzes.api.domain.UserRepository;
+import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
 
 import java.util.Optional;
 
@@ -75,5 +76,20 @@ class AccountServiceTest {
         service.register(REQUEST);
 
         verify(userRepository).saveAndFlush(any());
+    }
+
+    @Test
+    void reportsWhenTheCurrentUserDisappeared() {
+        when(userRepository.findByLogin("missing")).thenReturn(Optional.empty());
+
+        ResourceNotFoundException profileFailure = assertThrows(
+                ResourceNotFoundException.class, () -> service.profile("missing"));
+        ResourceNotFoundException passwordFailure = assertThrows(
+                ResourceNotFoundException.class,
+                () -> service.changePassword(
+                        "missing", new ChangePasswordRequest("CurrentPass1", "ReplacementPass1")));
+
+        assertEquals("Current user was not found", profileFailure.getMessage());
+        assertEquals("Current user was not found", passwordFailure.getMessage());
     }
 }

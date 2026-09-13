@@ -12,10 +12,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import tools.jackson.databind.ObjectMapper;
+import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +52,9 @@ class AttemptSnapshotTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private AttemptService attemptService;
 
     private static final String FOUR_ANSWERS = """
             {"text":"%s","answers":[
@@ -170,6 +175,13 @@ class AttemptSnapshotTest {
         } finally {
             deleteAttempt(attemptId);
         }
+    }
+
+    @Test
+    void startingAnAttemptReportsAUserThatDisappeared() {
+        assertThatThrownBy(() -> attemptService.start(1, "missing"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Current user was not found");
     }
 
     private int start(String token, String address) throws Exception {
