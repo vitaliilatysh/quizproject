@@ -20,6 +20,10 @@ import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * What a quiz asks: its questions and the answers offered for each.
@@ -74,9 +78,10 @@ public class QuestionAdminService {
             throw new ResourceConflictException(
                     "Question " + questionId + " does not contain exactly four answers");
         }
-        for (int index = 0; index < answers.size(); index++) {
+        List<Answer> targets = pairWithStoredRows(questionId, answers, request.answers());
+        for (int index = 0; index < targets.size(); index++) {
             AnswerRequest answerRequest = request.answers().get(index);
-            Answer answer = answers.get(index);
+            Answer answer = targets.get(index);
             answer.setAnswer(answerRequest.text().trim());
             answer.setCorrect(answerRequest.correct());
         }
@@ -91,6 +96,53 @@ public class QuestionAdminService {
         resultRepository.deleteAllByQuestionId(questionId);
         answerRepository.deleteAllByQuestionId(questionId);
         questionRepository.deleteById(questionId);
+    }
+
+    /**
+     * Which stored row each submitted option is an edit of.
+     *
+     * <p>By id when the request carries them, so the order of the list stops
+     * meaning anything. Before, the two were paired by position: the same four
+     * options sent in a different order rewrote each other's rows. Nothing was
+     * corrupted by that — text and correctness travel together, so the question
+     * still asked what the administrator meant — but an answer's id came to name
+     * a different option, and ids are what {@code results} rows and an attempt's
+     * snapshot are written against. An identifier that changes meaning is worth
+     * ending before something starts reading those back.
+     *
+     * <p>Position still decides when no ids are sent, because a client that has
+     * always echoed the order it was given is not wrong and had nothing else to
+     * send until now. Mixing the two is refused rather than guessed at: a
+     * request that names some rows and not others has not said what it wants.
+     *
+     * @throws InvalidRequestException if the ids are partial, repeated, or name
+     *     rows that belong to another question
+     */
+    private List<Answer> pairWithStoredRows(
+            int questionId, List<Answer> stored, List<AnswerRequest> submitted) {
+        List<Integer> submittedIds = submitted.stream().map(AnswerRequest::id).filter(Objects::nonNull).toList();
+        if (submittedIds.isEmpty()) {
+            return stored;
+        }
+        if (submittedIds.size() != submitted.size()) {
+            throw new InvalidRequestException(
+                    "Either every answer names the row it edits, or none of them do");
+        }
+        Map<Integer, Answer> byId = stored.stream()
+                .collect(Collectors.toMap(Answer::getId, answer -> answer));
+        if (Set.copyOf(submittedIds).size() != submittedIds.size()) {
+            throw new InvalidRequestException("An answer was named twice");
+        }
+        return submittedIds.stream()
+                .map(id -> {
+                    Answer answer = byId.get(id);
+                    if (answer == null) {
+                        throw new InvalidRequestException(
+                                "Answer " + id + " does not belong to question " + questionId);
+                    }
+                    return answer;
+                })
+                .toList();
     }
 
     /**
