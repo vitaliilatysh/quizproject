@@ -1,7 +1,12 @@
 package ua.nure.latysh.quizzes.api;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
+import org.slf4j.LoggerFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -32,6 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 import ua.nure.latysh.quizzes.api.attempt.AttemptService;
 import ua.nure.latysh.quizzes.api.quiz.QuizQueryService;
+import ua.nure.latysh.quizzes.api.support.ApiExceptionHandler;
 
 import java.util.Arrays;
 import java.util.concurrent.Executors;
@@ -758,6 +764,82 @@ class ApiContractTest {
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
                 .andExpect(jsonPath("$.status").value(429))
                 .andExpect(jsonPath("$.message").value("Rate limit exceeded"));
+    }
+
+    /**
+     * The request-shape failures, each with its own status and the API's own body.
+     *
+     * <p>All four used to reach the client as 401. Spring raises them before a
+     * controller runs, so they left the dispatcher, the container forwarded to
+     * {@code /error}, and the security chain denied that forward — a malformed
+     * body was answered with "Authentication is required", and {@code path} read
+     * {@code /error} rather than what was asked for.
+     *
+     * <p>They are also why {@code ApiExceptionHandler} names them rather than
+     * leaving them to Spring: the catch-all for {@code Exception} outranks
+     * Spring's own resolver, so without these rows each of these would now be a
+     * 500 instead.
+     */
+    @Test
+    void requestShapeFailuresKeepTheirOwnStatus() throws Exception {
+        // Allow is not decoration: RFC 9110 requires it on a 405, and it is the
+        // only thing that tells the caller what to send instead. Building the
+        // response by hand drops what Spring's own resolver would have set.
+        mockMvc.perform(get("/api/v1/auth/login").with(from("192.0.2.120")))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string(HttpHeaders.ALLOW, containsString("POST")))
+                .andExpect(jsonPath("$.message").value("Method is not allowed for this resource"))
+                .andExpect(jsonPath("$.path").value("/api/v1/auth/login"));
+
+        mockMvc.perform(post("/api/v1/auth/login").with(from("192.0.2.121"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{not json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Request validation failed"))
+                .andExpect(jsonPath("$.path").value("/api/v1/auth/login"));
+
+        mockMvc.perform(post("/api/v1/auth/login").with(from("192.0.2.122"))
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("username=student"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.message").value("Content type is not supported"));
+
+        mockMvc.perform(get("/api/v1/quizzes/not-a-number").with(from("192.0.2.123")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Request validation failed"))
+                .andExpect(jsonPath("$.path").value("/api/v1/quizzes/not-a-number"));
+    }
+
+    /**
+     * A caller that accepts nothing this API produces is not a fault.
+     *
+     * <p>The status was 406 either way — a 500 built for it could not be written
+     * in a type the caller accepts either, so Spring falls back to 406 with an
+     * empty body. What the catch-all added was a log line: "Unhandled exception
+     * serving GET /api/v1/quizzes" at ERROR, for somebody sending
+     * {@code Accept: application/xml}. That is what this asserts, because the
+     * status alone cannot tell the two apart.
+     */
+    @Test
+    void anUnacceptableResponseTypeIsNotLoggedAsAFault() {
+        Logger handlerLog = (Logger) LoggerFactory.getLogger(ApiExceptionHandler.class);
+        var recorded = new ListAppender<ILoggingEvent>();
+        recorded.start();
+        handlerLog.addAppender(recorded);
+        try {
+            mockMvc.perform(get("/api/v1/quizzes")
+                            .accept(MediaType.APPLICATION_XML)
+                            .with(from("192.0.2.124")))
+                    .andExpect(status().isNotAcceptable());
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        } finally {
+            handlerLog.detachAppender(recorded);
+        }
+
+        assertThat(recorded.list)
+                .as("a client's choice of Accept header is not a server fault")
+                .noneMatch(event -> event.getLevel() == Level.ERROR);
     }
 
     /**

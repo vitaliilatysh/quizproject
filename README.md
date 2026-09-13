@@ -132,6 +132,11 @@ scraper не має чим автентифікуватися, і віддає �
 - `/actuator/metrics` — метрики, доступні лише адміністратору;
 - `/actuator/prometheus` — endpoint для Prometheus scrape.
 
+Помилки повертаються однією формою — `{timestamp, status, error, message, path}` — для всіх
+випадків: валідація, 404, 405, 415, конфлікти та непередбачені збої (500). `message` для 500
+фіксований (`Unexpected server error`), а сам виняток іде в лог під тим самим `X-Correlation-ID`,
+що й у відповіді.
+
 Захищені маршрути приймають `Authorization: Bearer <token>`. Адміністративні операції
 доступні лише ролі `ADMIN`.
 
