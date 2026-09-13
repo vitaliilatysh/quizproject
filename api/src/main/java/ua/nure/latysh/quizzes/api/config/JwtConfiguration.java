@@ -2,12 +2,14 @@ package ua.nure.latysh.quizzes.api.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import ua.nure.latysh.quizzes.api.auth.ActiveSessionJwtValidator;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -37,11 +39,16 @@ public class JwtConfiguration {
     }
 
     @Bean
-    JwtDecoder jwtDecoder(SecretKey secretKey, SecurityProperties properties) {
+    JwtDecoder jwtDecoder(
+            SecretKey secretKey,
+            SecurityProperties properties,
+            ActiveSessionJwtValidator activeSessionValidator) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(secretKey)
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
-        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(properties.issuer()),
+                activeSessionValidator));
         return decoder;
     }
 }

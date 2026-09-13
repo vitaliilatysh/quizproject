@@ -31,7 +31,8 @@ class JwtConfigurationTest {
     }
 
     private static SecurityProperties properties(String secret) {
-        return new SecurityProperties(secret, "quiz-api", Duration.ofMinutes(15), List.of("https://example.test"),
+        return new SecurityProperties(secret, "quiz-api", Duration.ofMinutes(15), Duration.ofDays(7),
+                List.of("https://example.test"),
                 new SecurityProperties.RateLimitProperties(
                         MEMORY, 100, 3, Duration.ofMinutes(1), 100, List.of("127.0.0.1/32")));
     }

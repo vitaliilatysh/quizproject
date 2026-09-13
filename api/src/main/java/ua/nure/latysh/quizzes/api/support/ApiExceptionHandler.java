@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import ua.nure.latysh.quizzes.api.auth.InvalidRefreshTokenException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -66,6 +67,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(AuthenticationException.class)
     ResponseEntity<ApiError> authenticationFailed(AuthenticationException exception, HttpServletRequest request) {
         return response(HttpStatus.UNAUTHORIZED, "Invalid username or password", request.getRequestURI());
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    ResponseEntity<ApiError> invalidRefreshToken(
+            InvalidRefreshTokenException exception, HttpServletRequest request) {
+        return response(HttpStatus.UNAUTHORIZED, exception.getMessage(), request.getRequestURI());
     }
 
     /**

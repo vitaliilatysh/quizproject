@@ -1,8 +1,12 @@
 package ua.nure.latysh.quizzes.api.auth;
 
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
@@ -11,28 +15,44 @@ import org.springframework.stereotype.Service;
 import ua.nure.latysh.quizzes.api.config.SecurityProperties;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Service
 public class TokenService {
-    /** The account's credentials stamp, read back by {@code /auth/refresh}. */
-    public static final String CREDENTIALS_CLAIM = "cca";
-
     private final JwtEncoder jwtEncoder;
     private final SecurityProperties properties;
+    private final RefreshSessionService refreshSessions;
+    private final UserDetailsService userDetailsService;
 
-    public TokenService(JwtEncoder jwtEncoder, SecurityProperties properties) {
+    public TokenService(
+            JwtEncoder jwtEncoder,
+            SecurityProperties properties,
+            RefreshSessionService refreshSessions,
+            UserDetailsService userDetailsService) {
         this.jwtEncoder = jwtEncoder;
         this.properties = properties;
+        this.refreshSessions = refreshSessions;
+        this.userDetailsService = userDetailsService;
     }
 
-    /**
-     * @param credentialsStamp what the account's credentials looked like in the
-     *     read that authorised this token, carried as {@code cca} so that a
-     *     later refresh can tell whether they have moved since. It is the read's
-     *     own value rather than anything derived from the clock: see
-     *     {@code AccountService.credentialsStamp}.
-     */
-    public TokenResponse issue(Authentication authentication, String credentialsStamp) {
+    public TokenResponse issue(Authentication authentication) {
+        return issue(authentication, refreshSessions.create(authentication.getName()));
+    }
+
+    public TokenResponse refresh(String refreshToken) {
+        RefreshSessionService.RefreshGrant grant = refreshSessions.rotate(refreshToken);
+        UserDetails user = userDetailsService.loadUserByUsername(grant.username());
+        Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
+                user, null, user.getAuthorities());
+        return issue(authentication, grant);
+    }
+
+    public void revoke(Jwt token) {
+        refreshSessions.revoke(token.getClaimAsString("sid"), token.getSubject());
+    }
+
+    private TokenResponse issue(
+            Authentication authentication, RefreshSessionService.RefreshGrant refreshGrant) {
         Instant issuedAt = Instant.now();
         Instant expiresAt = issuedAt.plus(properties.tokenTtl());
         var roles = authentication.getAuthorities().stream()
@@ -43,11 +63,17 @@ public class TokenService {
                 .subject(authentication.getName())
                 .issuedAt(issuedAt)
                 .expiresAt(expiresAt)
+                .id(UUID.randomUUID().toString())
                 .claim("roles", roles)
-                .claim(CREDENTIALS_CLAIM, credentialsStamp)
+                .claim("sid", refreshGrant.sessionId())
                 .build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
-        return new TokenResponse(token, "Bearer", properties.tokenTtl().toSeconds());
+        return new TokenResponse(
+                token,
+                "Bearer",
+                properties.tokenTtl().toSeconds(),
+                refreshGrant.refreshToken(),
+                properties.refreshTokenTtl().toSeconds());
     }
 }

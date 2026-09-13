@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import ua.nure.latysh.quizzes.api.admin.AdminModels.UserResponse;
+import ua.nure.latysh.quizzes.api.auth.RefreshSessionService;
 import ua.nure.latysh.quizzes.api.domain.Status;
 import ua.nure.latysh.quizzes.api.domain.StatusRepository;
 import ua.nure.latysh.quizzes.api.domain.UserAccount;
@@ -27,10 +28,15 @@ public class UserAdminService {
 
     private final UserRepository userRepository;
     private final StatusRepository statusRepository;
+    private final RefreshSessionService refreshSessions;
 
-    public UserAdminService(UserRepository userRepository, StatusRepository statusRepository) {
+    public UserAdminService(
+            UserRepository userRepository,
+            StatusRepository statusRepository,
+            RefreshSessionService refreshSessions) {
         this.userRepository = userRepository;
         this.statusRepository = statusRepository;
+        this.refreshSessions = refreshSessions;
     }
 
     public Page<UserResponse> users(Pageable pageable) {
@@ -50,6 +56,9 @@ public class UserAdminService {
                     "Blocking user " + userId + " would leave no active administrator");
         }
         user.setStatus(requireStatus(normalizedStatus));
+        if (BLOCKED.equals(normalizedStatus)) {
+            refreshSessions.revokeAll(user.getLogin());
+        }
         return toResponse(user);
     }
 
@@ -57,22 +66,11 @@ public class UserAdminService {
      * Whether blocking this account would leave nobody able to administer the
      * system.
      *
-     * <p>Refusing to block the caller's own account is not enough. The API is a
-     * stateless JWT resource server: authorities come from the token's claims
-     * and the account is not re-read per request, so blocking someone does not
-     * revoke the token they already hold. For the length of its time to live a
-     * blocked administrator keeps full rights, which is long enough to block
-     * the administrator who just blocked them. That leaves an installation with
-     * no active administrator and no way back, because unblocking anyone needs
-     * the role nobody holds any more.
-     *
-     * <p>"For the length of its time to live" is true only because
-     * {@code /api/v1/auth/refresh} re-reads the account before issuing a new
-     * token. It used to issue one from the presented token's own claims, which
-     * made the window unbounded: a blocked account refreshed itself for ever.
-     * A change there that stops re-reading brings this hole back, and this
-     * guard is the last thing standing between it and an installation nobody
-     * can administer.
+     * <p>Refusing to block the caller's own account is not enough: two active
+     * administrators could block each other concurrently. Refresh sessions now
+     * make the first block effective immediately, but serialising the decision
+     * still prevents both requests from observing two administrators and
+     * committing a state with none.
      */
     private boolean isLastActiveAdministrator(int userId) {
         List<UserAccount> activeAdministrators = userRepository.lockActiveAdministrators();

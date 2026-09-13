@@ -17,6 +17,7 @@ public record SecurityProperties(
         @NotBlank String jwtSecret,
         @NotBlank String issuer,
         @NotNull Duration tokenTtl,
+        @NotNull Duration refreshTokenTtl,
         @NotEmpty List<String> allowedOrigins,
         @Valid @NotNull RateLimitProperties rateLimit) {
     public record RateLimitProperties(

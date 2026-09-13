@@ -201,26 +201,73 @@ class ApiContractTest {
     }
 
     @Test
-    void exchangesAStillValidTokenForAFreshOneOnRefresh() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/refresh"))
-                .andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/v1/auth/refresh").header(HttpHeaders.AUTHORIZATION, "Bearer invalid"))
+    void rotatesRefreshTokensAndRejectsReplay() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody("invalid")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid or expired refresh token"));
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody("00000000-0000-0000-0000-000000000000.unknown")))
                 .andExpect(status().isUnauthorized());
 
-        String originalToken = login("student", "secret123", "192.0.2.12");
-        MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
-                        .header(HttpHeaders.AUTHORIZATION, bearer(originalToken)))
+        Tokens original = loginTokens("student", "secret123", "192.0.2.12");
+        MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(original.refreshToken())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.expiresIn").value(900))
+                .andExpect(jsonPath("$.refreshExpiresIn").value(604800))
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
                 .andReturn();
-        String refreshedToken = objectMapper.readTree(refreshed.getResponse().getContentAsString())
-                .get("accessToken").asString();
-        Assertions.assertNotEquals(originalToken, refreshedToken);
+        var refreshedBody = objectMapper.readTree(refreshed.getResponse().getContentAsString());
+        String refreshedAccessToken = refreshedBody.get("accessToken").asString();
+        String rotatedRefreshToken = refreshedBody.get("refreshToken").asString();
+        Assertions.assertNotEquals(original.accessToken(), refreshedAccessToken);
+        Assertions.assertNotEquals(original.refreshToken(), rotatedRefreshToken);
 
-        mockMvc.perform(get("/api/v1/results/me").header(HttpHeaders.AUTHORIZATION, bearer(refreshedToken)))
+        mockMvc.perform(get("/api/v1/results/me").with(from("192.0.2.12"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(refreshedAccessToken)))
                 .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(original.refreshToken())))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/results/me").with(from("192.0.2.12"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(refreshedAccessToken)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(rotatedRefreshToken)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void logsOutAndRevokesBothTokensInTheCurrentSession() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout").with(from("192.0.2.15")))
+                .andExpect(status().isUnauthorized());
+        Tokens tokens = loginTokens("student", "secret123", "192.0.2.15");
+
+        mockMvc.perform(post("/api/v1/auth/logout").with(from("192.0.2.15"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(tokens.accessToken())))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/results/me").with(from("192.0.2.15"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(tokens.accessToken())))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.15"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(tokens.refreshToken())))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -286,10 +333,13 @@ class ApiContractTest {
                         }))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.refreshExpiresIn").value(604800))
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
                 .andReturn();
-        String token = objectMapper.readTree(registered.getResponse().getContentAsString())
-                .get("accessToken").asString();
+        var registeredBody = objectMapper.readTree(registered.getResponse().getContentAsString());
+        String token = registeredBody.get("accessToken").asString();
+        String refreshToken = registeredBody.get("refreshToken").asString();
 
         mockMvc.perform(get("/api/v1/users/me")
                         .header(HttpHeaders.AUTHORIZATION, bearer(token)))
@@ -320,6 +370,14 @@ class ApiContractTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"currentPassword\":\"initial123\",\"newPassword\":\"updated123\"}"))
                 .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/users/me").with(from("192.0.2.72"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.72"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(refreshToken)))
+                .andExpect(status().isUnauthorized());
 
         performLogin("p10user", "initial123", "192.0.2.73")
                 .andExpect(status().isUnauthorized());
@@ -532,12 +590,20 @@ class ApiContractTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].username").value("admin"));
+        Tokens emptySession = loginTokens("empty", "secret123", "192.0.2.62");
         mockMvc.perform(patch("/api/v1/admin/users/3/status")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"blocked\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("blocked"));
+        mockMvc.perform(get("/api/v1/users/me").with(from("192.0.2.62"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(emptySession.accessToken())))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.62"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(emptySession.refreshToken())))
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(patch("/api/v1/admin/users/3/status")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -711,19 +777,17 @@ class ApiContractTest {
         String token = login("orphan", "secret123", "192.0.2.52");
         jdbcTemplate.update("DELETE FROM users WHERE id = 7");
         try {
-            mockMvc.perform(get("/api/v1/users/me")
+            mockMvc.perform(get("/api/v1/users/me").with(from("192.0.2.52"))
                             .header(HttpHeaders.AUTHORIZATION, bearer(token)))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.message").value("Current user was not found"));
-            mockMvc.perform(put("/api/v1/users/me/password")
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(put("/api/v1/users/me/password").with(from("192.0.2.52"))
                             .header(HttpHeaders.AUTHORIZATION, bearer(token))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"currentPassword\":\"secret123\",\"newPassword\":\"updated123\"}"))
-                    .andExpect(status().isNotFound());
-            mockMvc.perform(post("/api/v1/quizzes/1/attempts")
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(post("/api/v1/quizzes/1/attempts").with(from("192.0.2.52"))
                             .header(HttpHeaders.AUTHORIZATION, bearer(token)))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.message").value("Current user was not found"));
+                    .andExpect(status().isUnauthorized());
         } finally {
             // Columns named rather than positional: a VALUES list matched to the
             // table by position breaks silently the next time a column is added.
@@ -1028,13 +1092,22 @@ class ApiContractTest {
     }
 
     private String login(String username, String password, String remoteAddress) throws Exception {
+        return loginTokens(username, password, remoteAddress).accessToken();
+    }
+
+    private Tokens loginTokens(String username, String password, String remoteAddress) throws Exception {
         MvcResult result = performLogin(username, password, remoteAddress)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.expiresIn").value(900))
+                .andExpect(jsonPath("$.refreshExpiresIn").value(604800))
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
                 .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).get("accessToken").asString();
+        var response = objectMapper.readTree(result.getResponse().getContentAsString());
+        return new Tokens(
+                response.get("accessToken").asString(),
+                response.get("refreshToken").asString());
     }
 
     private org.springframework.test.web.servlet.ResultActions startAttempt(String token) throws Exception {
@@ -1063,6 +1136,13 @@ class ApiContractTest {
 
     private static String bearer(String token) {
         return "Bearer " + token;
+    }
+
+    private static String refreshBody(String token) {
+        return "{\"refreshToken\":\"%s\"}".formatted(token);
+    }
+
+    private record Tokens(String accessToken, String refreshToken) {
     }
 
     // Each of these takes its own client address: the catalogue shares one
@@ -1508,13 +1588,7 @@ class ApiContractTest {
     }
 
     @Test
-    void refusesToBlockTheLastActiveAdministrator() throws Exception {
-        // Blocking someone does not revoke the token they already hold: this is
-        // a stateless resource server, so authorities come from the token's
-        // claims and the account is never re-read per request. A blocked
-        // administrator therefore keeps full rights until the token expires,
-        // which is the window this test walks through — and the reason
-        // refusing to block *the current account* is not enough on its own.
+    void blockingAnAdministratorImmediatelyRevokesItsSession() throws Exception {
         jdbcTemplate.update("""
                 INSERT INTO users (id, login, password, first_name, last_name,
                                    register_date, login_date, status_id, role_id)
@@ -1534,17 +1608,14 @@ class ApiContractTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("blocked"));
 
-            // admin2 is blocked, yet the token minted a moment ago still works.
-            // Without the guard this call succeeds and the installation is left
-            // with nobody who can unblock anybody.
+            // A blocked account cannot use an access token that was already
+            // issued. The database-backed session check closes that window.
             mockMvc.perform(patch("/api/v1/admin/users/5/status")
                             .header(HttpHeaders.AUTHORIZATION, bearer(secondAdminToken))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"status\":\"blocked\"}")
                             .with(from("192.0.2.96")))
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.message")
-                            .value("Blocking user 5 would leave no active administrator"));
+                    .andExpect(status().isUnauthorized());
 
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT status_id FROM users WHERE id = 5", Integer.class))
