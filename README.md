@@ -38,7 +38,7 @@ CLASS        100.00%
 
 `jacocoTestCoverageVerification` тримає рядки й методи на 100%, а гілки — за **кількістю**
 непокритих, не за часткою: `MISSEDCOUNT` максимум 1. Рівно одну гілку в модулі не покриє
-жоден тест — охоронець `question != null` у `AdminService.questionsWithAnswers`. Він будує
+жоден тест — охоронець `question != null` у `QuestionAdminService.questionsWithAnswers`. Він будує
 мапу запитань тесту, а потім проходить відповіді того самого тесту; це два запити з
 однаковим `quizId` в одній read-only REPEATABLE_READ транзакції, тож запитання кожної
 відповіді вже в мапі й `null` прийти не може. Частка дозволила б цій одній непомітно стати
