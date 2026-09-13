@@ -50,7 +50,7 @@ class AdminStatusConcurrencyIntegrationTest {
             .withPassword("quiz-password");
 
     @Autowired
-    private AdminService adminService;
+    private UserAdminService userAdminService;
 
     @Autowired
     private AccountService accountService;
@@ -98,7 +98,7 @@ class AdminStatusConcurrencyIntegrationTest {
             bothReady.countDown();
             go.await();
             try {
-                return adminService.updateUserStatus(targetId, "blocked", actingAs);
+                return userAdminService.updateUserStatus(targetId, "blocked", actingAs);
             } catch (ResourceConflictException exception) {
                 return exception;
             }

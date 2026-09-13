@@ -80,6 +80,9 @@ class ApiContractTest {
     private QuizQueryService quizQueryService;
 
     @Autowired
+    private org.springframework.context.ApplicationContext applicationContext;
+
+    @Autowired
     private EntityManagerFactory entityManagerFactory;
 
     @Autowired
@@ -1354,41 +1357,59 @@ class ApiContractTest {
     }
 
     /**
-     * Every transactional method on the pinned services, not just the class.
+     * Every service that pins the isolation level pins it on every method.
      *
      * <p>The test above reads the class annotation, which is the one thing a
      * write method does not use: Spring takes the most specific annotation and
      * does not merge, so a method-level {@code @Transactional} replaces the
      * class-level one outright — readOnly, isolation and all. Fifteen write
-     * methods were declared that way and ran at the database default.
+     * methods were once declared that way and ran at the database default.
      *
-     * <p>This asks {@link AnnotationTransactionAttributeSource}, the same class
+     * <p>The services are discovered rather than listed. A list is only correct
+     * until someone adds a service — splitting AdminService into four would have
+     * quietly taken all four out of this contract while the test went on passing
+     * — so the rule is stated as a property of the code instead: a class that
+     * pins the level on itself must pin it on each of its transactional methods.
+     * A service that does not pin it at all is not making the claim and is not
+     * held to it; {@code ApiUserDetailsService} is the one such class.
+     *
+     * <p>It asks {@link AnnotationTransactionAttributeSource}, the same class
      * the transaction interceptor consults at runtime, so it reports the
      * attribute that will actually be applied rather than the annotation text.
      */
     @Test
-    void everyTransactionalMethodOnThePinnedServicesPinsTheIsolationLevel() {
+    void everyServiceThatPinsTheIsolationLevelPinsItOnEveryMethod() {
         var attributes = new AnnotationTransactionAttributeSource();
         var unpinned = new java.util.ArrayList<String>();
+        var pinnedServices = new java.util.ArrayList<String>();
 
-        for (Class<?> type : new Class<?>[]{
-                ua.nure.latysh.quizzes.api.attempt.AttemptService.class,
-                ua.nure.latysh.quizzes.api.account.AccountService.class,
-                ua.nure.latysh.quizzes.api.admin.AdminService.class,
-                ua.nure.latysh.quizzes.api.quiz.QuizQueryService.class,
-                ua.nure.latysh.quizzes.api.result.ResultQueryService.class}) {
-            for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+        for (String beanName : applicationContext.getBeanDefinitionNames()) {
+            Class<?> type = applicationContext.getType(beanName);
+            if (type == null || !type.getPackageName().startsWith("ua.nure.latysh.quizzes.api")) {
+                continue;
+            }
+            Class<?> target = org.springframework.util.ClassUtils.getUserClass(type);
+            if (AnnotationUtils.findAnnotation(target, Transactional.class) == null) {
+                continue;
+            }
+            pinnedServices.add(target.getSimpleName());
+            for (java.lang.reflect.Method method : target.getDeclaredMethods()) {
                 if (!java.lang.reflect.Modifier.isPublic(method.getModifiers())) {
                     continue;
                 }
-                TransactionAttribute attribute = attributes.getTransactionAttribute(method, type);
+                TransactionAttribute attribute = attributes.getTransactionAttribute(method, target);
                 if (attribute != null
                         && attribute.getIsolationLevel() != TransactionDefinition.ISOLATION_REPEATABLE_READ) {
-                    unpinned.add(type.getSimpleName() + "." + method.getName());
+                    unpinned.add(target.getSimpleName() + "." + method.getName());
                 }
             }
         }
 
+        assertThat(pinnedServices)
+                .as("discovery found no services at all, so this would pass whatever the code did")
+                .contains("AttemptService", "AccountService", "QuizQueryService", "ResultQueryService",
+                        "CatalogueAdminService", "QuizAdminService", "QuestionAdminService",
+                        "UserAdminService", "ResultAdminService");
         assertThat(unpinned)
                 .as("a bare @Transactional drops the class-level isolation without saying so")
                 .isEmpty();
