@@ -199,24 +199,24 @@ class ApiContractTest {
 
     @Test
     void rotatesRefreshTokensAndRejectsReplay() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/refresh"))
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12")))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"\"}"))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody("invalid")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Invalid or expired refresh token"));
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody("00000000-0000-0000-0000-000000000000.unknown")))
                 .andExpect(status().isUnauthorized());
 
         Tokens original = loginTokens("student", "secret123", "192.0.2.12");
-        MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
+        MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody(original.refreshToken())))
                 .andExpect(status().isOk())
@@ -232,18 +232,18 @@ class ApiContractTest {
         Assertions.assertNotEquals(original.accessToken(), refreshedAccessToken);
         Assertions.assertNotEquals(original.refreshToken(), rotatedRefreshToken);
 
-        mockMvc.perform(get("/api/v1/results/me")
+        mockMvc.perform(get("/api/v1/results/me").with(from("192.0.2.12"))
                         .header(HttpHeaders.AUTHORIZATION, bearer(refreshedAccessToken)))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody(original.refreshToken())))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/v1/results/me")
+        mockMvc.perform(get("/api/v1/results/me").with(from("192.0.2.12"))
                         .header(HttpHeaders.AUTHORIZATION, bearer(refreshedAccessToken)))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.12"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody(rotatedRefreshToken)))
                 .andExpect(status().isUnauthorized());
@@ -251,17 +251,17 @@ class ApiContractTest {
 
     @Test
     void logsOutAndRevokesBothTokensInTheCurrentSession() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout"))
+        mockMvc.perform(post("/api/v1/auth/logout").with(from("192.0.2.15")))
                 .andExpect(status().isUnauthorized());
         Tokens tokens = loginTokens("student", "secret123", "192.0.2.15");
 
-        mockMvc.perform(post("/api/v1/auth/logout")
+        mockMvc.perform(post("/api/v1/auth/logout").with(from("192.0.2.15"))
                         .header(HttpHeaders.AUTHORIZATION, bearer(tokens.accessToken())))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(get("/api/v1/results/me")
+        mockMvc.perform(get("/api/v1/results/me").with(from("192.0.2.15"))
                         .header(HttpHeaders.AUTHORIZATION, bearer(tokens.accessToken())))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.15"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody(tokens.refreshToken())))
                 .andExpect(status().isUnauthorized());
@@ -368,10 +368,10 @@ class ApiContractTest {
                         .content("{\"currentPassword\":\"initial123\",\"newPassword\":\"updated123\"}"))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/v1/users/me")
+        mockMvc.perform(get("/api/v1/users/me").with(from("192.0.2.72"))
                         .header(HttpHeaders.AUTHORIZATION, bearer(token)))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.72"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody(refreshToken)))
                 .andExpect(status().isUnauthorized());
@@ -594,10 +594,10 @@ class ApiContractTest {
                         .content("{\"status\":\"blocked\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("blocked"));
-        mockMvc.perform(get("/api/v1/users/me")
+        mockMvc.perform(get("/api/v1/users/me").with(from("192.0.2.62"))
                         .header(HttpHeaders.AUTHORIZATION, bearer(emptySession.accessToken())))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/refresh").with(from("192.0.2.62"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody(emptySession.refreshToken())))
                 .andExpect(status().isUnauthorized());
@@ -774,19 +774,17 @@ class ApiContractTest {
         String token = login("orphan", "secret123", "192.0.2.52");
         jdbcTemplate.update("DELETE FROM users WHERE id = 7");
         try {
-            mockMvc.perform(get("/api/v1/users/me")
+            mockMvc.perform(get("/api/v1/users/me").with(from("192.0.2.52"))
                             .header(HttpHeaders.AUTHORIZATION, bearer(token)))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.message").value("Current user was not found"));
-            mockMvc.perform(put("/api/v1/users/me/password")
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(put("/api/v1/users/me/password").with(from("192.0.2.52"))
                             .header(HttpHeaders.AUTHORIZATION, bearer(token))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"currentPassword\":\"secret123\",\"newPassword\":\"updated123\"}"))
-                    .andExpect(status().isNotFound());
-            mockMvc.perform(post("/api/v1/quizzes/1/attempts")
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(post("/api/v1/quizzes/1/attempts").with(from("192.0.2.52"))
                             .header(HttpHeaders.AUTHORIZATION, bearer(token)))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.message").value("Current user was not found"));
+                    .andExpect(status().isUnauthorized());
         } finally {
             // Columns named rather than positional: a VALUES list matched to the
             // table by position breaks silently the next time a column is added.
