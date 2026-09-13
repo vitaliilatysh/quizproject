@@ -58,7 +58,20 @@ public interface AdminModels {
             @Min(1) @Max(1440) int timeToPassMinutes) {
     }
 
-    record AnswerRequest(@NotBlank @Size(max = 50) String text, boolean correct) {
+    /**
+     * One option as the administrator wants it to stand.
+     *
+     * <p>{@code id} names the stored row this is an edit of, and is what makes
+     * the order of the list its own business. It is optional because a client
+     * that has always sent the four options in the order it received them is
+     * not wrong, and did not have an id to send before this field existed —
+     * {@code updateQuestion} falls back to position when it is absent. Creating
+     * a question leaves it null: there is nothing yet to name.
+     */
+    record AnswerRequest(Integer id, @NotBlank @Size(max = 50) String text, boolean correct) {
+        AnswerRequest(String text, boolean correct) {
+            this(null, text, correct);
+        }
     }
 
     record QuestionRequest(
