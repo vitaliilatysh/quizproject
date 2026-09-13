@@ -1,5 +1,6 @@
 package ua.nure.latysh.quizzes.api.auth;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -11,6 +12,7 @@ import java.util.HexFormat;
 public class RefreshTokenHasher {
     private final String algorithm;
 
+    @Autowired
     public RefreshTokenHasher() {
         this("SHA-256");
     }

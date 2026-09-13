@@ -81,13 +81,13 @@ class AccountServiceTest {
     @Test
     void reportsWhenTheCurrentUserDisappeared() {
         when(userRepository.findByLogin("missing")).thenReturn(Optional.empty());
+        ChangePasswordRequest request = new ChangePasswordRequest("CurrentPass1", "ReplacementPass1");
 
         ResourceNotFoundException profileFailure = assertThrows(
                 ResourceNotFoundException.class, () -> service.profile("missing"));
         ResourceNotFoundException passwordFailure = assertThrows(
                 ResourceNotFoundException.class,
-                () -> service.changePassword(
-                        "missing", new ChangePasswordRequest("CurrentPass1", "ReplacementPass1")));
+                () -> service.changePassword("missing", request));
 
         assertEquals("Current user was not found", profileFailure.getMessage());
         assertEquals("Current user was not found", passwordFailure.getMessage());

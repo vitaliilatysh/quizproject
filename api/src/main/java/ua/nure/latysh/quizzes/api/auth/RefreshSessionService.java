@@ -117,7 +117,7 @@ public class RefreshSessionService {
         try {
             UUID.fromString(sessionId);
             return sessionId;
-        } catch (IllegalArgumentException exception) {
+        } catch (IllegalArgumentException _) {
             throw new InvalidRefreshTokenException();
         }
     }

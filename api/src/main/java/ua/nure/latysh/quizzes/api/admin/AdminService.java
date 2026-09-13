@@ -70,6 +70,8 @@ import java.util.stream.Collectors;
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class AdminService {
+    private static final String BLOCKED_STATUS = "blocked";
+
     private final SubjectRepository subjectRepository;
     private final LevelRepository levelRepository;
     private final QuizRepository quizRepository;
@@ -270,15 +272,15 @@ public class AdminService {
         String normalizedStatus = status.toLowerCase(Locale.ROOT);
         UserAccount user = userRepository.findById(userId)
                 .orElseThrow(() -> missing("User", userId));
-        if (user.getLogin().equals(currentUsername) && "blocked".equals(normalizedStatus)) {
+        if (user.getLogin().equals(currentUsername) && BLOCKED_STATUS.equals(normalizedStatus)) {
             throw new ResourceConflictException("An administrator cannot block the current account");
         }
-        if ("blocked".equals(normalizedStatus) && isLastActiveAdministrator(userId)) {
+        if (BLOCKED_STATUS.equals(normalizedStatus) && isLastActiveAdministrator(userId)) {
             throw new ResourceConflictException(
                     "Blocking user " + userId + " would leave no active administrator");
         }
         user.setStatus(requireStatus(normalizedStatus));
-        if ("blocked".equals(normalizedStatus)) {
+        if (BLOCKED_STATUS.equals(normalizedStatus)) {
             refreshSessions.revokeAll(user.getLogin());
         }
         return new UserResponse(user.getId(), user.getLogin(), user.getRole().getName(), user.getStatus().getName());
