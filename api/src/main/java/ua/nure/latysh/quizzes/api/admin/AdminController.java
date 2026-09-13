@@ -43,11 +43,25 @@ import java.util.List;
 @RequestMapping("/api/v1/admin")
 @Tag(name = "Administration")
 public class AdminController {
-    private final AdminService adminService;
+    private final CatalogueAdminService catalogue;
+    private final QuizAdminService quizzes;
+    private final QuestionAdminService questions;
+    private final UserAdminService users;
+    private final ResultAdminService results;
     private final PaginationSupport pagination;
 
-    public AdminController(AdminService adminService, PaginationSupport pagination) {
-        this.adminService = adminService;
+    public AdminController(
+            CatalogueAdminService catalogue,
+            QuizAdminService quizzes,
+            QuestionAdminService questions,
+            UserAdminService users,
+            ResultAdminService results,
+            PaginationSupport pagination) {
+        this.catalogue = catalogue;
+        this.quizzes = quizzes;
+        this.questions = questions;
+        this.users = users;
+        this.results = results;
         this.pagination = pagination;
     }
 
@@ -60,62 +74,62 @@ public class AdminController {
 
     @GetMapping("/subjects")
     public List<SubjectResponse> subjects() {
-        return adminService.subjects();
+        return catalogue.subjects();
     }
 
     @PostMapping("/subjects")
     @ResponseStatus(HttpStatus.CREATED)
     public SubjectResponse createSubject(@Valid @RequestBody SubjectRequest request) {
-        return adminService.createSubject(request.name());
+        return catalogue.createSubject(request.name());
     }
 
     @PutMapping("/subjects/{subjectId}")
     public SubjectResponse updateSubject(
             @PathVariable @Positive int subjectId,
             @Valid @RequestBody SubjectRequest request) {
-        return adminService.updateSubject(subjectId, request.name());
+        return catalogue.updateSubject(subjectId, request.name());
     }
 
     @DeleteMapping("/subjects/{subjectId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteSubject(@PathVariable @Positive int subjectId) {
-        adminService.deleteSubject(subjectId);
+        catalogue.deleteSubject(subjectId);
     }
 
     @GetMapping("/levels")
     public List<LevelResponse> levels() {
-        return adminService.levels();
+        return catalogue.levels();
     }
 
     @GetMapping("/quizzes")
     public ResponseEntity<List<QuizResponse>> quizzes(
             @RequestParam(required = false) @Min(0) Integer page,
             @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
-        return pagination.response(adminService.quizzes(pagination.pageable(page, size)));
+        return pagination.response(quizzes.quizzes(pagination.pageable(page, size)));
     }
 
     @PostMapping("/quizzes")
     @ResponseStatus(HttpStatus.CREATED)
     public QuizResponse createQuiz(@Valid @RequestBody QuizRequest request) {
-        return adminService.createQuiz(request);
+        return quizzes.createQuiz(request);
     }
 
     @PutMapping("/quizzes/{quizId}")
     public QuizResponse updateQuiz(
             @PathVariable @Positive int quizId,
             @Valid @RequestBody QuizRequest request) {
-        return adminService.updateQuiz(quizId, request);
+        return quizzes.updateQuiz(quizId, request);
     }
 
     @DeleteMapping("/quizzes/{quizId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteQuiz(@PathVariable @Positive int quizId) {
-        adminService.deleteQuiz(quizId);
+        quizzes.deleteQuiz(quizId);
     }
 
     @GetMapping("/quizzes/{quizId}/questions")
     public List<QuestionResponse> questions(@PathVariable @Positive int quizId) {
-        return adminService.questions(quizId);
+        return questions.questions(quizId);
     }
 
     @PostMapping("/quizzes/{quizId}/questions")
@@ -123,27 +137,27 @@ public class AdminController {
     public QuestionResponse createQuestion(
             @PathVariable @Positive int quizId,
             @Valid @RequestBody QuestionRequest request) {
-        return adminService.createQuestion(quizId, request);
+        return questions.createQuestion(quizId, request);
     }
 
     @PutMapping("/questions/{questionId}")
     public QuestionResponse updateQuestion(
             @PathVariable @Positive int questionId,
             @Valid @RequestBody QuestionRequest request) {
-        return adminService.updateQuestion(questionId, request);
+        return questions.updateQuestion(questionId, request);
     }
 
     @DeleteMapping("/questions/{questionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteQuestion(@PathVariable @Positive int questionId) {
-        adminService.deleteQuestion(questionId);
+        questions.deleteQuestion(questionId);
     }
 
     @GetMapping("/users")
     public ResponseEntity<List<UserResponse>> users(
             @RequestParam(required = false) @Min(0) Integer page,
             @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
-        return pagination.response(adminService.users(pagination.pageable(page, size)));
+        return pagination.response(users.users(pagination.pageable(page, size)));
     }
 
     @PatchMapping("/users/{userId}/status")
@@ -151,7 +165,7 @@ public class AdminController {
             @PathVariable @Positive int userId,
             @Valid @RequestBody UserStatusRequest request,
             Authentication authentication) {
-        return adminService.updateUserStatus(userId, request.status(), authentication.getName());
+        return users.updateUserStatus(userId, request.status(), authentication.getName());
     }
 
     @GetMapping("/results")
@@ -162,6 +176,6 @@ public class AdminController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(required = false) @Min(0) Integer page,
             @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
-        return pagination.response(adminService.results(from, to, pagination.pageable(page, size)));
+        return pagination.response(results.results(from, to, pagination.pageable(page, size)));
     }
 }
