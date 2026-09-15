@@ -404,6 +404,16 @@ class ApiContractTest {
         String userToken = login("student", "secret123", "192.0.2.60");
         String adminToken = login("admin", "secret123", "192.0.2.61");
 
+        verifyAdministrativeAccess(userToken, adminToken);
+        int subjectId = manageSubjects(adminToken);
+        int quizId = manageQuizzes(adminToken, subjectId);
+        manageQuestions(adminToken, quizId);
+        manageUsers(adminToken);
+        queryAdministrativeResults(adminToken);
+        deleteAdministrativeCatalogue(adminToken, quizId, subjectId);
+    }
+
+    private void verifyAdministrativeAccess(String userToken, String adminToken) throws Exception {
         mockMvc.perform(get("/api/v1/admin/subjects"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/admin/subjects")
@@ -422,7 +432,9 @@ class ApiContractTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].subjectId").value(1));
+    }
 
+    private int manageSubjects(String adminToken) throws Exception {
         int subjectId = responseId(mockMvc.perform(post("/api/v1/admin/subjects")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -462,7 +474,10 @@ class ApiContractTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Subject 1 is used by a quiz"));
+        return subjectId;
+    }
 
+    private int manageQuizzes(String adminToken, int subjectId) throws Exception {
         String quizRequest = """
                 {"name":"Data structures","subjectId":%d,"levelId":1,"timeToPassMinutes":15}
                 """.formatted(subjectId);
@@ -523,7 +538,10 @@ class ApiContractTest {
         mockMvc.perform(get("/api/v1/admin/quizzes/999/questions")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isNotFound());
+        return quizId;
+    }
 
+    private void manageQuestions(String adminToken, int quizId) throws Exception {
         String questionRequest = """
                 {"text":"What is a stack?","answers":[
                   {"text":"LIFO","correct":true},{"text":"FIFO","correct":false},
@@ -585,7 +603,9 @@ class ApiContractTest {
         mockMvc.perform(delete("/api/v1/admin/questions/{questionId}", questionId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isNotFound());
+    }
 
+    private void manageUsers(String adminToken) throws Exception {
         mockMvc.perform(get("/api/v1/admin/users")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isOk())
@@ -625,7 +645,9 @@ class ApiContractTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"paused\"}"))
                 .andExpect(status().isBadRequest());
+    }
 
+    private void queryAdministrativeResults(String adminToken) throws Exception {
         mockMvc.perform(get("/api/v1/admin/results")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isOk())
@@ -644,7 +666,9 @@ class ApiContractTest {
                         .param("to", "2026-01-01T00:00:00Z")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isBadRequest());
+    }
 
+    private void deleteAdministrativeCatalogue(String adminToken, int quizId, int subjectId) throws Exception {
         mockMvc.perform(delete("/api/v1/admin/quizzes/{quizId}", quizId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isNoContent());

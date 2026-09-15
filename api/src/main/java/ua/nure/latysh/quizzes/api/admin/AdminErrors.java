@@ -34,7 +34,7 @@ final class AdminErrors {
     static void saveUnique(String resource, String name, Runnable save) {
         try {
             save.run();
-        } catch (DataIntegrityViolationException exception) {
+        } catch (DataIntegrityViolationException _) {
             throw duplicate(resource, name);
         }
     }

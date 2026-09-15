@@ -16,7 +16,11 @@ import java.io.IOException;
 
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
+    // Versioned endpoint paths are part of the public API contract and must
+    // stay aligned with the controller mappings, not vary by deployment.
+    @SuppressWarnings("java:S1075")
     private static final String LOGIN_PATH = "/api/v1/auth/login";
+    @SuppressWarnings("java:S1075")
     private static final String REGISTER_PATH = "/api/v1/auth/register";
 
     private final RateLimitService rateLimitService;
