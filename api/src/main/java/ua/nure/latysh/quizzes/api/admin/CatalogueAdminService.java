@@ -23,6 +23,8 @@ import java.util.List;
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class CatalogueAdminService {
+    private static final String SUBJECT_RESOURCE = "Subject";
+
     private final SubjectRepository subjectRepository;
     private final LevelRepository levelRepository;
     private final QuizRepository quizRepository;
@@ -52,7 +54,7 @@ public class CatalogueAdminService {
     public SubjectResponse createSubject(String name) {
         String normalizedName = name.trim();
         var subject = new Subject(normalizedName);
-        AdminErrors.saveUnique("Subject", normalizedName, () -> subjectRepository.saveAndFlush(subject));
+        AdminErrors.saveUnique(SUBJECT_RESOURCE, normalizedName, () -> subjectRepository.saveAndFlush(subject));
         return new SubjectResponse(subject.getId(), normalizedName);
     }
 
@@ -60,16 +62,16 @@ public class CatalogueAdminService {
     public SubjectResponse updateSubject(int subjectId, String name) {
         String normalizedName = name.trim();
         Subject subject = subjectRepository.findById(subjectId)
-                .orElseThrow(() -> AdminErrors.missing("Subject", subjectId));
+                .orElseThrow(() -> AdminErrors.missing(SUBJECT_RESOURCE, subjectId));
         subject.setName(normalizedName);
-        AdminErrors.saveUnique("Subject", normalizedName, () -> subjectRepository.saveAndFlush(subject));
+        AdminErrors.saveUnique(SUBJECT_RESOURCE, normalizedName, () -> subjectRepository.saveAndFlush(subject));
         return new SubjectResponse(subjectId, normalizedName);
     }
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void deleteSubject(int subjectId) {
         Subject subject = subjectRepository.findById(subjectId)
-                .orElseThrow(() -> AdminErrors.missing("Subject", subjectId));
+                .orElseThrow(() -> AdminErrors.missing(SUBJECT_RESOURCE, subjectId));
         if (quizRepository.existsBySubject_Id(subjectId)) {
             throw new ResourceConflictException("Subject " + subjectId + " is used by a quiz");
         }

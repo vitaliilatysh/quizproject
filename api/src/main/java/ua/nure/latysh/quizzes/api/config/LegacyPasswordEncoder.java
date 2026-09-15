@@ -1,5 +1,6 @@
 package ua.nure.latysh.quizzes.api.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -14,29 +15,30 @@ import java.util.Base64;
 @Component
 public class LegacyPasswordEncoder implements PasswordEncoder {
     private static final String PREFIX = "pbkdf2-sha256";
-    private static final int ITERATIONS = 600_000;
+    private static final int DEFAULT_ITERATION_COUNT = 600_000;
     private static final int SALT_LENGTH = 16;
     private static final int KEY_LENGTH = 256;
     private final SecureRandom secureRandom;
     private final String algorithm;
-    private final int iterations;
+    private final int encodingIterationCount;
 
+    @Autowired
     public LegacyPasswordEncoder() {
-        this(new SecureRandom(), "PBKDF2WithHmacSHA256", ITERATIONS);
+        this(new SecureRandom(), "PBKDF2WithHmacSHA256", DEFAULT_ITERATION_COUNT);
     }
 
-    LegacyPasswordEncoder(SecureRandom secureRandom, String algorithm, int iterations) {
+    LegacyPasswordEncoder(SecureRandom secureRandom, String algorithm, int encodingIterationCount) {
         this.secureRandom = secureRandom;
         this.algorithm = algorithm;
-        this.iterations = iterations;
+        this.encodingIterationCount = encodingIterationCount;
     }
 
     @Override
     public String encode(CharSequence rawPassword) {
         byte[] salt = new byte[SALT_LENGTH];
         secureRandom.nextBytes(salt);
-        byte[] hash = derive(rawPassword, salt, iterations);
-        return PREFIX + "$" + iterations + "$" +
+        byte[] hash = derive(rawPassword, salt, encodingIterationCount);
+        return PREFIX + "$" + encodingIterationCount + "$" +
                 Base64.getUrlEncoder().withoutPadding().encodeToString(salt) + "$" +
                 Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
     }
@@ -70,17 +72,18 @@ public class LegacyPasswordEncoder implements PasswordEncoder {
             return false;
         }
         try {
-            int iterations = Integer.parseInt(parts[1]);
+            int encodedIterationCount = Integer.parseInt(parts[1]);
             byte[] salt = Base64.getUrlDecoder().decode(parts[2]);
             byte[] expected = Base64.getUrlDecoder().decode(parts[3]);
-            return MessageDigest.isEqual(expected, derive(rawPassword, salt, iterations));
-        } catch (IllegalArgumentException exception) {
+            return MessageDigest.isEqual(expected, derive(rawPassword, salt, encodedIterationCount));
+        } catch (IllegalArgumentException _) {
             return false;
         }
     }
 
-    private byte[] derive(CharSequence password, byte[] salt, int iterations) {
-        PBEKeySpec specification = new PBEKeySpec(password.toString().toCharArray(), salt, iterations, KEY_LENGTH);
+    private byte[] derive(CharSequence password, byte[] salt, int iterationCount) {
+        PBEKeySpec specification = new PBEKeySpec(
+                password.toString().toCharArray(), salt, iterationCount, KEY_LENGTH);
         try {
             return SecretKeyFactory.getInstance(algorithm)
                     .generateSecret(specification).getEncoded();
