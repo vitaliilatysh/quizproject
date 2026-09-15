@@ -1,5 +1,6 @@
 package ua.nure.latysh.quizzes.api.domain;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -16,7 +17,8 @@ public class Answer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    private String answer;
+    @Column(name = "answer")
+    private String text;
 
     private boolean correct;
 
@@ -28,7 +30,7 @@ public class Answer {
     }
 
     public Answer(String answer, boolean correct, Question question) {
-        this.answer = answer;
+        this.text = answer;
         this.correct = correct;
         this.question = question;
     }
@@ -38,11 +40,11 @@ public class Answer {
     }
 
     public String getAnswer() {
-        return answer;
+        return text;
     }
 
     public void setAnswer(String answer) {
-        this.answer = answer;
+        this.text = answer;
     }
 
     public boolean isCorrect() {

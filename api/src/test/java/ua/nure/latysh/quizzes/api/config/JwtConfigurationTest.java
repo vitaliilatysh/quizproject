@@ -24,10 +24,13 @@ class JwtConfigurationTest {
 
     @Test
     void rejectsMalformedAndShortSecrets() {
+        SecurityProperties malformed = properties("not-base64!");
+        SecurityProperties tooShort = properties("c2hvcnQ=");
+
         assertThrows(IllegalStateException.class,
-                () -> configuration.jwtSecretKey(properties("not-base64!")));
+                () -> configuration.jwtSecretKey(malformed));
         assertThrows(IllegalStateException.class,
-                () -> configuration.jwtSecretKey(properties("c2hvcnQ=")));
+                () -> configuration.jwtSecretKey(tooShort));
     }
 
     private static SecurityProperties properties(String secret) {

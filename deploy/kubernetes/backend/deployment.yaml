@@ -48,7 +48,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: quiz-api
-          image: quiz-api
+          image: quiz-api:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

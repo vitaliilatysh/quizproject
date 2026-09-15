@@ -72,22 +72,26 @@ class AnswerIdentityTest {
 
     @Test
     void anEditNamingARowFromAnotherQuestionIsRefused() {
-        assertThatThrownBy(() -> service.updateQuestion(1, new QuestionRequest("Question 1", List.of(
+        var request = new QuestionRequest("Question 1", List.of(
                 new AnswerRequest(5, "Answer 1.1", true),
                 new AnswerRequest(2, "Answer 1.2", false),
                 new AnswerRequest(3, "Answer 1.3", false),
-                new AnswerRequest(4, "Answer 1.4", false)))))
+                new AnswerRequest(4, "Answer 1.4", false)));
+
+        assertThatThrownBy(() -> service.updateQuestion(1, request))
                 .isInstanceOf(InvalidRequestException.class)
                 .hasMessage("Answer 5 does not belong to question 1");
     }
 
     @Test
     void anEditNamingOneRowTwiceIsRefused() {
-        assertThatThrownBy(() -> service.updateQuestion(1, new QuestionRequest("Question 1", List.of(
+        var request = new QuestionRequest("Question 1", List.of(
                 new AnswerRequest(1, "Answer 1.1", true),
                 new AnswerRequest(1, "Answer 1.2", false),
                 new AnswerRequest(3, "Answer 1.3", false),
-                new AnswerRequest(4, "Answer 1.4", false)))))
+                new AnswerRequest(4, "Answer 1.4", false)));
+
+        assertThatThrownBy(() -> service.updateQuestion(1, request))
                 .isInstanceOf(InvalidRequestException.class)
                 .hasMessage("An answer was named twice");
     }
@@ -99,11 +103,13 @@ class AnswerIdentityTest {
      */
     @Test
     void anEditThatNamesSomeRowsAndNotOthersIsRefused() {
-        assertThatThrownBy(() -> service.updateQuestion(1, new QuestionRequest("Question 1", List.of(
+        var request = new QuestionRequest("Question 1", List.of(
                 new AnswerRequest(1, "Answer 1.1", true),
                 new AnswerRequest("Answer 1.2", false),
                 new AnswerRequest(3, "Answer 1.3", false),
-                new AnswerRequest(4, "Answer 1.4", false)))))
+                new AnswerRequest(4, "Answer 1.4", false)));
+
+        assertThatThrownBy(() -> service.updateQuestion(1, request))
                 .isInstanceOf(InvalidRequestException.class)
                 .hasMessage("Either every answer names the row it edits, or none of them do");
     }

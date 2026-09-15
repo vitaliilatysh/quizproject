@@ -29,7 +29,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
         String correlationId = correlationId(request.getHeader(HEADER_NAME));
         response.setHeader(HEADER_NAME, correlationId);
         long startedAt = System.nanoTime();
-        try (var ignored = MDC.putCloseable(MDC_KEY, correlationId)) {
+        try (var _ = MDC.putCloseable(MDC_KEY, correlationId)) {
             try {
                 filterChain.doFilter(request, response);
             } finally {
