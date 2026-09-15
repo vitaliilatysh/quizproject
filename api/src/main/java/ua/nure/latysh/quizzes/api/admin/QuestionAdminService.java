@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class QuestionAdminService {
+    private static final String QUESTION_RESOURCE = "Question";
+
     private final QuestionRepository questionRepository;
     private final AnswerRepository answerRepository;
     private final ResultRepository resultRepository;
@@ -71,7 +73,7 @@ public class QuestionAdminService {
     public QuestionResponse updateQuestion(int questionId, QuestionRequest request) {
         validateAnswers(request.answers());
         Question question = questionRepository.findById(questionId)
-                .orElseThrow(() -> AdminErrors.missing("Question", questionId));
+                .orElseThrow(() -> AdminErrors.missing(QUESTION_RESOURCE, questionId));
         question.setQuestion(request.text().trim());
         List<Answer> answers = answerRepository.findAllByQuestion_IdOrderByIdAsc(questionId);
         if (answers.size() != request.answers().size()) {
@@ -91,7 +93,7 @@ public class QuestionAdminService {
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void deleteQuestion(int questionId) {
         if (!questionRepository.existsById(questionId)) {
-            throw AdminErrors.missing("Question", questionId);
+            throw AdminErrors.missing(QUESTION_RESOURCE, questionId);
         }
         resultRepository.deleteAllByQuestionId(questionId);
         answerRepository.deleteAllByQuestionId(questionId);
@@ -154,7 +156,7 @@ public class QuestionAdminService {
         return questionsWithAnswers(quizId).stream()
                 .filter(response -> response.id() == questionId)
                 .findFirst()
-                .orElseThrow(() -> AdminErrors.missing("Question", questionId));
+                .orElseThrow(() -> AdminErrors.missing(QUESTION_RESOURCE, questionId));
     }
 
     private List<QuestionResponse> questionsWithAnswers(int quizId) {
