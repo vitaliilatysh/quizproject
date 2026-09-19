@@ -18,6 +18,7 @@ Legacy JSP/Servlet WAR більше не є частиною backend.
 - Flyway
 - Gradle 9.7.1
 - JUnit 6, Testcontainers і JaCoCo
+- SonarCloud із блокувальним quality gate
 - OpenAPI / Swagger UI
 
 ## Збірка і перевірка
@@ -51,6 +52,60 @@ CLASS        100.00%
 результат — пессимістичне блокування рядка допускає рівно одне успішне завершення.
 
 Готовий executable JAR створюється в `api/build/libs`.
+
+### Залежності зафіксовані локами
+
+`dependencyLocking` увімкнено для всіх конфігурацій, а стан зберігається в `gradle.lockfile`
+кореня та модуля `api`. Збірка звіряє кожну резолюцію з локом і падає, якщо вона розійшлася,
+тому **не запускайте `--write-locks` у CI** — там це мовчки прийняло б те, що upstream віддає
+зараз, тобто рівно те, від чого локи й захищають. Зміна залежності означає локальний
+`./gradlew --write-locks` і коміт оновлених локів.
+
+Dependabot оновлює Gradle-залежності щотижня і регенерує `gradle.lockfile` разом із версією в
+`build.gradle`, включно з транзитивними змінами, тож ручний крок для його PR не потрібний.
+
+Версія Tomcat навмисно піднята над тим, чим керує Spring Boot 4.1.1
+(`ext['tomcat.version'] = '11.0.25'` в `api/build.gradle`): на керовану 11.0.24 припадають три
+CRITICAL-адвізорі про обхід автентифікації та контролю доступу. Перевизначення прибирається,
+щойно з'явиться реліз Boot, який сам керує 11.0.25 або новішою; передчасне прибирання помітить
+Trivy-скан у `container.yml`.
+
+## Якість коду
+
+Workflow **SonarQube analysis** аналізує код у SonarCloud на кожен pull request і на push у
+`master`. Проєкт — `vitaliilatysh_quizproject` в організації `vitaliilatysh`; SQL-міграції
+виключені з аналізу (`sonar.exclusions`).
+
+~~~bash
+./gradlew :api:test :api:jacocoTestReport :api:jacocoTestCoverageVerification sonar
+~~~
+
+`sonar.qualitygate.wait=true`, тому крок чекає на вердикт quality gate і падає, якщо той не
+пройдений — аналіз тут блокує, а не лише звітує. Покриття Sonar читає з
+`api/build/reports/jacoco/test/jacocoTestReport.xml`, який створює `jacocoTestReport` на основі
+`:api:test`. Тому workflow **навмисно не запускає** `:api:integrationTest`: його execution data
+до цього звіту не потрапляє, а другий стек MySQL і Redis через Testcontainers на кожен PR коштує
+часу без користі для аналізу. `:api:integrationTest` залишається в `ci.yml`.
+
+Потрібен repository secret `SONAR_TOKEN`. Для PR від Dependabot job пропускається цілком:
+такі прогони не отримують секретів репозиторію, тож `sonar` падав би на кожному bump. Гейт
+покриття при цьому не втрачається — `ci.yml` виконує `:api:check` (а отже
+`jacocoTestCoverageVerification`) і на цих PR теж.
+
+## Безперервна інтеграція
+
+Чотири workflow у `.github/workflows`:
+
+| Workflow | Коли | Що робить |
+| --- | --- | --- |
+| `ci.yml` — **CI** | PR, push у `master` | `./gradlew clean :api:check :api:integrationTest :api:bootJar`, потім рендерить і перевіряє Kustomize overlays |
+| `sonarqube.yml` — **SonarQube analysis** | PR, push у `master` | тести, JaCoCo-звіт, аналіз SonarCloud і quality gate |
+| `container.yml` — **Backend container delivery** | PR, push у `master` | збірка образу, Trivy, smoke-перевірка проти MySQL і Redis; після `master` — публікація, SBOM і підпис cosign |
+| `deploy.yml` — **Deploy** | після успішного delivery з `master`, або вручну | розгортання за digest у `staging`, у production — лише вручну через protected environment |
+
+Java 25 і Gradle wrapper (з перевіркою wrapper) встановлює спільний composite action
+`.github/actions/setup-java-gradle`, тому pinned SHA сторонніх actions живуть в одному місці.
+Сторонні actions скрізь закріплені за commit SHA, а Dependabot тримає їх актуальними.
 
 ## Локальний запуск
 
@@ -102,6 +157,38 @@ Flyway автоматично перевіряє та застосовує мі�
 акаунта негайно роблять недійсними і access, і refresh token на всіх pod-ах. Після розгортання цієї
 версії старі JWT без `sid` будуть відхилені — користувачеві треба один раз увійти знову.
 
+### Змінні середовища
+
+Повний перелік із `api/src/main/resources/application.yml`. Обов'язкова рівно одна — `JWT_SECRET`;
+решта має придатні для локальної розробки значення за замовчуванням.
+
+| Змінна | Типово | Що робить |
+| --- | --- | --- |
+| `JWT_SECRET` | — (**обов'язкова**) | Base64 щонайменше з 32 випадкових байтів для підпису access JWT |
+| `JWT_TTL` | `PT15M` | час життя access JWT |
+| `REFRESH_TOKEN_TTL` | `P7D` | sliding TTL opaque refresh token |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | allowlist origin-ів для CORS |
+| `DB_URL` | `jdbc:mysql://localhost:3306/tests_db?...` | JDBC URL MySQL |
+| `DB_USERNAME` / `DB_PASSWORD` | `root` / порожній | облікові дані бази |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | адреса Redis |
+| `REDIS_PASSWORD` | порожній | пароль Redis |
+| `REDIS_CONNECT_TIMEOUT` / `REDIS_TIMEOUT` | `2s` / `2s` | таймаути клієнта Redis |
+| `REDIS_HEALTH_ENABLED` | `true` | чи входить Redis у health-перевірку |
+| `READINESS_HEALTH_INDICATORS` | `readinessState,db,redis` | склад readiness-групи |
+| `RATE_LIMIT_BACKEND` | `redis` | `redis` або `memory` (лише один екземпляр API) |
+| `API_RATE_LIMIT_REQUESTS` | `120` | ліміт запитів до API у вікні |
+| `LOGIN_RATE_LIMIT_REQUESTS` | `5` | ліміт спроб входу у вікні |
+| `API_RATE_LIMIT_WINDOW` | `PT1M` | розмір вікна rate limit |
+| `API_RATE_LIMIT_MAX_CLIENTS` | `10000` | максимум відстежуваних клієнтів у in-memory backend |
+| `TRUSTED_PROXY_CIDRS` | `127.0.0.1/32,::1/128` | мережі proxy, яким довіряють `X-Forwarded-For` |
+| `API_PORT` | `8081` | порт API |
+| `MANAGEMENT_PORT` | `9081` | окремий порт actuator |
+| `SHUTDOWN_TIMEOUT` | `20s` | ліміт graceful shutdown |
+| `HTTP_COMPRESSION_ENABLED` | `true` | gzip для великих відповідей |
+| `HTTP_COMPRESSION_MIN_RESPONSE_SIZE` | `1KB` | поріг компресії |
+| `PUBLIC_QUIZ_CACHE_MAX_AGE` | `PT1M` | TTL кешу публічного каталогу |
+| `LOG_FORMAT` | `logstash` | формат структурованих console logs |
+
 ## Основні маршрути
 
 - `POST /api/v1/auth/login` — вхід;
@@ -110,7 +197,8 @@ Flyway автоматично перевіряє та застосовує мі�
 - `POST /api/v1/auth/logout` — відкликання поточної сесії;
 - `GET /api/v1/users/me` — профіль;
 - `PUT /api/v1/users/me/password` — зміна пароля;
-- `GET /api/v1/quizzes` — список тестів;
+- `GET /api/v1/quizzes` — список тестів (з `search`, `complexity` і пагінацією);
+- `GET /api/v1/quizzes/summary` — `totalQuizzes` і `totalSubjects` для зведення;
 - `GET /api/v1/quizzes/{id}` — один тест;
 - `POST /api/v1/quizzes/{id}/attempts` — початок спроби;
 - `GET /api/v1/attempts/{id}` — поточна спроба;
@@ -199,7 +287,8 @@ docker run --rm -p 8081:8081 \
 ## Kubernetes
 
 Базові маніфести знаходяться в `deploy/kubernetes/backend`, а готові конфігурації оточень — у
-`deploy/kubernetes/overlays/local` і `deploy/kubernetes/overlays/production`. Вони створюють:
+`deploy/kubernetes/overlays/local`, `deploy/kubernetes/overlays/staging` і
+`deploy/kubernetes/overlays/production`. Вони створюють:
 
 - два екземпляри API;
 - Redis 8.2 для спільних атомарних rate limits;
@@ -313,6 +402,9 @@ GitHub secrets (значення не зберігаються в репозит
 | `OCI_CLI_KEY_CONTENT` | приватний API-ключ у PEM |
 | `OCI_CLI_REGION` | регіон, наприклад `eu-frankfurt-1` |
 | `OKE_CLUSTER_OCID` | OCID кластера OKE |
+
+Окремо від розгортання workflow **SonarQube analysis** потребує `SONAR_TOKEN`; без нього job не
+запуститься, але гейт покриття в `ci.yml` продовжує працювати.
 
 GitHub environments: `staging` (без обмежень) і `production` (required reviewers — саме це
 робить розгортання в production свідомою дією).
