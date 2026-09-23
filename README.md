@@ -181,6 +181,8 @@ Flyway автоматично перевіряє та застосовує мі�
 | `API_RATE_LIMIT_WINDOW` | `PT1M` | розмір вікна rate limit |
 | `API_RATE_LIMIT_MAX_CLIENTS` | `10000` | максимум відстежуваних клієнтів у in-memory backend |
 | `TRUSTED_PROXY_CIDRS` | `127.0.0.1/32,::1/128` | мережі proxy, яким довіряють `X-Forwarded-For` |
+| `SWAGGER_UI_ENABLED` | `true` | віддавати `/swagger-ui.html`; у ConfigMap кластера `false` |
+| `API_DOCS_ENABLED` | `true` | віддавати `/v3/api-docs`; у ConfigMap кластера `false` |
 | `API_PORT` | `8081` | порт API |
 | `MANAGEMENT_PORT` | `9081` | окремий порт actuator |
 | `SHUTDOWN_TIMEOUT` | `20s` | ліміт graceful shutdown |
@@ -206,6 +208,13 @@ Flyway автоматично перевіряє та застосовує мі�
 - `GET /api/v1/results/me` — результати користувача;
 - `/api/v1/admin/**` — адміністративні операції;
 - `/swagger-ui.html` — інтерактивна OpenAPI-документація.
+
+Обидва документаційні шляхи (`/swagger-ui.html` і `/v3/api-docs`) дозволені без
+автентифікації, тож там, де вони увімкнені, уся поверхня API — кожен маршрут,
+схема й обмеження валідації — доступна будь-кому, хто дістає порт. На локальній
+машині та в CI це те, що треба, і саме це закріплює `HttpContractTest`. У
+ConfigMap кластера обидва вимкнені; `SWAGGER_UI_ENABLED=true` повертає їх для
+конкретного середовища, без перезбірки образу.
 
 Actuator слухає окремий порт (`MANAGEMENT_PORT`, типово `9081`), а не порт API
 (`API_PORT`, типово `8081`). `/actuator/prometheus` мусить лишатися відкритим, бо

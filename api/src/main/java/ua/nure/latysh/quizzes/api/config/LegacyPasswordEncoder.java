@@ -44,19 +44,45 @@ public class LegacyPasswordEncoder implements PasswordEncoder {
     }
 
     /**
-     * Reports a stored value that is not in this encoder's format, so Spring
-     * Security re-encodes it after a successful login.
+     * Reports a stored value weaker than what {@link #encode} produces today, so
+     * Spring Security re-encodes it after a successful login.
      *
-     * <p>The legacy schema stored passwords in plain text — {@code VARCHAR(15)}
-     * could hold nothing else — and V2 only widened the column, leaving every
-     * migrated row as it was. Without this, {@link #matches} keeps accepting
-     * those values verbatim and they stay in plain text forever, however often
-     * the account signs in. Upgrading on login drains them as people return.
+     * <p>Two kinds of value qualify, and the second is the one this originally
+     * missed.
+     *
+     * <p><strong>Not this format at all.</strong> The legacy schema stored
+     * passwords in plain text — {@code VARCHAR(15)} could hold nothing else —
+     * and V2 only widened the column, leaving every migrated row as it was.
+     * Without this, {@link #matches} keeps accepting those values verbatim and
+     * they stay in plain text forever, however often the account signs in.
+     *
+     * <p><strong>This format, but under-iterated.</strong> {@code matches}
+     * deliberately derives with the iteration count written into the stored
+     * value, so that a hash produced under an older, cheaper setting still
+     * verifies. That is what makes lowering the count survivable — and it is
+     * also what makes such a row permanent, because it carries the prefix and
+     * the check above therefore called it current. A row at a thousand
+     * iterations was verified at a thousand iterations for the rest of its life.
+     * Comparing the stored count against the one in force closes that: the row
+     * is accepted, and then immediately rewritten at today's cost.
+     *
+     * <p>An unreadable count is an upgrade too. {@code matches} will refuse the
+     * value, so nothing reaches this method for it on a successful login, but
+     * saying "current" about something this class cannot parse would be a claim
+     * it has no basis for.
      */
     @Override
     public boolean upgradeEncoding(String encodedPassword) {
-        return encodedPassword != null && !encodedPassword.startsWith(PREFIX + "$");
+        if (encodedPassword == null) {
+            return false;
+        }
+        if (!encodedPassword.startsWith(PREFIX + "$")) {
+            return true;
+        }
+        StoredHash stored = parse(encodedPassword);
+        return stored == null || stored.iterationCount() < encodingIterationCount;
     }
+
 
     @Override
     public boolean matches(CharSequence rawPassword, String encodedPassword) {
@@ -67,18 +93,46 @@ public class LegacyPasswordEncoder implements PasswordEncoder {
             return MessageDigest.isEqual(rawPassword.toString().getBytes(StandardCharsets.UTF_8),
                     encodedPassword.getBytes(StandardCharsets.UTF_8));
         }
+        // A stored value decides its own cost, which is the point — it is how a
+        // hash written under a cheaper setting still verifies, and upgradeEncoding
+        // is what stops that leniency being permanent. A count at or below zero
+        // is not a cheaper setting but a broken row, and PBEKeySpec rejects it
+        // with an exception that would read here as a wrong password.
+        StoredHash stored = parse(encodedPassword);
+        if (stored == null || stored.iterationCount() <= 0) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                stored.hash(), derive(rawPassword, stored.salt(), stored.iterationCount()));
+    }
+
+    /**
+     * The three fields of a value in this encoder's format, or {@code null} when
+     * it does not have them.
+     *
+     * <p>One parser for both callers. {@code matches} needs the salt and the
+     * hash, {@code upgradeEncoding} needs only the cost, and splitting the
+     * string in each of them left the second copy of every check unreachable —
+     * which the line gate said so immediately.
+     */
+    private static StoredHash parse(String encodedPassword) {
         String[] parts = encodedPassword.split("\\$", -1);
         if (parts.length != 4) {
-            return false;
+            return null;
         }
         try {
-            int encodedIterationCount = Integer.parseInt(parts[1]);
-            byte[] salt = Base64.getUrlDecoder().decode(parts[2]);
-            byte[] expected = Base64.getUrlDecoder().decode(parts[3]);
-            return MessageDigest.isEqual(expected, derive(rawPassword, salt, encodedIterationCount));
+            // NumberFormatException is an IllegalArgumentException, so this one
+            // catch answers for the cost and for both Base64 fields.
+            return new StoredHash(
+                    Integer.parseInt(parts[1]),
+                    Base64.getUrlDecoder().decode(parts[2]),
+                    Base64.getUrlDecoder().decode(parts[3]));
         } catch (IllegalArgumentException _) {
-            return false;
+            return null;
         }
+    }
+
+    private record StoredHash(int iterationCount, byte[] salt, byte[] hash) {
     }
 
     private byte[] derive(CharSequence password, byte[] salt, int iterationCount) {

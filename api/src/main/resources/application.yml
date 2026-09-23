@@ -76,12 +76,19 @@ logging:
     format:
       console: ${LOG_FORMAT:logstash}
 
+# The only two operational settings in this file that were not environment
+# variables, and the pair with the widest blast radius: SecurityConfiguration
+# permits both paths unauthenticated, so wherever they are enabled the full API
+# surface — every route, schema and constraint — is published to anyone who can
+# reach the port. That is wanted in development and is what HttpContractTest
+# pins. Whether it is wanted in staging or production is a deployment's call,
+# and until now making that call meant rebuilding the image.
 springdoc:
   swagger-ui:
-    enabled: true
+    enabled: ${SWAGGER_UI_ENABLED:true}
     path: /swagger-ui.html
   api-docs:
-    enabled: true
+    enabled: ${API_DOCS_ENABLED:true}
     path: /v3/api-docs
 
 quiz:
