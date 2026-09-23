@@ -17,6 +17,8 @@ import ua.nure.latysh.quizzes.api.domain.ResultRepository;
 import ua.nure.latysh.quizzes.api.support.InvalidRequestException;
 import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
 
+import static ua.nure.latysh.quizzes.api.admin.AdminModels.ANSWERS_PER_QUESTION;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,9 +78,9 @@ public class QuestionAdminService {
                 .orElseThrow(() -> AdminErrors.missing(QUESTION_RESOURCE, questionId));
         question.setQuestion(request.text().trim());
         List<Answer> answers = answerRepository.findAllByQuestion_IdOrderByIdAsc(questionId);
-        if (answers.size() != request.answers().size()) {
-            throw new ResourceConflictException(
-                    "Question " + questionId + " does not contain exactly four answers");
+        if (answers.size() != ANSWERS_PER_QUESTION) {
+            throw new ResourceConflictException("Question " + questionId
+                    + " does not contain exactly " + ANSWERS_PER_QUESTION + " answers");
         }
         List<Answer> targets = pairWithStoredRows(questionId, answers, request.answers());
         for (int index = 0; index < targets.size(); index++) {
