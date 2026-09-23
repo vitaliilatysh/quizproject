@@ -318,7 +318,7 @@ class AdminContractTest extends ApiContractTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(questionRequest))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Question 99 does not contain exactly four answers"));
+                .andExpect(jsonPath("$.message").value("Question 99 does not contain exactly 4 answers"));
         mockMvc.perform(delete("/api/v1/admin/questions/99")
                         .header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isNoContent());

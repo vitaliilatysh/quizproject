@@ -13,15 +13,31 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import ua.nure.latysh.quizzes.api.config.SecurityProperties;
 
 import java.io.IOException;
+import java.util.Set;
 
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
-    // Versioned endpoint paths are part of the public API contract and must
-    // stay aligned with the controller mappings, not vary by deployment.
+    /**
+     * The endpoints that verify a password, and so share the strict budget.
+     *
+     * <p>Membership is decided by what the endpoint does with a password, not
+     * by where it sits in the URL tree: {@code /users/me/password} is not under
+     * {@code /auth}, but it hands {@code currentPassword} to the same encoder
+     * {@code /auth/login} does, and a wrong one fails it the same way. Left in
+     * the general bucket it allowed {@code requests} guesses a minute — 120 by
+     * default against 5 — at a password that is very often reusable elsewhere.
+     * A caller needs a valid access token to reach it, so this is the borrowed
+     * session and the stolen token, not the anonymous crawler; those are
+     * exactly the cases where the password is the thing still worth protecting.
+     *
+     * <p>Versioned endpoint paths are part of the public API contract and must
+     * stay aligned with the controller mappings, not vary by deployment.
+     */
     @SuppressWarnings("java:S1075")
-    private static final String LOGIN_PATH = "/api/v1/auth/login";
-    @SuppressWarnings("java:S1075")
-    private static final String REGISTER_PATH = "/api/v1/auth/register";
+    private static final Set<String> PASSWORD_PATHS = Set.of(
+            "/api/v1/auth/login",
+            "/api/v1/auth/register",
+            "/api/v1/users/me/password");
 
     private final RateLimitService rateLimitService;
     private final ClientIpResolver clientIpResolver;
@@ -52,8 +68,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
-        boolean sensitiveAuthentication = LOGIN_PATH.equals(request.getRequestURI())
-                || REGISTER_PATH.equals(request.getRequestURI());
+        boolean sensitiveAuthentication = PASSWORD_PATHS.contains(request.getRequestURI());
         int limit = sensitiveAuthentication
                 ? properties.rateLimit().loginAttempts()
                 : properties.rateLimit().requests();

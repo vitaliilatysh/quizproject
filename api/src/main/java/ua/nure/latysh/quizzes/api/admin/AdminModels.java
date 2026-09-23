@@ -13,6 +13,16 @@ import java.time.Instant;
 import java.util.List;
 
 public interface AdminModels {
+    /**
+     * How many options a question offers.
+     *
+     * <p>Named because two places need the number and they must not spell it
+     * separately: the constraint that enforces it on the way in, and the
+     * message {@code QuestionAdminService} returns when a stored question does
+     * not have that many. A number written twice is a message waiting to lie.
+     */
+    int ANSWERS_PER_QUESTION = 4;
+
     record SubjectResponse(int id, String name) {
     }
 
@@ -76,7 +86,8 @@ public interface AdminModels {
 
     record QuestionRequest(
             @NotBlank @Size(max = 250) String text,
-            @NotNull @Size(min = 4, max = 4) List<@Valid AnswerRequest> answers) {
+            @NotNull @Size(min = ANSWERS_PER_QUESTION, max = ANSWERS_PER_QUESTION)
+            List<@Valid AnswerRequest> answers) {
     }
 
     record UserStatusRequest(
