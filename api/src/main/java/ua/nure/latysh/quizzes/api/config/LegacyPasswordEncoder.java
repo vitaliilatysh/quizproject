@@ -79,8 +79,7 @@ public class LegacyPasswordEncoder implements PasswordEncoder {
         if (!encodedPassword.startsWith(PREFIX + "$")) {
             return true;
         }
-        StoredHash stored = parse(encodedPassword);
-        return stored == null || stored.iterationCount() < encodingIterationCount;
+        return iterationCountOf(encodedPassword.split("\\$", -1)) < encodingIterationCount;
     }
 
 
@@ -93,46 +92,49 @@ public class LegacyPasswordEncoder implements PasswordEncoder {
             return MessageDigest.isEqual(rawPassword.toString().getBytes(StandardCharsets.UTF_8),
                     encodedPassword.getBytes(StandardCharsets.UTF_8));
         }
+        String[] parts = encodedPassword.split("\\$", -1);
         // A stored value decides its own cost, which is the point — it is how a
         // hash written under a cheaper setting still verifies, and upgradeEncoding
         // is what stops that leniency being permanent. A count at or below zero
         // is not a cheaper setting but a broken row, and PBEKeySpec rejects it
         // with an exception that would read here as a wrong password.
-        StoredHash stored = parse(encodedPassword);
-        if (stored == null || stored.iterationCount() <= 0) {
+        int encodedIterationCount = iterationCountOf(parts);
+        if (encodedIterationCount <= 0) {
             return false;
         }
-        return MessageDigest.isEqual(
-                stored.hash(), derive(rawPassword, stored.salt(), stored.iterationCount()));
+        try {
+            byte[] salt = Base64.getUrlDecoder().decode(parts[2]);
+            byte[] expected = Base64.getUrlDecoder().decode(parts[3]);
+            return MessageDigest.isEqual(expected, derive(rawPassword, salt, encodedIterationCount));
+        } catch (IllegalArgumentException _) {
+            return false;
+        }
     }
 
     /**
-     * The three fields of a value in this encoder's format, or {@code null} when
-     * it does not have them.
+     * The cost a stored value was produced with, read from the split fields both
+     * callers already have.
      *
-     * <p>One parser for both callers. {@code matches} needs the salt and the
-     * hash, {@code upgradeEncoding} needs only the cost, and splitting the
-     * string in each of them left the second copy of every check unreachable —
-     * which the line gate said so immediately.
+     * <p>{@code -1} when the value does not have four fields or its cost is not
+     * a number — weaker than any configured count, so it asks for an upgrade,
+     * and not a cost, so {@code matches} refuses it.
+     *
+     * <p>Takes the split array rather than the string, and hands back a number
+     * rather than the three fields. The first shape duplicated the split in both
+     * callers and left the second copy of every check unreachable; the second
+     * carried two arrays in a record, whose inherited equals compares references
+     * rather than contents. Neither mattered here — nothing compares these — but
+     * both are traps to leave lying around, and the gates said so in turn.
      */
-    private static StoredHash parse(String encodedPassword) {
-        String[] parts = encodedPassword.split("\\$", -1);
+    private static int iterationCountOf(String[] parts) {
         if (parts.length != 4) {
-            return null;
+            return -1;
         }
         try {
-            // NumberFormatException is an IllegalArgumentException, so this one
-            // catch answers for the cost and for both Base64 fields.
-            return new StoredHash(
-                    Integer.parseInt(parts[1]),
-                    Base64.getUrlDecoder().decode(parts[2]),
-                    Base64.getUrlDecoder().decode(parts[3]));
-        } catch (IllegalArgumentException _) {
-            return null;
+            return Integer.parseInt(parts[1]);
+        } catch (NumberFormatException _) {
+            return -1;
         }
-    }
-
-    private record StoredHash(int iterationCount, byte[] salt, byte[] hash) {
     }
 
     private byte[] derive(CharSequence password, byte[] salt, int iterationCount) {

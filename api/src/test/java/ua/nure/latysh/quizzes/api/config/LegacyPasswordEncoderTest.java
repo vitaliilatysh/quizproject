@@ -86,6 +86,25 @@ class LegacyPasswordEncoderTest {
                 "an unreadable count was called current");
     }
 
+    /**
+     * A row whose cost reads fine and whose salt does not.
+     *
+     * <p>Its own case because the cost and the fields stopped being read in the
+     * same place: while one try block covered both, a value with an unreadable
+     * count reached this catch on the way past. Now it does not, and a corrupt
+     * salt is the only thing that gets here.
+     */
+    @Test
+    void refusesAStoredValueWhoseFieldsAreNotBase64() {
+        LegacyPasswordEncoder encoder = new LegacyPasswordEncoder(new SecureRandom(),
+                "PBKDF2WithHmacSHA256", 1_000);
+
+        assertFalse(encoder.matches("secret123", "pbkdf2-sha256$1000$!!!!$aGFzaA"),
+                "a corrupt salt was decoded as one");
+        assertFalse(encoder.matches("secret123", "pbkdf2-sha256$1000$c2FsdA$!!!!"),
+                "a corrupt hash was compared against");
+    }
+
     @Test
     void reportsUnavailableHashingAlgorithm() {
         LegacyPasswordEncoder encoder = new LegacyPasswordEncoder(
