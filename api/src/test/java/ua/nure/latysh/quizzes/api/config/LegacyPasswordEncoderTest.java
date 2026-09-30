@@ -42,6 +42,69 @@ class LegacyPasswordEncoderTest {
         assertFalse(encoder.upgradeEncoding(null));
     }
 
+    /**
+     * The case the upgrade signal used to miss.
+     *
+     * <p>matches() derives with the count written into the stored value, which
+     * is what lets a hash from a cheaper setting still verify. That leniency is
+     * only safe if such a row is then rewritten — and it was not, because it
+     * carried the prefix and so read as current.
+     */
+    @Test
+    void asksForAnUpgradeOfAHashWrittenUnderACheaperSetting() {
+        LegacyPasswordEncoder cheap = new LegacyPasswordEncoder(new SecureRandom(),
+                "PBKDF2WithHmacSHA256", 1_000);
+        LegacyPasswordEncoder current = new LegacyPasswordEncoder(new SecureRandom(),
+                "PBKDF2WithHmacSHA256", 10_000);
+        String cheapHash = cheap.encode("secret123");
+
+        assertTrue(current.matches("secret123", cheapHash),
+                "a hash from a cheaper setting stopped verifying, which is the leniency being kept");
+        assertTrue(current.upgradeEncoding(cheapHash),
+                "a hash at a thousand iterations was called current under ten thousand");
+        assertFalse(current.upgradeEncoding(current.encode("secret123")),
+                "a hash at the current cost was rewritten for no reason");
+        assertFalse(cheap.upgradeEncoding(current.encode("secret123")),
+                "a hash stronger than the configured cost was treated as weaker");
+    }
+
+    /**
+     * A row whose iteration count cannot be read, or is not a cost at all.
+     * PBEKeySpec throws on a count at or below zero, and that exception would
+     * otherwise leave matches() reporting a wrong password for a broken row.
+     */
+    @Test
+    void refusesAStoredCostThatIsNotOne() {
+        LegacyPasswordEncoder encoder = new LegacyPasswordEncoder(new SecureRandom(),
+                "PBKDF2WithHmacSHA256", 1_000);
+
+        for (String broken : new String[]{"pbkdf2-sha256$0$c2FsdA$aGFzaA", "pbkdf2-sha256$-1$c2FsdA$aGFzaA"}) {
+            assertFalse(encoder.matches("secret123", broken), broken + " was accepted as a cost");
+            assertTrue(encoder.upgradeEncoding(broken), broken + " was called current");
+        }
+        assertTrue(encoder.upgradeEncoding("pbkdf2-sha256$x$c2FsdA$aGFzaA"),
+                "an unreadable count was called current");
+    }
+
+    /**
+     * A row whose cost reads fine and whose salt does not.
+     *
+     * <p>Its own case because the cost and the fields stopped being read in the
+     * same place: while one try block covered both, a value with an unreadable
+     * count reached this catch on the way past. Now it does not, and a corrupt
+     * salt is the only thing that gets here.
+     */
+    @Test
+    void refusesAStoredValueWhoseFieldsAreNotBase64() {
+        LegacyPasswordEncoder encoder = new LegacyPasswordEncoder(new SecureRandom(),
+                "PBKDF2WithHmacSHA256", 1_000);
+
+        assertFalse(encoder.matches("secret123", "pbkdf2-sha256$1000$!!!!$aGFzaA"),
+                "a corrupt salt was decoded as one");
+        assertFalse(encoder.matches("secret123", "pbkdf2-sha256$1000$c2FsdA$!!!!"),
+                "a corrupt hash was compared against");
+    }
+
     @Test
     void reportsUnavailableHashingAlgorithm() {
         LegacyPasswordEncoder encoder = new LegacyPasswordEncoder(
