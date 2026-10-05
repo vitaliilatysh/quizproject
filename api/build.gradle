@@ -32,6 +32,27 @@ repositories {
 // Trivy scan in container.yml is what will notice if it is removed too early.
 ext['tomcat.version'] = '11.0.25'
 
+// Same gap, same mechanism, for both Jackson generations. Boot 4.1.1 manages
+// jackson-bom 3.1.5 and jackson-2-bom 2.21.5, and ten HIGH advisories land on
+// that pair — every one a denial of service in a parser this API points at
+// untrusted request bodies:
+//
+//   CVE-2026-89407  jackson-core, regular expression backtracking
+//   CVE-2026-89425  jackson-core, unbounded StringBuilder growth
+//   CVE-2026-68497  jackson-databind, unbounded numeric parsing
+//   CVE-2026-91776  jackson-databind, unbounded cache growth
+//   CVE-2026-91777  jackson-databind, quadratic forward-reference completion
+//
+// Each generation's lowest version clearing all five is a patch release on the
+// line Boot already manages: 3.1.7 and 2.21.7. Jackson 3 is what Boot itself
+// binds; Jackson 2 arrives through springdoc-openapi-starter-webmvc-ui ->
+// swagger-core-jakarta, so both are in the image and both have to move.
+//
+// Remove each once a Boot release manages a cleared version; as with Tomcat,
+// the Trivy scan in container.yml is what notices if one goes too early.
+ext['jackson-bom.version'] = '3.1.7'
+ext['jackson-2-bom.version'] = '2.21.7'
+
 dependencyLocking {
     lockAllConfigurations()
 }
