@@ -104,6 +104,11 @@ jobs:
       - name: Run container smoke test
         shell: bash
         run: |
+          # Generate a fresh signing key for each smoke-test run.
+          JWT_SECRET="$(openssl rand -base64 32)"
+          echo "::add-mask::${JWT_SECRET}"
+          export JWT_SECRET
+
           docker run --detach --name quiz-api-test --network quizproject-test \
             --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
             --cap-drop ALL --security-opt no-new-privileges \
@@ -114,7 +119,7 @@ jobs:
             --env DB_PASSWORD=container-db-password \
             --env REDIS_HOST=quiz-redis \
             --env REDIS_PASSWORD=container-redis-password \
-            --env JWT_SECRET=cXVpenByb2plY3QtY29udGFpbmVyLXNtb2tlLXRlc3Qtc2VjcmV0LTEyMzQ= \
+            --env JWT_SECRET \
             --env CORS_ALLOWED_ORIGINS=http://localhost:4173 \
             "${TEST_IMAGE}"
 
