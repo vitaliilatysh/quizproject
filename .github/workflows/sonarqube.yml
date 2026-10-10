@@ -16,6 +16,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  diagnostics:
+    name: Inspect SonarCloud security findings
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    steps:
+      - name: Read current master security findings
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+          
+          project = "vitaliilatysh_quizproject"
+          branch = "master"
+          
+          def read_api(path, parameters):
+              query = urllib.parse.urlencode(parameters)
+              request = urllib.request.Request(
+                  "https://sonarcloud.io/api/" + path + "?" + query,
+                  headers={"Authorization": "Bearer " + os.environ["SONAR_TOKEN"]},
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          
+          gate = read_api("qualitygates/project_status", {"projectKey": project, "branch": branch})
+          print("QUALITY_GATE_DIAGNOSTICS " + json.dumps(gate["projectStatus"]))
+          
+          page = 1
+          while True:
+              result = read_api("issues/search", {
+                  "componentKeys": project, "branch": branch,
+                  "resolved": "false", "types": "VULNERABILITY", "p": page, "ps": 100,
+              })
+              for issue in result["issues"]:
+                  finding = {
+                      "key": issue["key"], "rule": issue["rule"],
+                      "severity": issue.get("severity"), "message": issue["message"],
+                      "component": issue["component"], "line": issue.get("line"),
+                      "creationDate": issue.get("creationDate"),
+                  }
+                  print("SECURITY_FINDING " + json.dumps(finding))
+              if page * result["paging"]["pageSize"] >= result["paging"]["total"]:
+                  break
+              page += 1
+          PY
+
   analysis:
     name: Build and analyze
     runs-on: ubuntu-latest
