@@ -13,12 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionAttribute;
 import org.springframework.transaction.support.TransactionTemplate;
-import ua.nure.latysh.quizzes.api.attempt.AttemptService;
-import ua.nure.latysh.quizzes.api.quiz.QuizQueryService;
 import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** The API contract for the transaction boundaries and isolation levels the services declare. */
 class TransactionContractTest extends ApiContractTestBase {

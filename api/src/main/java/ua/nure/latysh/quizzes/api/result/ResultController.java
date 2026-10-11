@@ -39,4 +39,11 @@ public class ResultController {
         return pagination.response(resultQueryService.findCompletedByUsername(
                 authentication.getName(), pagination.pageable(page, size)));
     }
+
+    @GetMapping("/me/summary")
+    @Operation(summary = "Summarize all the current user's completed results, independently of pagination")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResultSummary getMySummary(Authentication authentication) {
+        return resultQueryService.summarizeCompletedByUsername(authentication.getName());
+    }
 }

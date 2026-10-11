@@ -161,6 +161,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify MySQL backup and restore on a fresh instance
+        run: bash .github/scripts/verify-backup-restore.sh
+
       # A workflow_run trigger matches the upstream workflow's declared name,
       # and a mismatch does not error — the deploy simply never fires, silently.
       # That is exactly what shipped: this file was named "Backend container
