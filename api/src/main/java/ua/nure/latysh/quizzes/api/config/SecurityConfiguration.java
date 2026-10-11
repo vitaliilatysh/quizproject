@@ -66,7 +66,8 @@ public class SecurityConfiguration {
                         .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole(ADMIN_ROLE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/quizzes/**").permitAll()
                         .requestMatchers("/api/v1/auth/logout",
-                                "/api/v1/results/me", "/api/v1/users/me", "/api/v1/users/me/**",
+                                "/api/v1/results/me", "/api/v1/results/me/summary",
+                                "/api/v1/users/me", "/api/v1/users/me/**",
                                 "/api/v1/attempts/**",
                                 "/api/v1/quizzes/*/attempts").hasAnyRole("USER", ADMIN_ROLE)
                         .requestMatchers("/api/v1/admin/**").hasRole(ADMIN_ROLE)
