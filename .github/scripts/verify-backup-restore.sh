@@ -7,7 +7,7 @@ RESTORED_FILE="$(mktemp)"
 RESTORE_CONTAINER="quiz-mysql-restore-$$"
 CREATED=false
 cleanup() {
-  if [ "${CREATED}" = true ]; then docker rm -f "${RESTORE_CONTAINER}" >/dev/null; fi
+  if [[ "${CREATED}" == true ]]; then docker rm -f "${RESTORE_CONTAINER}" >/dev/null; fi
   rm -f -- "${BACKUP_FILE}" "${RESTORED_FILE}"
 }
 trap cleanup EXIT
@@ -19,13 +19,14 @@ INSERT INTO backup_restore_probe VALUES (1, 'Відновлення тестів
 SQL
 
 dump() {
-  docker exec "$1" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqldump -uroot \
+  local container="$1"
+  docker exec "${container}" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqldump -uroot \
     --single-transaction --quick --no-tablespaces --set-gtid-purged=OFF \
     --routines --events --triggers --hex-blob --order-by-primary \
     --skip-comments --skip-dump-date --skip-add-locks tests_db'
 }
 dump quiz-mysql > "${BACKUP_FILE}"
-test -s "${BACKUP_FILE}"
+[[ -s "${BACKUP_FILE}" ]] || { echo 'The backup is empty.' >&2; exit 1; }
 
 export MYSQL_ROOT_PASSWORD
 MYSQL_ROOT_PASSWORD="$(openssl rand -hex 32)"
@@ -37,7 +38,7 @@ for attempt in {1..60}; do
     'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot --protocol=TCP -h127.0.0.1 -e "SELECT 1"' >/dev/null 2>&1; then
     break
   fi
-  if [ "${attempt}" -eq 60 ]; then echo 'Restore database did not become ready.' >&2; exit 1; fi
+  if [[ "${attempt}" -eq 60 ]]; then echo 'Restore database did not become ready.' >&2; exit 1; fi
   sleep 2
 done
 

@@ -1,5 +1,6 @@
 """Fail closed unless the latest push run of every required workflow passed."""
 import argparse
+import itertools
 import json
 import os
 import re
@@ -28,22 +29,28 @@ def fetch_runs(repo, workflow, sha, branch):
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)["workflow_runs"]
 
-def verify(repo, shas, branch, workflows, wait_seconds, fetch=fetch_runs, clock=time.monotonic, sleep=time.sleep):
+def check_inputs(repo, shas):
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
         raise ValueError("Invalid repository.")
     if not shas or any(not re.fullmatch(r"[0-9a-f]{40}", sha) for sha in shas):
         raise ValueError("A full image/manifest source commit SHA is required.")
+
+def pending_checks(repo, shas, branch, workflows, fetch):
+    pending = []
+    for sha, workflow in itertools.product(dict.fromkeys(shas), workflows):
+        state = verdict(fetch(repo, workflow, sha, branch), sha, branch)
+        label = f"{sha[:12]} / {workflow}"
+        if state == "failure":
+            raise RuntimeError(f"Production blocked: latest push run failed or was skipped: {label}")
+        if state == "pending":
+            pending.append(label)
+    return pending
+
+def verify(repo, shas, branch, workflows, wait_seconds, fetch=fetch_runs, clock=time.monotonic, sleep=time.sleep):
+    check_inputs(repo, shas)
     deadline = clock() + wait_seconds
     while True:
-        pending = []
-        for sha in dict.fromkeys(shas):
-            for workflow in workflows:
-                state = verdict(fetch(repo, workflow, sha, branch), sha, branch)
-                label = f"{sha[:12]} / {workflow}"
-                if state == "failure":
-                    raise RuntimeError(f"Production blocked: latest push run failed or was skipped: {label}")
-                if state == "pending":
-                    pending.append(label)
+        pending = pending_checks(repo, shas, branch, workflows, fetch)
         if not pending:
             print("All required push workflows passed for the image and deployment manifests.")
             return

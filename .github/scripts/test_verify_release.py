@@ -41,7 +41,7 @@ class ReleaseGateTest(unittest.TestCase):
     def test_missing_or_failed_run_blocks(self):
         for rows in ([], [run(conclusion="failure")]):
             with self.assertRaises(RuntimeError):
-                verify("owner/repo", [SHA], "main", ["ci.yml"], 0, fetch=lambda *args: rows)
+                verify("owner/repo", [SHA], "main", ["ci.yml"], 0, fetch=lambda *args, rows=rows: rows)
 
     def test_invalid_metadata_is_rejected_before_requests(self):
         for repo, sha in (("owner/repo", "main"), ("bad", SHA)):
