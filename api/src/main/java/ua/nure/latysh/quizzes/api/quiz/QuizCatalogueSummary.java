@@ -1,5 +1,7 @@
 package ua.nure.latysh.quizzes.api.quiz;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * Catalogue-wide totals that cannot be derived from a single page.
  *
@@ -7,5 +9,6 @@ package ua.nure.latysh.quizzes.api.quiz;
  * is what the catalogue actually offers to browse — not every row in the
  * subjects table.
  */
+@Schema(requiredProperties = {"totalQuizzes", "totalSubjects"})
 public record QuizCatalogueSummary(long totalQuizzes, long totalSubjects) {
 }

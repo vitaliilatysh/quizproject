@@ -1,0 +1,9 @@
+# Coverage tooling for the release-gate tests, used only by sonarqube.yml to
+# hand SonarCloud a report for .github/scripts. Not a runtime dependency of
+# anything: the scripts themselves use the standard library alone.
+#
+# Pinned by hash, like everything else this repository pulls in. Only the
+# pure-Python wheel is listed, so it installs identically on any runner
+# Python; install it with --require-hashes --only-binary=:all:.
+coverage==7.16.2 \
+    --hash=sha256:11d28e9123a9156cb405d8d27b44256c9a58fb5decc2073a8f17862057e3aa0f

@@ -85,6 +85,26 @@ jobs:
                           print(f"{report}: {package.get('name')}/{source.get('name')}: {', '.join(missed)}")
           PY
 
+      # The release gate in .github/scripts decides whether production deploys,
+      # and scanAll hands it to SonarCloud as source. Without a report it reads
+      # as 0% covered however well it is tested — on #87 that alone took
+      # Coverage on New Code to 3.1%. ci.yml runs the same tests to gate the
+      # build; this measures them. Runs after the `clean` above, which would
+      # otherwise delete the report. The venv is because the runner's system
+      # Python is externally managed (PEP 668) and pip refuses to install there.
+      - name: Measure release-gate coverage
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/.coverage
+        run: |
+          python3 -m venv "$RUNNER_TEMP/coverage-venv"
+          "$RUNNER_TEMP/coverage-venv/bin/pip" install --disable-pip-version-check \
+            --require-hashes --only-binary=:all: -r .github/scripts/requirements-coverage.txt
+          "$RUNNER_TEMP/coverage-venv/bin/python" -B -m coverage run --branch \
+            --source=.github/scripts --omit='.github/scripts/test_*.py' \
+            -m unittest discover -s .github/scripts
+          "$RUNNER_TEMP/coverage-venv/bin/python" -m coverage report -m
+          "$RUNNER_TEMP/coverage-venv/bin/python" -m coverage xml -o build/python-coverage.xml
+
       - name: Verify coverage and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

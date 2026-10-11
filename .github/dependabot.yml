@@ -11,6 +11,16 @@ updates:
     commit-message:
       prefix: "ci"
 
+  # The one Python dependency: coverage tooling for the release-gate tests,
+  # pinned by hash in .github/scripts/requirements-coverage.txt.
+  - package-ecosystem: pip
+    directory: /.github/scripts
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci"
+
   - package-ecosystem: docker
     directory: /
     schedule:
