@@ -22,6 +22,22 @@ sonar {
         property 'sonar.gradle.scanAll', 'true'
         property 'sonar.qualitygate.wait', 'true'
         property 'sonar.exclusions', 'api/src/main/resources/db/migration/**/*.sql'
+
+        // scanAll brings the files under .github/scripts in as source, which is
+        // what puts the production release gate in front of the analysis. It
+        // also means SonarCloud needs a coverage report for them: with none,
+        // verify_release.py read as 0% covered however well it was tested.
+        // sonarqube.yml writes this one.
+        property 'sonar.python.coverage.reportPaths', 'build/python-coverage.xml'
+
+        // scanAll files only what sits in a Gradle test source set as a test;
+        // everything else it collects is source, and it takes .github in whole.
+        // So the gate's own tests are indexed as production code, uncovered.
+        // They are excluded from coverage only — still analyzed for issues.
+        // Setting sonar.tests instead would look like the fix and is not:
+        // overriding sonar.sources or sonar.tests switches scanAll off, and
+        // takes the workflows and scripts out of the analysis with it.
+        property 'sonar.coverage.exclusions', '.github/scripts/test_*.py'
     }
 }
 

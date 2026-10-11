@@ -1,5 +1,12 @@
+import io
+import json
+import os
 import unittest
-from verify_release import verdict, verify
+from unittest import mock
+from urllib.parse import parse_qs, urlsplit
+
+import verify_release
+from verify_release import fetch_runs, verdict, verify
 
 SHA = "a" * 40
 
@@ -53,6 +60,28 @@ class ReleaseGateTest(unittest.TestCase):
             raise OSError("GitHub unavailable")
         with self.assertRaises(OSError):
             verify("owner/repo", [SHA], "main", ["ci.yml"], 0, fetch=unavailable)
+
+    def test_fetch_asks_github_for_push_runs_of_exactly_that_commit(self):
+        seen = {}
+        def urlopen(request, timeout):
+            seen.update(url=request.full_url, auth=request.get_header("Authorization"), timeout=timeout)
+            return io.BytesIO(json.dumps({"workflow_runs": [run()]}).encode())
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "test-token"}), mock.patch("urllib.request.urlopen", urlopen):
+            runs = fetch_runs("owner/repo", "ci.yml", SHA, "main")
+        url = urlsplit(seen["url"])
+        self.assertEqual("/repos/owner/repo/actions/workflows/ci.yml/runs", url.path)
+        query = parse_qs(url.query)
+        self.assertEqual(([SHA], ["main"], ["push"]), (query["head_sha"], query["branch"], query["event"]))
+        self.assertEqual("Bearer test-token", seen["auth"])
+        self.assertEqual(30, seen["timeout"])
+        self.assertEqual([run()], runs)
+
+    def test_every_sha_and_workflow_on_the_command_line_is_checked(self):
+        argv = ["verify_release.py", "--repo", "owner/repo", "--sha", SHA, "--sha", "b" * 40,
+                "--branch", "main", "--workflow", "ci.yml", "--workflow", "container.yml"]
+        with mock.patch("sys.argv", argv), mock.patch.object(verify_release, "verify") as checked:
+            verify_release.main()
+        checked.assert_called_once_with("owner/repo", [SHA, "b" * 40], "main", ["ci.yml", "container.yml"], 300)
 
 if __name__ == "__main__":
     unittest.main()
