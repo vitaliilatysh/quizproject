@@ -116,7 +116,7 @@ Workflow **SonarQube analysis** аналізує код у SonarCloud на ко�
 | `ci.yml` — **CI** | PR, push у `master` | `./gradlew clean :api:check :api:integrationTest :api:bootJar`, потім рендерить і перевіряє Kustomize overlays |
 | `sonarqube.yml` — **SonarQube analysis** | PR, push у `master` | тести, JaCoCo-звіт, аналіз SonarCloud і quality gate |
 | `container.yml` — **Backend container delivery** | PR, push у `master` | збірка образу, Trivy, smoke-перевірка проти MySQL і Redis; після `master` — публікація, SBOM і підпис cosign |
-| `deploy.yml` — **Deploy** | після успішного delivery з `master`, або вручну | розгортання за digest у `staging`, у production — лише вручну через protected environment |
+| `deploy.yml` — **Deploy** | після успішного delivery з `master`, якщо `STAGING_AUTO_DEPLOY=true`, або вручну | розгортання за digest у `staging`, у production — лише вручну через protected environment |
 
 Java 25 і Gradle wrapper (з перевіркою wrapper) встановлює спільний composite action
 `.github/actions/setup-java-gradle`, тому pinned SHA сторонніх actions живуть в одному місці.
@@ -403,6 +403,13 @@ cosign verify \
 Workflow **Deploy** застосовує те, що опублікував container delivery. Він запускається сам після
 успішної публікації образу з `master` і розгортає у `staging`; production розгортається лише
 вручну (`workflow_dispatch`) і через protected environment, тобто з підтвердженням людини.
+
+Автоматичний запуск увімкнено змінною репозиторію `STAGING_AUTO_DEPLOY` (Settings → Secrets and
+variables → Actions → Variables) зі значенням `true`. Поки кластера немає, вона не задана, і job
+**пропускається**, а не падає: інакше кожен пуш закінчувався б червоним деплоєм, а перевірка,
+що червона завжди, перестає щось означати — справжня поломка поруч із нею губиться. Ручний
+`workflow_dispatch` працює незалежно від змінної. Коли кластер з'явиться, досить виставити
+змінну — змін у коді не потрібно.
 
 Розгортається **digest, а не тег**. Тег `sha-<commit>` резолвиться в digest один раз, підпис
 cosign перевіряється саме над цим digest, і всі подальші кроки посилаються тільки на нього —
