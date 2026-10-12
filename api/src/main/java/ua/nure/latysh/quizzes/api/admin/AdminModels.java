@@ -1,5 +1,7 @@
 package ua.nure.latysh.quizzes.api.admin;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -23,12 +25,16 @@ public interface AdminModels {
      */
     int ANSWERS_PER_QUESTION = 4;
 
+    @Schema(name = "AdminSubject", requiredProperties = {"id", "name"})
     record SubjectResponse(int id, String name) {
     }
 
+    @Schema(name = "AdminLevel", requiredProperties = {"id", "name"})
     record LevelResponse(int id, String name) {
     }
 
+    @Schema(name = "AdminQuiz", requiredProperties = {"id", "name", "timeToPassMinutes", "levelId",
+            "complexity", "subjectId", "subject", "totalQuestions"})
     record QuizResponse(
             int id,
             String name,
@@ -40,15 +46,19 @@ public interface AdminModels {
             int totalQuestions) {
     }
 
+    @Schema(name = "AdminAnswer", requiredProperties = {"id", "text", "correct"})
     record AnswerResponse(int id, String text, boolean correct) {
     }
 
+    @Schema(name = "AdminQuestion", requiredProperties = {"id", "quizId", "text", "answers"})
     record QuestionResponse(int id, int quizId, String text, List<AnswerResponse> answers) {
     }
 
+    @Schema(name = "AdminUser", requiredProperties = {"id", "username", "role", "status"})
     record UserResponse(int id, String username, String role, String status) {
     }
 
+    @Schema(name = "AdminResult", requiredProperties = {"attemptId", "username", "quizId", "quizName", "score", "completedAt"})
     record ResultResponse(
             long attemptId,
             String username,
@@ -61,6 +71,7 @@ public interface AdminModels {
     record SubjectRequest(@NotBlank @Size(max = 25) String name) {
     }
 
+    @Schema(requiredProperties = {"name", "subjectId", "levelId", "timeToPassMinutes"})
     record QuizRequest(
             @NotBlank @Size(max = 50) String name,
             @Positive int subjectId,
@@ -78,6 +89,7 @@ public interface AdminModels {
      * {@code updateQuestion} falls back to position when it is absent. Creating
      * a question leaves it null: there is nothing yet to name.
      */
+    @Schema(requiredProperties = {"text", "correct"})
     record AnswerRequest(Integer id, @NotBlank @Size(max = 50) String text, boolean correct) {
         AnswerRequest(String text, boolean correct) {
             this(null, text, correct);

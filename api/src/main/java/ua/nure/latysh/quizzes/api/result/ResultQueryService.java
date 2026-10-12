@@ -45,4 +45,8 @@ public class ResultQueryService {
                         attempt.getScore(),
                         attempt.getEndTime()));
     }
+
+    public ResultSummary summarizeCompletedByUsername(String username) {
+        return attemptRepository.summarizeCompletedByUsername(username);
+    }
 }

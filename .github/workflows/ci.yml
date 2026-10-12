@@ -24,11 +24,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Test production release gate
+        run: python3 -B -m unittest discover -s .github/scripts -v
+
       - name: Set up Java and Gradle
         uses: ./.github/actions/setup-java-gradle
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
+        uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5.2.0
         with:
           version: v1.36.1
 
@@ -62,3 +65,11 @@ jobs:
           grep --quiet 'averageUtilization: 70' production.yaml
           grep --quiet 'kind: ServiceMonitor' monitoring.yaml
           grep --quiet 'alert: QuizApiUnavailable' monitoring.yaml
+
+      - name: Upload generated OpenAPI contract
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openapi-contract
+          path: api/build/openapi/openapi.json
+          if-no-files-found: error
+          retention-days: 30

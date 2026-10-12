@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import ua.nure.latysh.quizzes.api.result.ResultSummary;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -29,6 +30,14 @@ public interface AttemptRepository extends JpaRepository<Attempt, Integer> {
             WHERE a.user.login = :username AND a.completed = true AND a.endTime IS NOT NULL
             """)
     Page<Attempt> findCompletedByUsername(@Param("username") String username, Pageable pageable);
+
+    @Query("""
+            SELECT new ua.nure.latysh.quizzes.api.result.ResultSummary(
+                COUNT(a), COALESCE(AVG(a.score), 0.0), COALESCE(MAX(a.score), 0))
+            FROM Attempt a
+            WHERE a.user.login = :username AND a.completed = true AND a.endTime IS NOT NULL
+            """)
+    ResultSummary summarizeCompletedByUsername(@Param("username") String username);
 
     @Query(value = """
             SELECT a FROM Attempt a JOIN FETCH a.quiz JOIN FETCH a.user
