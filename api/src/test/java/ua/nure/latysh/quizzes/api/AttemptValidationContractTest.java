@@ -35,6 +35,21 @@ class AttemptValidationContractTest extends ApiContractTestBase {
     }
 
     @Test
+    void rejectsMoreAnswersThanTheAttemptSnapshotContains() throws Exception {
+        String token = login("student", "secret123", "203.0.113.204");
+        long attempt = attemptId(mockMvc.perform(post("/api/v1/quizzes/1/attempts")
+                        .with(from("203.0.113.204")).header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isCreated()).andReturn());
+        mockMvc.perform(post("/api/v1/attempts/{id}/complete", attempt)
+                        .with(from("203.0.113.204")).header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answerIds\":[1,2,3,4,5,6,7,8,9]}"))
+                .andExpect(status().isBadRequest());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT completed FROM attempts WHERE id=?", Boolean.class, attempt)).isFalse();
+    }
+
+    @Test
     void rejectsNullAdminAnswersWithoutCreatingAQuestion() throws Exception {
         String token = login("admin", "secret123", "203.0.113.202");
         Integer before = jdbcTemplate.queryForObject(
