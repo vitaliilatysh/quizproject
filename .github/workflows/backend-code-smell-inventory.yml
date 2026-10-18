@@ -1,0 +1,47 @@
+name: Backend code smell inventory
+on:
+  push:
+    branches: [codex/fix-backend-code-smells-20261018]
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read unresolved backend code smells
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+          page = 1
+          while True:
+              query = urllib.parse.urlencode({
+                  "componentKeys": "vitaliilatysh_quizproject",
+                  "branch": "master",
+                  "types": "CODE_SMELL",
+                  "resolved": "false",
+                  "ps": "500",
+                  "p": str(page),
+              })
+              request = urllib.request.Request(
+                  "https://sonarcloud.io/api/issues/search?" + query,
+                  headers={"Authorization": "Bearer " + os.environ["SONAR_TOKEN"]},
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  data = json.load(response)
+              if page == 1:
+                  print("INVENTORY_TOTAL=" + str(data.get("total", data.get("paging", {}).get("total"))))
+              for issue in data.get("issues", []):
+                  print("ISSUE=" + json.dumps({key: issue.get(key) for key in (
+                      "key", "rule", "severity", "component", "line", "message", "textRange", "effort", "status"
+                  )}))
+              if len(data.get("issues", [])) < 500:
+                  break
+              page += 1
+          PY
