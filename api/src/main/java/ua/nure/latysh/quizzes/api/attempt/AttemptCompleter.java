@@ -72,10 +72,11 @@ final class AttemptCompleter {
         if (answerKey.correctByQuestion().isEmpty()) {
             throw new ResourceConflictException("The attempted quiz no longer contains valid questions");
         }
-        Set<Integer> selectedAnswers = Set.copyOf(answerIds);
-        if (!answerKey.knownAnswerIds().containsAll(selectedAnswers)) {
+        if (answerIds.size() > answerKey.knownAnswerIds().size()
+                || !answerKey.knownAnswerIds().containsAll(answerIds)) {
             throw new InvalidRequestException("An answer does not belong to the attempted quiz");
         }
+        Set<Integer> selectedAnswers = Set.copyOf(answerIds);
 
         int score = calculateScore(answerKey, selectedAnswers);
         saveAnswers(attempt, selectedAnswers);
@@ -150,3 +151,4 @@ final class AttemptCompleter {
             Map<Integer, Integer> answerToQuestion) {
     }
 }
+

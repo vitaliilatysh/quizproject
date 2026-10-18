@@ -5,9 +5,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -16,55 +13,46 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import ua.nure.latysh.quizzes.api.account.AccountService;
 import ua.nure.latysh.quizzes.api.observability.QuizMetrics;
 
 @RestController
 @RequestMapping("/api/v1/auth")
 @Tag(name = "Authentication")
 public class AuthController {
-    private final AuthenticationManager authenticationManager;
+    private final AuthenticationService authenticationService;
     private final TokenService tokenService;
-    private final AccountService accountService;
     private final QuizMetrics metrics;
 
     public AuthController(
-            AuthenticationManager authenticationManager,
+            AuthenticationService authenticationService,
             TokenService tokenService,
-            AccountService accountService,
             QuizMetrics metrics) {
-        this.authenticationManager = authenticationManager;
+        this.authenticationService = authenticationService;
         this.tokenService = tokenService;
-        this.accountService = accountService;
         this.metrics = metrics;
     }
 
     @PostMapping("/login")
     @Operation(summary = "Exchange database credentials for an access and refresh token pair")
     public TokenResponse login(@Valid @RequestBody LoginRequest request) {
-        var credentials = UsernamePasswordAuthenticationToken.unauthenticated(
-                request.username(), request.password());
-        final Authentication authentication;
+        final TokenResponse response;
         try {
-            authentication = authenticationManager.authenticate(credentials);
+            response = authenticationService.login(request);
         } catch (AuthenticationException exception) {
             metrics.recordFailedLogin();
             throw exception;
         }
         metrics.recordSuccessfulLogin();
-        accountService.recordLogin(authentication.getName());
-        return tokenService.issue(authentication);
+        return response;
     }
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create an active student account and return an access and refresh token pair")
     public TokenResponse register(@Valid @RequestBody RegisterRequest request) {
-        accountService.register(request);
+        TokenResponse response = authenticationService.register(request);
         metrics.recordRegistration();
-        var authentication = authenticationManager.authenticate(
-                UsernamePasswordAuthenticationToken.unauthenticated(request.username(), request.password()));
-        return tokenService.issue(authentication);
+        return response;
     }
 
     @PostMapping("/refresh")
@@ -83,3 +71,4 @@ public class AuthController {
         tokenService.revoke(token);
     }
 }
+
