@@ -1,0 +1,38 @@
+name: Dependabot Sonar diagnostics
+on:
+  push:
+    branches: [codex/dependabot-auto-merge-20261018]
+permissions:
+  contents: read
+jobs:
+  issues:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read analysis issues
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+          query = urllib.parse.urlencode({
+              "componentKeys": "vitaliilatysh_quizproject",
+              "pullRequest": "88",
+              "resolved": "false",
+              "ps": "100",
+          })
+          request = urllib.request.Request(
+              "https://sonarcloud.io/api/issues/search?" + query,
+              headers={"Authorization": "Bearer " + os.environ["SONAR_TOKEN"]},
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              data = json.load(response)
+          for issue in data.get("issues", []):
+              print(json.dumps({key: issue.get(key) for key in (
+                  "key", "rule", "severity", "type", "component", "line", "message", "impacts"
+              )}))
+          PY
