@@ -22,6 +22,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import tools.jackson.databind.ObjectMapper;
 import ua.nure.latysh.quizzes.api.account.AccountService;
 import ua.nure.latysh.quizzes.api.account.ChangePasswordRequest;
+import ua.nure.latysh.quizzes.api.admin.UserAdminService;
 import ua.nure.latysh.quizzes.api.domain.UserRepository;
 
 import java.util.concurrent.CountDownLatch;
@@ -55,6 +56,7 @@ class PasswordConcurrencyIntegrationTest {
 
     @Autowired private AccountService accounts;
     @Autowired private UserRepository users;
+    @Autowired private UserAdminService administrators;
     @Autowired private PlatformTransactionManager transactions;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private MockMvc mvc;
@@ -81,6 +83,27 @@ class PasswordConcurrencyIntegrationTest {
             pool.shutdownNow();
         }
         assertReplacementPassword("datelogin");
+    }
+
+    @Test
+    void blockingAnAccountDoesNotRestoreAStalePassword() throws Exception {
+        register("statuschange");
+        var pool = Executors.newSingleThreadExecutor();
+        try {
+            transaction().executeWithoutResult(state -> {
+                int userId = users.findByLogin("statuschange").orElseThrow().getId();
+                try {
+                    pool.submit(() -> changePassword("statuschange")).get(30, TimeUnit.SECONDS);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+                administrators.updateUserStatus(userId, "blocked", "operator");
+            });
+        } finally {
+            pool.shutdownNow();
+        }
+        assertReplacementPassword("statuschange");
+        assertThat(users.findByLogin("statuschange").orElseThrow().getStatus().getName()).isEqualTo("blocked");
     }
 
     @Test
