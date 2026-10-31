@@ -429,7 +429,16 @@ cosign перевіряється саме над цим digest, і всі по�
 переспрямований тег не може підмінити образ між перевіркою підпису й `kubectl apply`. Підпис,
 який ніхто не перевіряє в момент розгортання, був би декоративним.
 
+Перед production gate перевіряє **обидва коміти**: джерело підписаного образу (OCI label
+`org.opencontainers.image.revision`) і checkout маніфестів. Для кожного потрібні успішні
+`ci.yml`, `sonarqube.yml` і `container.yml` у цьому репозиторії на `master`. Зараховуються
+`push` та `workflow_dispatch` (зокрема перевірки після Dependabot auto-merge), але не PR,
+fork чи scheduled runs. Вирішальним є найновіший запуск кожного workflow серед цих двох
+подій: failure, skipped або відсутня перевірка блокують деплой; незавершені перевірки
+очікуються до 5 хвилин. Gate не запускає перевірки й не застосовується до staging.
+
 Порядок кроків: перевірка готовності namespace → резолв digest → перевірка підпису →
+production gate →
 `kubectl apply --dry-run=server` проти живого кластера → `apply` → `rollout status` →
 перевірка, що Service має готовий endpoint. Якщо rollout не піднявся, workflow друкує події та
 логи подів і робить `rollout undo` (за наявності попередньої ревізії).

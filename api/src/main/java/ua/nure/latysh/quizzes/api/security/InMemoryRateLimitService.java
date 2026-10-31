@@ -1,8 +1,5 @@
 package ua.nure.latysh.quizzes.api.security;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
 import ua.nure.latysh.quizzes.api.config.SecurityProperties;
 
 import java.time.Clock;
@@ -10,14 +7,11 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-@Service
-@ConditionalOnProperty(prefix = "quiz.security.rate-limit", name = "backend", havingValue = "memory")
 public class InMemoryRateLimitService implements RateLimitService {
     private final Clock clock;
     private final int maxClients;
     private final Map<String, Window> windows = new LinkedHashMap<>(16, 0.75f, true);
 
-    @Autowired
     public InMemoryRateLimitService(SecurityProperties properties) {
         this(Clock.systemUTC(), properties.rateLimit().maxClients());
     }
