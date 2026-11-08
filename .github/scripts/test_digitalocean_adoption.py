@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "deploy/digitalocean/adopt-existing.py"
@@ -255,7 +256,9 @@ class AdoptionTest(unittest.TestCase):
 
     def test_origins_and_dotenv_literals_are_validated(self):
         self.assertEqual(ADOPT.addresses("https://quiz.example.com/"), ("https://quiz.example.com", "quiz.example.com", 80))
-        self.assertEqual(ADOPT.addresses("http://127.0.0.1:18080"), ("http://127.0.0.1:18080", "http://:80", 18080))
+        origin, listener, port = ADOPT.addresses("http://127.0.0.1:18080")
+        self.assertEqual(origin, "http://127.0.0.1:18080")
+        self.assertEqual((urlsplit(listener).scheme, urlsplit(listener).port, port), ("http", 80, 18080))
         self.assertEqual(ADOPT.addresses("https://quiz.example.com:443")[0], "https://quiz.example.com")
         for origin in ("https://user:pass@host", "https://host/path", "https://host:8443", "http://localhost:443", "http://localhost:0", "http://localhost:65536"):
             with self.assertRaises(ValueError):

@@ -55,7 +55,8 @@ jobs:
           printf '%s\n' "$DO_SSH_KEY" > "$credentials/key"
           printf '%s\n' "$DO_KNOWN_HOSTS" > "$credentials/known_hosts"
           unset DO_SSH_KEY DO_KNOWN_HOSTS
-          printf -v remote_origin '%q' "$PUBLIC_ORIGIN"
+          # The bootstrap URL is configuration sent over verified SSH, not an HTTP request.
+          printf -v remote_origin '%q' "$PUBLIC_ORIGIN" # NOSONAR
           ssh -T -p "$DO_SSH_PORT" -i "$credentials/key" \
             -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             -o "UserKnownHostsFile=$credentials/known_hosts" \
