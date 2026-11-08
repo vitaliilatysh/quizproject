@@ -5,9 +5,11 @@ import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +22,15 @@ public interface UserRepository extends JpaRepository<UserAccount, Integer> {
      */
     @Query("SELECT u FROM UserAccount u JOIN FETCH u.role JOIN FETCH u.status WHERE u.login = :login")
     Optional<UserAccount> findByLogin(@Param("login") String login);
+
+    /** Serializes authentication and password changes for this account only. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM UserAccount u WHERE u.login = :login")
+    Optional<UserAccount> findByLoginForUpdate(@Param("login") String login);
+
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE UserAccount u SET u.loginDate = :now WHERE u.login = :login")
+    void updateLoginDate(@Param("login") String login, @Param("now") Instant now);
 
     /** Same reason: the admin listing maps role and status outside a transaction. */
     @Query(value = "SELECT u FROM UserAccount u JOIN FETCH u.role JOIN FETCH u.status ORDER BY u.login",
@@ -44,3 +55,4 @@ public interface UserRepository extends JpaRepository<UserAccount, Integer> {
             """)
     List<UserAccount> lockActiveAdministrators();
 }
+

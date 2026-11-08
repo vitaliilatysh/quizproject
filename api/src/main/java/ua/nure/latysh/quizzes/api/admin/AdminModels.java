@@ -99,7 +99,7 @@ public interface AdminModels {
     record QuestionRequest(
             @NotBlank @Size(max = 250) String text,
             @NotNull @Size(min = ANSWERS_PER_QUESTION, max = ANSWERS_PER_QUESTION)
-            List<@Valid AnswerRequest> answers) {
+            List<@NotNull @Valid AnswerRequest> answers) {
     }
 
     record UserStatusRequest(
@@ -107,3 +107,4 @@ public interface AdminModels {
             String status) {
     }
 }
+
