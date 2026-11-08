@@ -243,6 +243,8 @@ class AdoptionTest(unittest.TestCase):
         self.assertEqual(metadata["volumes"][0]["type"], "bind")
         self.assertTrue(metadata["volumes"][0]["read_only"])
         self.assertEqual(metadata["healthcheck"], {})
+        container["HostConfig"]["Tmpfs"] = {"/tmp": ""}
+        self.assertEqual(ADOPT.snapshot_service(container, {}, {})["tmpfs"], ["/tmp"])
         self.assertEqual(ADOPT.snapshot_health({"Test": ["NONE"]}), {"test": ["NONE"]})
         container["HostConfig"]["Privileged"] = True
         with self.assertRaises(ValueError):

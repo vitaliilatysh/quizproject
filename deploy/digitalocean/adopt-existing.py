@@ -192,7 +192,7 @@ def snapshot_service(container, volumes, networks):
     if config.get("StopTimeout") is not None:
         service["stop_grace_period"] = f"{config['StopTimeout']}s"
     if host.get("Tmpfs"):
-        service["tmpfs"] = [f"{path}:{options}" for path, options in host["Tmpfs"].items()]
+        service["tmpfs"] = [f"{path}:{options}" if options else path for path, options in host["Tmpfs"].items()]
     if host.get("LogConfig", {}).get("Type"):
         service["logging"] = {"driver": host["LogConfig"]["Type"], "options": host["LogConfig"].get("Config") or {}}
     return service
