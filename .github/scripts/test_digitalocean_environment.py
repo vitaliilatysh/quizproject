@@ -1,0 +1,82 @@
+"""Check that first-time server setup cannot replace production credentials."""
+import base64
+import contextlib
+import importlib.util
+import io
+from pathlib import Path
+import runpy
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location("prepare_environment", ROOT / "deploy/digitalocean/prepare-env.py")
+PREPARE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(PREPARE)
+
+# RFC 5737 documentation address; these fixtures test bootstrap HTTP without networking.
+BOOTSTRAP_ORIGIN = "http://192.0.2.10"  # NOSONAR(S5332)
+
+
+class EnvironmentTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name)
+
+    def configure(self, origin):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            PREPARE.prepare(self.base, "production", origin)
+        return output.getvalue()
+
+    def test_random_credentials_are_private_and_not_printed(self):
+        output = self.configure(BOOTSTRAP_ORIGIN)
+        path = self.base / "production/backend/.env"
+        entries = {key: value for key, _, value in (line.partition("=") for line in path.read_text().splitlines())}
+        self.assertEqual(len(base64.b64decode(entries["JWT_SECRET"])), 32)
+        self.assertNotEqual(entries["MYSQL_PASSWORD"], entries["MYSQL_ROOT_PASSWORD"])
+        self.assertNotIn(entries["MYSQL_PASSWORD"], output)
+        self.assertNotIn(entries["JWT_SECRET"], output)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual((self.base / "production/frontend/.env").stat().st_mode & 0o777, 0o600)
+
+    def test_existing_environment_is_never_rotated(self):
+        self.configure("https://quiz.example.com")
+        path = self.base / "production/backend/.env"
+        previous = path.read_bytes()
+        with self.assertRaises(FileExistsError):
+            self.configure("https://quiz.example.com")
+        self.assertEqual(path.read_bytes(), previous)
+
+    def test_https_configures_the_domain_and_http_preserves_custom_ports(self):
+        self.configure(BOOTSTRAP_ORIGIN + ":8080")
+        self.assertIn("PUBLIC_ORIGIN=" + BOOTSTRAP_ORIGIN + ":8080", (self.base / "production/backend/.env").read_text())
+        self.assertIn("HTTP_PORT=8080", (self.base / "production/frontend/.env").read_text())
+        # A different environment gets its own credentials and TLS configuration.
+        PREPARE.prepare(self.base, "staging", "https://quiz.example.com")
+        self.assertIn("SITE_ADDRESS=quiz.example.com", (self.base / "staging/frontend/.env").read_text())
+
+    def test_credentials_paths_queries_and_invalid_origins_are_rejected(self):
+        for origin in ("https://u:p@quiz.example.com", "https://quiz.example.com/api", "https://quiz.example.com?x=y", "https://quiz.example.com#fragment", "file:///tmp/a", "https://quiz.example.com:8443", BOOTSTRAP_ORIGIN + ":443"):
+            with self.subTest(origin=origin), self.assertRaises(ValueError):
+                self.configure(origin)
+        self.assertFalse((self.base / "production").exists())
+
+    def test_invalid_environment_cannot_write_outside_the_environment_directory(self):
+        with self.assertRaises(ValueError):
+            PREPARE.prepare(self.base, "../other", "https://quiz.example.com")
+        self.assertEqual(list(self.base.iterdir()), [])
+
+    def test_cli_creates_the_requested_environment(self):
+        output = io.StringIO()
+        argv = ["prepare-env.py", "--root", str(self.base), "--environment", "staging", "--origin", "https://quiz.example.com"]
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
+            runpy.run_path(str(ROOT / "deploy/digitalocean/prepare-env.py"), run_name="__main__")
+        self.assertTrue((self.base / "staging/backend/.env").exists())
+        self.assertNotIn("JWT_SECRET=", output.getvalue())
+
+
+if __name__ == "__main__":
+    unittest.main()

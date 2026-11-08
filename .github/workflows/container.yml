@@ -213,6 +213,10 @@ jobs:
           docker rm --force quiz-api-test quiz-mysql quiz-redis 2>/dev/null || true
           docker network rm quizproject-test 2>/dev/null || true
 
+
+      - name: Smoke test DigitalOcean Compose deployment
+        run: bash .github/scripts/smoke-digitalocean.sh
+
   publish:
     name: Publish immutable image
     if: github.event_name != 'pull_request'
