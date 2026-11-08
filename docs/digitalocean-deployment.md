@@ -19,6 +19,16 @@ the first deployment. These files describe a **new** isolated Compose database;
 they do not import or replace an existing application's data. Never run `down -v`
 or remove existing Docker volumes to resolve a deployment problem.
 
+Once the SSH credentials below are configured, **DigitalOcean preflight** checks
+the connection and reports existing Compose projects, images, volumes, networks,
+environment variable **names** and environment-file permissions. It only reads
+metadata: environment values, commands, health-check logs and file contents are
+excluded. It runs from `master` manually or when its own workflow/inspection code
+changes on `master`, and uses the protected `production` environment. No deploy
+or container restart is performed. If an existing `quizproject` stack uses
+`quizproject_mysql_data`, prepare its migration before the first backend rollout;
+the new backend Compose project does not automatically adopt that volume.
+
 Install Docker Engine and the Compose v2 plugin following the
 [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/).
 Use a dedicated SSH account, for example `deploy`, with access to Docker. Docker
