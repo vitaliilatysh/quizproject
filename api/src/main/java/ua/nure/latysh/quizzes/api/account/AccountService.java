@@ -87,8 +87,7 @@ public class AccountService {
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void recordLogin(String username) {
-        userRepository.findByLogin(username)
-                .ifPresent(user -> user.setLoginDate(Instant.now(clock)));
+        userRepository.updateLoginDate(username, Instant.now(clock));
     }
 
     public ProfileResponse profile(String username) {
@@ -106,7 +105,7 @@ public class AccountService {
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void changePassword(String username, ChangePasswordRequest request) {
-        var user = userRepository.findByLogin(username)
+        var user = userRepository.findByLoginForUpdate(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Current user was not found"));
         String encodedPassword = user.getPassword();
         if (!passwordEncoder.matches(request.currentPassword(), encodedPassword)) {
@@ -120,3 +119,4 @@ public class AccountService {
         refreshSessions.revokeAll(username);
     }
 }
+
