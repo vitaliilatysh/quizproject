@@ -1,0 +1,13 @@
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# Same origin for the frontend and the API, as the Kubernetes ingress does it.
+	# Only /api is forwarded: the actuator port is never routed from here.
+	handle /api/* {
+		reverse_proxy api:8081
+	}
+
+	handle {
+		reverse_proxy web:8080
+	}
+}

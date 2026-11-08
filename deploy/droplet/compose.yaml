@@ -1,0 +1,175 @@
+# The whole stack on one DigitalOcean droplet: Caddy at the edge, the frontend,
+# the API, MySQL and Redis. Only Caddy publishes ports. The API's actuator port
+# (9081) and the databases stay on the private compose network.
+#
+# Images come from images.env, written by deploy.sh as digests
+# (ghcr.io/...@sha256:...) that the deploy workflow has already signature-checked.
+# Everything the application needs to keep secret is in .env on the droplet.
+
+name: quizproject
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # ":80" serves plain HTTP on the droplet's IP. A hostname makes Caddy
+      # obtain and renew a Let's Encrypt certificate by itself.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks: [edge, internal]
+
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE is set by deploy.sh}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # The image's own runtime-config.js points at localhost:8081. Here the API
+      # is behind the same origin as the frontend, so it is replaced.
+      - ./runtime-config.js:/usr/share/nginx/html/runtime-config.js:ro
+    networks: [internal]
+
+  api:
+    image: ${API_IMAGE:?API_IMAGE is set by deploy.sh}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      API_PORT: "8081"
+      MANAGEMENT_PORT: "9081"
+      DB_URL: jdbc:mysql://mysql:3306/tests_db?characterEncoding=UTF-8&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:?set DB_USERNAME in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_TTL: PT15M
+      REFRESH_TOKEN_TTL: P7D
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env}
+      RATE_LIMIT_BACKEND: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      REDIS_CONNECT_TIMEOUT: 2s
+      REDIS_TIMEOUT: 2s
+      API_RATE_LIMIT_REQUESTS: "120"
+      LOGIN_RATE_LIMIT_REQUESTS: "5"
+      API_RATE_LIMIT_WINDOW: PT1M
+      API_RATE_LIMIT_MAX_CLIENTS: "10000"
+      # Caddy is the only client the API ever sees, so the forwarded address it
+      # sets is trusted from the compose network and from nowhere else.
+      TRUSTED_PROXY_CIDRS: 172.28.0.0/24
+      SWAGGER_UI_ENABLED: "false"
+      API_DOCS_ENABLED: "false"
+      SHUTDOWN_TIMEOUT: 20s
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # The runtime image has bash but no curl or wget.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9081
+          && printf 'GET /actuator/health/readiness HTTP/1.0\r\n\r\n' >&3
+          && grep -q '"status":"UP"' <&3
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    networks: [internal]
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: tests_db
+      MYSQL_USER: ${DB_USERNAME:?set DB_USERNAME in .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --innodb-buffer-pool-size=512M
+      - --max-connections=60
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --host=127.0.0.1 --user=root --password=\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    networks: [internal]
+
+  redis:
+    image: redis:8.2.8-alpine
+    restart: unless-stopped
+    # Rate-limit counters only: nothing here is worth keeping across a restart.
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        exec redis-server --save '' --appendonly no --maxmemory 64mb
+        --maxmemory-policy allkeys-lru --requirepass "$$REDIS_PASSWORD"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks: [internal]
+
+networks:
+  edge: {}
+  internal:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  mysql-data: {}
+  caddy-data: {}
+  caddy-config: {}
