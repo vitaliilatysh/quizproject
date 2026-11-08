@@ -1,0 +1,64 @@
+name: Prepare existing DigitalOcean deployment
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/digitalocean-prepare.yml
+      - deploy/digitalocean/adopt-existing.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: digitalocean-production
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Back up and prepare existing DigitalOcean stack
+    if: github.ref == 'refs/heads/master'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted preparation code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Back up MySQL and preserve the existing deployment
+        env:
+          PUBLIC_ORIGIN: ${{ vars.DO_PUBLIC_ORIGIN || format('http://{0}', vars.DO_HOST) }}
+          DO_HOST: ${{ vars.DO_HOST }}
+          DO_SSH_USER: ${{ vars.DO_SSH_USER || 'deploy' }}
+          DO_SSH_PORT: ${{ vars.DO_SSH_PORT || '22' }}
+          DO_SSH_KEY: ${{ secrets.DO_SSH_KEY }}
+          DO_KNOWN_HOSTS: ${{ secrets.DO_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in DO_HOST DO_SSH_USER DO_SSH_KEY DO_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Configure ${name} in the production GitHub environment."
+              exit 1
+            fi
+          done
+          [[ "$DO_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$DO_SSH_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          [[ "$DO_SSH_PORT" =~ ^[0-9]{1,5}$ ]]
+          ((10#$DO_SSH_PORT >= 1 && 10#$DO_SSH_PORT <= 65535))
+          umask 077
+          credentials=$(mktemp -d "$RUNNER_TEMP/quiz-prepare.XXXXXXXX")
+          trap 'rm -rf -- "$credentials"' EXIT
+          printf '%s\n' "$DO_SSH_KEY" > "$credentials/key"
+          printf '%s\n' "$DO_KNOWN_HOSTS" > "$credentials/known_hosts"
+          unset DO_SSH_KEY DO_KNOWN_HOSTS
+          # The bootstrap URL is configuration sent over verified SSH, not an HTTP request.
+          printf -v remote_origin '%q' "$PUBLIC_ORIGIN" # NOSONAR
+          ssh -T -p "$DO_SSH_PORT" -i "$credentials/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o "UserKnownHostsFile=$credentials/known_hosts" \
+            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
+            "$DO_SSH_USER@$DO_HOST" "python3 -B - --origin $remote_origin" < deploy/digitalocean/adopt-existing.py

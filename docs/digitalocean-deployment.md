@@ -29,6 +29,43 @@ or container restart is performed. If an existing `quizproject` stack uses
 `quizproject_mysql_data`, prepare its migration before the first backend rollout;
 the new backend Compose project does not automatically adopt that volume.
 
+### Adopt the existing `quizproject` stack
+
+For the existing `quizproject-api-1`, `quizproject-mysql-1` and `quizproject-redis-1`
+containers, prepare the production directories as `deploy`, then run **Prepare
+existing DigitalOcean deployment**. This workflow runs from `master`, manually
+or when its own preparation files change there. It uses the same production SSH
+secrets and a host lock shared with both rollout workflows.
+
+Preparation reads credentials directly from the existing containers on the
+Droplet. It checks that backend/MySQL/Redis credentials and persistent volumes
+agree, then validates a private rollback Compose snapshot of the current images,
+ports, mounts, networks, health checks and security settings. A consistent MySQL
+dump is compressed under `/opt/quizproject/production/backups/` with mode 0600.
+Preparation does not restart or replace any application containers.
+
+After backup, preparation creates the two server `.env` files with the existing
+database passwords, Redis password and JWT secret. It pins the current MySQL and
+Redis image digests and sets `MYSQL_DATA_VOLUME=quizproject_mysql_data` with
+`MYSQL_DATA_EXTERNAL=true`. The private backend `.compose-project` marker selects
+the existing `quizproject` Compose project. The first normal rollout therefore
+replaces services in that project, using the original database volume; it does
+not start a second MySQL against the same data directory. New environments
+without this marker retain the usual environment/component project names.
+
+The initial `backend/current` points to the private `releases/0-0` snapshot, so
+the first rollout has a previous configuration for recovery. That snapshot
+contains resolved credentials and is mode 0600 inside a mode 0700 directory;
+never upload it or the database dump as an artifact. Repeating preparation after
+success preserves credentials and the current release. A failed installation
+cleans only its newly created state files and retains completed backups.
+
+Once preparation succeeds, deploy backend first and frontend second using the
+normal **Deploy to DigitalOcean** workflows. Bootstrap origin is
+`http://164.92.163.71`; set the server origin/site to your HTTPS domain before
+using real credentials. Image rollback still does not reverse Flyway migrations;
+the MySQL dump is the separate database recovery point.
+
 Install Docker Engine and the Compose v2 plugin following the
 [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/).
 Use a dedicated SSH account, for example `deploy`, with access to Docker. Docker
