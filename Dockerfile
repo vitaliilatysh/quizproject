@@ -24,7 +24,11 @@ FROM eclipse-temurin:25-jre-noble
 
 LABEL org.opencontainers.image.source="https://github.com/vitaliilatysh/quizproject"
 
-RUN groupadd --gid 10001 quiz \
+# Apply Ubuntu security fixes in the runtime layer before dropping privileges.
+RUN apt-get update \
+    && apt-get upgrade --yes --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 quiz \
     && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /app \
         --shell /usr/sbin/nologin quiz
 
