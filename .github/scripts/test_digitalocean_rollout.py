@@ -12,8 +12,8 @@ import unittest
 ROOT=Path(__file__).resolve().parents[2]
 SOURCE=ROOT/"deploy/digitalocean/rollout.sh"
 COMPONENT="backend"
-SERVICE="api" if COMPONENT=="backend" else "web"
-REPOSITORY="ghcr.io/vitaliilatysh/"+("quizproject" if COMPONENT=="backend" else "quizproject-web")
+SERVICE="api"
+REPOSITORY="ghcr.io/vitaliilatysh/quizproject"
 IMAGE=REPOSITORY+"@sha256:"+"a"*64
 
 
@@ -96,7 +96,7 @@ if release=="2-1" and command==os.environ.get("FAKE_FAIL"): sys.exit(1)
                 self.assertIsNone(process.poll())
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
-                stdout, stderr = process.communicate(timeout=10)
+                _, stderr = process.communicate(timeout=10)
             self.assertEqual(process.returncode, 0, stderr)
 
     def test_failed_start_restores_previous_release(self):
