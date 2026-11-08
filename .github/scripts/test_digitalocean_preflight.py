@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import secrets
 import subprocess
 import tempfile
 import unittest
@@ -16,7 +17,7 @@ SOURCE = ROOT / "deploy/digitalocean/preflight.py"
 SPEC = importlib.util.spec_from_file_location("digitalocean_preflight", SOURCE)
 PREFLIGHT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREFLIGHT)
-SECRET = "credential-value-must-never-appear"
+SENSITIVE_VALUE = secrets.token_hex(24)
 
 
 class PreflightTest(unittest.TestCase):
@@ -25,17 +26,17 @@ class PreflightTest(unittest.TestCase):
             "Name": "/quizproject-api-1",
             "Config": {
                 "Image": "ghcr.io/vitaliilatysh/quizproject@sha256:" + "a" * 64,
-                "Env": ["JWT_SECRET=" + SECRET, "DB_PASSWORD=" + SECRET],
-                "Cmd": ["redis-server", "--requirepass", SECRET],
-                "Labels": {"com.docker.compose.project": "quizproject", "other": SECRET},
+                "Env": ["JWT_SECRET=" + SENSITIVE_VALUE, "DB_PASSWORD=" + SENSITIVE_VALUE],
+                "Cmd": ["redis-server", "--requirepass", SENSITIVE_VALUE],
+                "Labels": {"com.docker.compose.project": "quizproject", "other": SENSITIVE_VALUE},
             },
-            "State": {"Status": "running", "Health": {"Status": "healthy", "Log": [SECRET]}},
-            "NetworkSettings": {"Networks": {"quizproject_default": {"Other": SECRET}},
+            "State": {"Status": "running", "Health": {"Status": "healthy", "Log": [SENSITIVE_VALUE]}},
+            "NetworkSettings": {"Networks": {"quizproject_default": {"Other": SENSITIVE_VALUE}},
                                 "Ports": {"8081/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8081"}]}},
             "Mounts": [{"Type": "volume", "Name": "quizproject_mysql_data", "Destination": "/var/lib/mysql",
                         "Source": "/var/lib/docker/volumes/quizproject_mysql_data/_data", "RW": True,
-                        "Extra": SECRET}],
-            "Other": SECRET,
+                        "Extra": SENSITIVE_VALUE}],
+            "Other": SENSITIVE_VALUE,
         }
         with patch.object(PREFLIGHT, "docker_output", side_effect=["abc\n", json.dumps([container])]), \
                 patch.object(PREFLIGHT, "ENVIRONMENT_FILES", ()):
@@ -43,7 +44,7 @@ class PreflightTest(unittest.TestCase):
             with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
                 self.assertEqual(PREFLIGHT.main(), 0)
         report = json.loads(output.getvalue())
-        self.assertNotIn(SECRET, output.getvalue() + errors.getvalue())
+        self.assertNotIn(SENSITIVE_VALUE, output.getvalue() + errors.getvalue())
         metadata = report["containers"][0]
         self.assertEqual(metadata["environment_names"], ["DB_PASSWORD", "JWT_SECRET"])
         self.assertEqual(metadata["compose"]["com.docker.compose.project"], "quizproject")
@@ -64,17 +65,17 @@ class PreflightTest(unittest.TestCase):
     def test_file_checks_read_only_permissions_never_contents(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
-            path.write_text("JWT_SECRET=" + SECRET)
+            path.write_text("JWT_SECRET=" + SENSITIVE_VALUE)
             path.chmod(0o600)
             metadata = PREFLIGHT.file_metadata(path)
             self.assertEqual(metadata["mode"], "0600")
             self.assertTrue(metadata["readable"])
             self.assertEqual(metadata["owner_uid"], os.getuid())
-            self.assertNotIn(SECRET, json.dumps(metadata))
+            self.assertNotIn(SENSITIVE_VALUE, json.dumps(metadata))
             with patch.object(PREFLIGHT, "docker_output", return_value=""), \
                     patch.object(PREFLIGHT, "ENVIRONMENT_FILES", (str(path),)):
                 self.assertEqual(PREFLIGHT.collect()["environment_files"], [metadata])
-            with patch.object(Path, "stat", side_effect=PermissionError(SECRET)):
+            with patch.object(Path, "stat", side_effect=PermissionError(SENSITIVE_VALUE)):
                 self.assertEqual(PREFLIGHT.file_metadata(path),
                                  {"path": str(path), "readable": False, "mode": None, "owner_uid": None})
 
@@ -86,36 +87,36 @@ class PreflightTest(unittest.TestCase):
             self.assertEqual(args[0], ["docker", "--host=unix:///var/run/docker.sock", "ps"])
             self.assertNotIn("DOCKER_HOST", kwargs["env"])
             self.assertNotIn("DOCKER_CONTEXT", kwargs["env"])
-        with patch.object(PREFLIGHT.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, SECRET, SECRET)):
-            with self.assertRaisesRegex(RuntimeError, "^Docker inspection failed\\.$"):
-                PREFLIGHT.docker_output("inspect", "abc")
+        with patch.object(PREFLIGHT.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, SENSITIVE_VALUE, SENSITIVE_VALUE)), \
+                self.assertRaisesRegex(RuntimeError, "^Docker inspection failed\\.$"):
+            PREFLIGHT.docker_output("inspect", "abc")
 
     def test_errors_cannot_expose_docker_output_credentials_or_tracebacks(self):
-        failures = (OSError(SECRET), ValueError(SECRET), RuntimeError(SECRET), TypeError(SECRET),
-                    subprocess.TimeoutExpired([SECRET], 30, output=SECRET, stderr=SECRET))
+        failures = (OSError(SENSITIVE_VALUE), ValueError(SENSITIVE_VALUE), RuntimeError(SENSITIVE_VALUE), TypeError(SENSITIVE_VALUE),
+                    subprocess.TimeoutExpired([SENSITIVE_VALUE], 30, output=SENSITIVE_VALUE, stderr=SENSITIVE_VALUE))
         for error in failures:
             with self.subTest(error=type(error).__name__), patch.object(PREFLIGHT, "collect", side_effect=error):
                 output, errors = io.StringIO(), io.StringIO()
                 with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
                     self.assertEqual(PREFLIGHT.main(), 1)
                 self.assertEqual(output.getvalue(), "")
-                self.assertNotIn(SECRET, errors.getvalue())
+                self.assertNotIn(SENSITIVE_VALUE, errors.getvalue())
                 self.assertNotIn("Traceback", errors.getvalue())
 
     def test_unexpected_docker_format_is_rejected(self):
-        with patch.object(PREFLIGHT, "docker_output", side_effect=["abc", "{}"]):
-            with self.assertRaisesRegex(ValueError, "Unexpected Docker inspection format"):
-                PREFLIGHT.collect()
+        with patch.object(PREFLIGHT, "docker_output", side_effect=["abc", "{}"]), \
+                self.assertRaisesRegex(ValueError, "Unexpected Docker inspection format"):
+            PREFLIGHT.collect()
 
     def test_cli_entrypoint_redacts_subprocess_failures(self):
         with tempfile.TemporaryDirectory() as directory:
             docker = Path(directory) / "docker"
-            docker.write_text("#!/bin/sh\nprintf '%s' '" + SECRET + "' >&2\nexit 1\n")
+            docker.write_text("#!/bin/sh\nprintf '%s' '" + SENSITIVE_VALUE + "' >&2\nexit 1\n")
             docker.chmod(0o700)
             result = subprocess.run([os.sys.executable, str(SOURCE)], text=True, capture_output=True,
                                     env={**os.environ, "PATH": directory}, timeout=10)
             self.assertEqual(result.returncode, 1)
-            self.assertNotIn(SECRET, result.stdout + result.stderr)
+            self.assertNotIn(SENSITIVE_VALUE, result.stdout + result.stderr)
             self.assertNotIn("Traceback", result.stderr)
 
     def test_cli_entrypoint_reports_an_empty_stack_successfully(self):
