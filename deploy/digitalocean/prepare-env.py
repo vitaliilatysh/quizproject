@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 
 # Plain HTTP is an explicit bootstrap-only listener; HTTPS uses the chosen domain.
-HTTP_BOOTSTRAP_SITE = "http://:80"  # NOSONAR: initial connectivity checks, documented separately from production HTTPS.
+HTTP_BOOTSTRAP_SITE = "http://:80"  # NOSONAR(S5332)
 
 
 def deployment_address(origin):

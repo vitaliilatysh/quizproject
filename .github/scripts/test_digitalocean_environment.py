@@ -15,8 +15,8 @@ SPEC = importlib.util.spec_from_file_location("prepare_environment", ROOT / "dep
 PREPARE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREPARE)
 
-# RFC 5737 documentation address; these tests never connect to the network.
-BOOTSTRAP_ORIGIN = "http://192.0.2.10"  # NOSONAR: fixture explicitly tests bootstrap HTTP, not a production connection.
+# RFC 5737 documentation address; these fixtures test bootstrap HTTP without networking.
+BOOTSTRAP_ORIGIN = "http://192.0.2.10"  # NOSONAR(S5332)
 
 
 class EnvironmentTest(unittest.TestCase):
@@ -34,7 +34,7 @@ class EnvironmentTest(unittest.TestCase):
     def test_random_credentials_are_private_and_not_printed(self):
         output = self.configure(BOOTSTRAP_ORIGIN)
         path = self.base / "production/backend/.env"
-        entries = {key: value for key, value in (line.split("=", 1) for line in path.read_text().splitlines())}
+        entries = {key: value for key, _, value in (line.partition("=") for line in path.read_text().splitlines())}
         self.assertEqual(len(base64.b64decode(entries["JWT_SECRET"])), 32)
         self.assertNotEqual(entries["MYSQL_PASSWORD"], entries["MYSQL_ROOT_PASSWORD"])
         self.assertNotIn(entries["MYSQL_PASSWORD"], output)
