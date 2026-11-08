@@ -40,11 +40,6 @@ jobs:
       - name: Set up Java and Gradle
         uses: ./.github/actions/setup-java-gradle
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5.2.0
-        with:
-          version: v1.36.1
-
       # Do NOT add a `--write-locks` step here. Gradle enforces the committed
       # lockfiles while resolving a locked configuration, so the build below
       # fails when a dependency resolves to anything other than what is locked.
@@ -55,27 +50,6 @@ jobs:
       - name: Build, test, and package
         run: ./gradlew clean :api:check :api:integrationTest :api:bootJar --no-daemon
 
-      - name: Render Kubernetes manifests
-        shell: bash
-        run: |
-          kubectl kustomize deploy/kubernetes/backend > backend.yaml
-          kubectl kustomize deploy/kubernetes/overlays/local > local.yaml
-          kubectl kustomize deploy/kubernetes/overlays/production > production.yaml
-          kubectl kustomize deploy/kubernetes/monitoring > monitoring.yaml
-
-          grep --quiet 'name: quiz-api' backend.yaml
-          grep --quiet 'name: quiz-redis' backend.yaml
-          grep --quiet 'kind: NetworkPolicy' backend.yaml
-          grep --quiet 'prometheus.io/scrape: "true"' backend.yaml
-          grep --quiet 'topologySpreadConstraints:' backend.yaml
-          grep --quiet 'preStop:' backend.yaml
-          grep --quiet 'image: quizproject-api:local' local.yaml
-          grep --quiet 'image: ghcr.io/vitaliilatysh/quizproject:master' production.yaml
-          grep --quiet 'kind: HorizontalPodAutoscaler' production.yaml
-          grep --quiet 'averageUtilization: 70' production.yaml
-          grep --quiet 'kind: ServiceMonitor' monitoring.yaml
-          grep --quiet 'alert: QuizApiUnavailable' monitoring.yaml
-
       - name: Upload generated OpenAPI contract
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -83,3 +57,24 @@ jobs:
           path: api/build/openapi/openapi.json
           if-no-files-found: error
           retention-days: 30
+
+  retire-legacy-deploy:
+    name: Retire legacy deployment workflow
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: write
+    steps:
+      - name: Disable the retired deployment entry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/workflows?per_page=100" \
+            --jq '.workflows[] | select(.path == ".github/workflows/deploy.yml" and .state == "active") | .id' |
+          while IFS= read -r workflow_id; do
+            [[ "$workflow_id" =~ ^[0-9]+$ ]]
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}/disable"
+            echo "Disabled the legacy deployment workflow (${workflow_id})."
+          done

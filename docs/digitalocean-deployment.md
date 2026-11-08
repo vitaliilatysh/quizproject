@@ -73,7 +73,7 @@ result. For nonstandard SSH ports, use the `[host]:port` known-hosts format.
 Never paste the private key into a chat, command-line argument or Git file.
 
 Existing GitHub environment protection remains effective. Retain production
-reviewers where configured. Production is a manual **Deploy** dispatch, selecting
+reviewers where configured. Production is a manual **Deploy to DigitalOcean** dispatch, selecting
 the default branch and `production`. The image tag defaults to `sha-<commit>`;
 an older published tag can be selected for an explicit image rollback.
 

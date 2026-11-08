@@ -136,7 +136,7 @@ Workflow **Dependabot auto-merge** автоматично зливає онов�
 | `ci.yml` — **CI** | PR, push у `master` | `./gradlew clean :api:check :api:integrationTest :api:bootJar`, потім рендерить і перевіряє Kustomize overlays |
 | `sonarqube.yml` — **SonarQube analysis** | PR, push у `master` | тести, JaCoCo-звіт, аналіз SonarCloud і quality gate |
 | `container.yml` — **Backend container delivery** | PR, push у `master` | збірка образу, Trivy, smoke-перевірка проти MySQL і Redis; після `master` — публікація, SBOM і підпис cosign |
-| `deploy.yml` — **Deploy** | після успішного delivery з `master`, або вручну | розгортання за digest у `staging`, у production — лише вручну через protected environment |
+| `deploy-digitalocean.yml` — **Deploy to DigitalOcean** | після успішного delivery з `master`, або вручну | DigitalOcean за digest; staging — opt-in, production — вручну через protected environment |
 
 Java 25 і Gradle wrapper (з перевіркою wrapper) встановлює спільний composite action
 `.github/actions/setup-java-gradle`, тому pinned SHA сторонніх actions живуть в одному місці.
@@ -337,7 +337,11 @@ docker run --rm -p 8081:8081 \
 
 Образ запускає лише Spring Boot API від непривілейованого користувача.
 
-## Kubernetes
+## Kubernetes: довідкові маніфести
+
+Ці маніфести призначені лише для ручного використання. CI/CD більше не встановлює
+`kubectl`, не рендерить і не публікує Kubernetes artifacts; автоматичне розгортання
+виконується лише через Docker Compose на DigitalOcean.
 
 Базові маніфести знаходяться в `deploy/kubernetes/backend`, а готові конфігурації оточень — у
 `deploy/kubernetes/overlays/local`, `deploy/kubernetes/overlays/staging` і
@@ -424,12 +428,12 @@ cosign verify \
   ghcr.io/vitaliilatysh/quizproject@sha256:...
 ~~~
 
-Готовий production manifest з immutable image digest зберігається в GitHub Actions artifact
-`kubernetes-manifest-<commit>` протягом 30 днів.
+DigitalOcean workflow отримує перевірений immutable image digest безпосередньо з GHCR.
+Kubernetes manifest artifacts більше не створюються.
 
 ## Розгортання на DigitalOcean
 
-Workflow **Deploy** розгортає підписаний GHCR image за digest на DigitalOcean Droplet
+Workflow **Deploy to DigitalOcean** розгортає підписаний GHCR image за digest на DigitalOcean Droplet
 через SSH і Docker Compose. Для production збережено перевірку CI/Sonar/container
 delivery для image revision і deployment checkout; frontend також вимагає E2E.
 Розгортаємо backend першим, frontend другим. Спільний серверний lock координує
