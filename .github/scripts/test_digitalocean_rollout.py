@@ -118,6 +118,29 @@ if release=="2-1" and command==os.environ.get("FAKE_FAIL"): sys.exit(1)
         self.assertEqual((self.root/"current").resolve(),previous)
         self.assertFalse(any("up" in c for c in self.calls()))
 
+    def test_adopted_backend_reuses_the_existing_compose_project_for_deploy_and_rollback(self):
+        marker = self.root / ".compose-project"
+        marker.write_text("quizproject\n")
+        marker.chmod(0o600)
+        self.previous()
+        self.env["FAKE_FAIL"] = "up"
+        self.assertNotEqual(self.run_release().returncode, 0)
+        for call in self.calls():
+            self.assertEqual(call[call.index("--project-name") + 1], "quizproject")
+
+    def test_invalid_or_public_project_markers_are_rejected_before_docker(self):
+        marker = self.root / ".compose-project"
+        marker.write_text("foreign-project\n")
+        marker.chmod(0o600)
+        self.assertNotEqual(self.run_release().returncode, 0)
+        marker.write_text("quizproject\n")
+        marker.chmod(0o644)
+        self.assertNotEqual(self.run_release().returncode, 0)
+        marker.unlink()
+        marker.symlink_to(self.root / ".env")
+        self.assertNotEqual(self.run_release().returncode, 0)
+        self.assertEqual(self.calls(), [])
+
     def test_first_failure_preserves_data_and_has_no_false_rollback(self):
         self.env["FAKE_FAIL"]="up"
         result=self.run_release()

@@ -20,6 +20,15 @@ directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 # Do not allow local users to read database/JWT credentials.
 mode=$(stat -c '%a' "$root/.env")
 (( (8#$mode & 077) == 0 ))
+project="quizproject-$environment-$component"
+if [[ -e "$root/.compose-project" || -L "$root/.compose-project" ]]; then
+  [[ "$component" == backend && "$environment" == production ]]
+  [[ -f "$root/.compose-project" && ! -L "$root/.compose-project" ]]
+  project_mode=$(stat -c '%a' "$root/.compose-project")
+  (( (8#$project_mode & 077) == 0 ))
+  project=$(cat "$root/.compose-project")
+  [[ "$project" == quizproject ]]
+fi
 
 # GitHub concurrency is per repository; this lock also serializes backend and
 # frontend jobs on the host. Both copies use the same environment-level lock.
@@ -40,7 +49,7 @@ compose() {
   shift
   env -u APP_IMAGE -u DEPLOY_ENV -u DOCKER_HOST -u DOCKER_CONTEXT \
     -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-    docker --host=unix:///var/run/docker.sock compose --project-name "quizproject-$environment-$component" \
+    docker --host=unix:///var/run/docker.sock compose --project-name "$project" \
     --env-file "$root/.env" --env-file "$release_dir/image.env" \
     --file "$release_dir/compose.yaml" "$@"
 }
