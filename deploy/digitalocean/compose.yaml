@@ -1,0 +1,92 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: ["--innodb-buffer-pool-size=268435456", "--max-connections=60"]
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-quizproject}
+      MYSQL_USER: ${MYSQL_USER:-quiz_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD on the Droplet}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD on the Droplet}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks: [data]
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql --protocol=TCP --host=127.0.0.1 --user=root --database=\"$$MYSQL_DATABASE\" --execute='SELECT 1' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:8.2.8-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD on the Droplet}
+    command: ["sh", "-ec", "exec redis-server --save '' --appendonly no --maxmemory 64mb --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
+    networks: [data]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *logging
+
+  api:
+    image: ${APP_IMAGE:?An immutable backend image is required}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    pids_limit: 256
+    stop_grace_period: 30s
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-quizproject}?characterEncoding=UTF-8&serverTimezone=UTC
+      DB_USERNAME: ${MYSQL_USER:-quiz_app}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD on the Droplet}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET on the Droplet}
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN on the Droplet}
+      API_PORT: "8081"
+      MANAGEMENT_PORT: "9081"
+      RATE_LIMIT_BACKEND: redis
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD on the Droplet}
+      TRUSTED_PROXY_CIDRS: 172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
+      SWAGGER_UI_ENABLED: "false"
+      API_DOCS_ENABLED: "false"
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      data:
+      public:
+        aliases: [quiz-api]
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "exec 3<>/dev/tcp/127.0.0.1/9081; printf 'GET /actuator/health/readiness HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3; IFS= read -r status <&3; [[ \"$$status\" == *' 200 '* ]]"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    logging: *logging
+
+networks:
+  data:
+    internal: true
+  public:
+    name: quizproject-${DEPLOY_ENV:?A deployment environment is required}
+
+volumes:
+  mysql-data:
