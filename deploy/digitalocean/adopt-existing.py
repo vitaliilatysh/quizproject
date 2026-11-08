@@ -18,8 +18,6 @@ from urllib.parse import urlsplit
 SERVICES = ("api", "mysql", "redis")
 CONTAINERS = [f"quizproject-{service}-1" for service in SERVICES]
 DOCKER_VARIABLES = {"DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"}
-BOOTSTRAP_ORIGIN = "http://164.92.163.71"  # NOSONAR(S5332): connectivity bootstrap before a domain is chosen.
-BOOTSTRAP_SITE = "http://:80"  # NOSONAR(S5332): explicit HTTP bootstrap listener.
 
 
 def docker(arguments, output=None):
@@ -45,21 +43,23 @@ def private_file(path, content):
 
 
 def environment(container):
-    return dict(entry.split("=", 1) for entry in container["Config"]["Env"])
+    return {name: value for entry in container["Config"]["Env"]
+            for name, value in [entry.split("=", 1)]}
 
 
 def addresses(origin):
-    match = re.fullmatch(r"(https?)://([a-zA-Z0-9][a-zA-Z0-9.-]*)(?::([0-9]+))?/?", origin)
+    match = re.fullmatch(r"(https?)://([a-zA-Z0-9][a-zA-Z0-9.-]*)(?::(\d+))?/?", origin, flags=re.ASCII)
     if not match:
         raise ValueError("An HTTP(S) origin without credentials or a path is required.")
     scheme, host, explicit_port = match.groups()
-    port = int(explicit_port) if explicit_port else (443 if scheme == "https" else 80)
+    default_port = 443 if scheme == "https" else 80
+    port = int(explicit_port) if explicit_port else default_port
     if not 1 <= port <= 65535 or (scheme == "https" and port != 443) or (scheme == "http" and port == 443):
         raise ValueError("Unsupported public port.")
     origin = f"{scheme}://{host}"
     if port not in (80, 443):
         origin += f":{port}"
-    return origin, host if scheme == "https" else BOOTSTRAP_SITE, 80 if scheme == "https" else port
+    return origin, host if scheme == "https" else f"{scheme}://:80", 80 if scheme == "https" else port
 
 
 def dotenv(values):
@@ -165,6 +165,22 @@ def snapshot_health(health):
     return result
 
 
+def runtime_options(config, host):
+    result = {}
+    for field, source in (("user", "User"), ("working_dir", "WorkingDir")):
+        if config.get(source):
+            result[field] = config[source]
+    if host.get("PidsLimit") is not None:
+        result["pids_limit"] = host["PidsLimit"]
+    if config.get("StopTimeout") is not None:
+        result["stop_grace_period"] = f"{config['StopTimeout']}s"
+    if host.get("Tmpfs"):
+        result["tmpfs"] = [f"{path}:{options}" if options else path for path, options in host["Tmpfs"].items()]
+    if host.get("LogConfig", {}).get("Type"):
+        result["logging"] = {"driver": host["LogConfig"]["Type"], "options": host["LogConfig"].get("Config") or {}}
+    return result
+
+
 def snapshot_service(container, volumes, networks):
     config, host = container["Config"], container["HostConfig"]
     if host.get("Privileged"):
@@ -184,17 +200,7 @@ def snapshot_service(container, volumes, networks):
         "ports": snapshot_ports(container["NetworkSettings"]),
         "healthcheck": snapshot_health(config.get("Healthcheck")),
     }
-    for field, source in (("user", "User"), ("working_dir", "WorkingDir")):
-        if config.get(source):
-            service[field] = config[source]
-    if host.get("PidsLimit") is not None:
-        service["pids_limit"] = host["PidsLimit"]
-    if config.get("StopTimeout") is not None:
-        service["stop_grace_period"] = f"{config['StopTimeout']}s"
-    if host.get("Tmpfs"):
-        service["tmpfs"] = [f"{path}:{options}" if options else path for path, options in host["Tmpfs"].items()]
-    if host.get("LogConfig", {}).get("Type"):
-        service["logging"] = {"driver": host["LogConfig"]["Type"], "options": host["LogConfig"].get("Config") or {}}
+    service.update(runtime_options(config, host))
     return service
 
 
@@ -288,7 +294,7 @@ def prepare(base, origin):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path("/opt/quizproject"))
-    parser.add_argument("--origin", default=BOOTSTRAP_ORIGIN)
+    parser.add_argument("--origin", required=True)
     args = parser.parse_args()
     try:
         lock_path = args.root / "production/.deploy.lock"

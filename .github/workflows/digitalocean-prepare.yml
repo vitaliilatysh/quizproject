@@ -30,6 +30,7 @@ jobs:
 
       - name: Back up MySQL and preserve the existing deployment
         env:
+          PUBLIC_ORIGIN: ${{ vars.DO_PUBLIC_ORIGIN || format('http://{0}', vars.DO_HOST) }}
           DO_HOST: ${{ vars.DO_HOST }}
           DO_SSH_USER: ${{ vars.DO_SSH_USER || 'deploy' }}
           DO_SSH_PORT: ${{ vars.DO_SSH_PORT || '22' }}
@@ -54,8 +55,9 @@ jobs:
           printf '%s\n' "$DO_SSH_KEY" > "$credentials/key"
           printf '%s\n' "$DO_KNOWN_HOSTS" > "$credentials/known_hosts"
           unset DO_SSH_KEY DO_KNOWN_HOSTS
+          printf -v remote_origin '%q' "$PUBLIC_ORIGIN"
           ssh -T -p "$DO_SSH_PORT" -i "$credentials/key" \
             -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             -o "UserKnownHostsFile=$credentials/known_hosts" \
             -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
-            "$DO_SSH_USER@$DO_HOST" 'python3 -B -' < deploy/digitalocean/adopt-existing.py
+            "$DO_SSH_USER@$DO_HOST" "python3 -B - --origin $remote_origin" < deploy/digitalocean/adopt-existing.py

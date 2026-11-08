@@ -20,6 +20,7 @@ SOURCE = ROOT / "deploy/digitalocean/adopt-existing.py"
 SPEC = importlib.util.spec_from_file_location("digitalocean_adoption", SOURCE)
 ADOPT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ADOPT)
+TEST_ORIGIN = "https://quiz.example.com"
 PRIVATE_VALUE = secrets.token_hex(24) + "$'\\# text"
 
 
@@ -42,7 +43,7 @@ def fixture():
             "HostConfig": {"RestartPolicy": {"Name": "unless-stopped"}, "ReadonlyRootfs": True,
                            "Memory": 128 * 1024 * 1024, "Init": True, "PidsLimit": 256,
                            "CapDrop": ["ALL"], "SecurityOpt": ["no-new-privileges:true"],
-                           "Tmpfs": {"/tmp": "rw"}, "LogConfig": {"Type": "json-file", "Config": {"max-size": "10m"}}},
+                           "Tmpfs": {"/run/quiz-tmp": "rw"}, "LogConfig": {"Type": "json-file", "Config": {"max-size": "10m"}}},
             "State": {"Running": True}, "Mounts": [],
             "NetworkSettings": {"Networks": {"quizproject_backend": {"Aliases": [name]}},
                                 "Ports": {"8081/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8081"}]} if name == "api" else {"3306/tcp": None}},
@@ -82,9 +83,9 @@ class AdoptionTest(unittest.TestCase):
     def test_adoption_preserves_credentials_volumes_images_and_rollback_without_restarts(self):
         output = io.StringIO()
         with patch.object(ADOPT, "docker", side_effect=self.docker), contextlib.redirect_stdout(output):
-            ADOPT.prepare(self.base, ADOPT.BOOTSTRAP_ORIGIN)
+            ADOPT.prepare(self.base, TEST_ORIGIN)
             before = (self.backend / ".env").read_bytes()
-            ADOPT.prepare(self.base, ADOPT.BOOTSTRAP_ORIGIN)
+            ADOPT.prepare(self.base, TEST_ORIGIN)
         self.assertNotIn(PRIVATE_VALUE, output.getvalue())
         self.assertEqual((self.backend / ".env").read_bytes(), before)
         self.assertIn("MYSQL_DATA_VOLUME='quizproject_mysql_data'", before.decode())
@@ -110,21 +111,21 @@ class AdoptionTest(unittest.TestCase):
     def test_existing_or_partial_files_are_never_overwritten(self):
         (self.backend / ".env").write_text(PRIVATE_VALUE)
         with self.assertRaises(FileExistsError):
-            ADOPT.prepare(self.base, ADOPT.BOOTSTRAP_ORIGIN)
+            ADOPT.prepare(self.base, TEST_ORIGIN)
         self.assertEqual((self.backend / ".env").read_text(), PRIVATE_VALUE)
         (self.backend / ".env").unlink()
         (self.backend / ".env").symlink_to(self.base / "missing")
         with self.assertRaises(FileExistsError):
-            ADOPT.prepare(self.base, ADOPT.BOOTSTRAP_ORIGIN)
+            ADOPT.prepare(self.base, TEST_ORIGIN)
         (self.backend / ".env").unlink()
         (self.backend / "adopted.json").write_text("{}")
         with self.assertRaisesRegex(ValueError, "incomplete"):
-            ADOPT.prepare(self.base, ADOPT.BOOTSTRAP_ORIGIN)
+            ADOPT.prepare(self.base, TEST_ORIGIN)
 
     def test_rollback_release_cannot_be_overwritten(self):
         (self.backend / "releases/0-0").mkdir()
         with patch.object(ADOPT, "docker", side_effect=self.docker), self.assertRaises(FileExistsError):
-            ADOPT.prepare(self.base, ADOPT.BOOTSTRAP_ORIGIN)
+            ADOPT.prepare(self.base, TEST_ORIGIN)
         self.assertFalse((self.backend / ".env").exists())
 
     def test_backup_failure_leaves_credentials_and_current_stack_untouched(self):
@@ -150,7 +151,7 @@ class AdoptionTest(unittest.TestCase):
         with patch.object(ADOPT, "docker", side_effect=self.docker), \
                 patch.object(ADOPT, "private_file", side_effect=fail_frontend), \
                 contextlib.redirect_stdout(io.StringIO()), self.assertRaises(OSError):
-            ADOPT.prepare(self.base, ADOPT.BOOTSTRAP_ORIGIN)
+            ADOPT.prepare(self.base, TEST_ORIGIN)
         self.assertFalse((self.backend / ".env").exists())
         self.assertFalse((self.backend / "current").exists())
         self.assertEqual(list((self.backend / "releases").iterdir()), [])
@@ -173,7 +174,7 @@ class AdoptionTest(unittest.TestCase):
     def test_real_compose_preserves_literal_credentials_and_adopted_volume(self):
         services = ADOPT.services_from(self.containers)
         (self.base / "snapshot.json").write_text(ADOPT.snapshot(services))
-        (self.base / "test.env").write_text(ADOPT.dotenv(ADOPT.credentials(services, ADOPT.BOOTSTRAP_ORIGIN)))
+        (self.base / "test.env").write_text(ADOPT.dotenv(ADOPT.credentials(services, TEST_ORIGIN)))
         for source, extra in ((self.base / "snapshot.json", []),
                               (ROOT / "deploy/digitalocean/compose.yaml", ["--env-file", str(self.base / "test.env")])):
             result = subprocess.run(["docker", "compose", "--project-name", "quizproject", "--env-file", "/dev/null",
@@ -193,19 +194,19 @@ class AdoptionTest(unittest.TestCase):
             env["DB_URL"] = url
             services["api"]["Config"]["Env"] = [name + "=" + value for name, value in env.items()]
             with self.assertRaises(ValueError):
-                ADOPT.credentials(services, ADOPT.BOOTSTRAP_ORIGIN)
+                ADOPT.credentials(services, TEST_ORIGIN)
         for service, key in (("api", "DB_URL"), ("api", "DB_USERNAME"), ("api", "DB_PASSWORD"), ("api", "REDIS_PASSWORD")):
             services = ADOPT.services_from(copy.deepcopy(self.containers))
             env = ADOPT.environment(services[service])
             env[key] = "different"
             services[service]["Config"]["Env"] = [name + "=" + value for name, value in env.items()]
             with self.subTest(key=key), self.assertRaises(ValueError):
-                ADOPT.credentials(services, ADOPT.BOOTSTRAP_ORIGIN)
+                ADOPT.credentials(services, TEST_ORIGIN)
         for mounts in ([], [{"Destination": "/var/lib/mysql", "Name": "foreign"}]):
             services = ADOPT.services_from(copy.deepcopy(self.containers))
             services["mysql"]["Mounts"] = mounts
             with self.assertRaises(ValueError):
-                ADOPT.credentials(services, ADOPT.BOOTSTRAP_ORIGIN)
+                ADOPT.credentials(services, TEST_ORIGIN)
 
     def test_unexpected_stack_state_is_rejected(self):
         mutations = (
@@ -229,7 +230,7 @@ class AdoptionTest(unittest.TestCase):
         self.assertEqual(api["cap_drop"], ["ALL"])
         self.assertTrue(api["read_only"])
         self.assertEqual(api["security_opt"], ["no-new-privileges:true"])
-        self.assertEqual(api["tmpfs"], ["/tmp:rw"])
+        self.assertEqual(api["tmpfs"], ["/run/quiz-tmp:rw"])
         self.assertEqual(api["stop_grace_period"], "30s")
         self.assertEqual(result["services"]["mysql"]["healthcheck"]["interval"], "10000000000ns")
         container = copy.deepcopy(self.containers[0])
@@ -243,8 +244,8 @@ class AdoptionTest(unittest.TestCase):
         self.assertEqual(metadata["volumes"][0]["type"], "bind")
         self.assertTrue(metadata["volumes"][0]["read_only"])
         self.assertEqual(metadata["healthcheck"], {})
-        container["HostConfig"]["Tmpfs"] = {"/tmp": ""}
-        self.assertEqual(ADOPT.snapshot_service(container, {}, {})["tmpfs"], ["/tmp"])
+        container["HostConfig"]["Tmpfs"] = {"/run/quiz-empty": ""}
+        self.assertEqual(ADOPT.snapshot_service(container, {}, {})["tmpfs"], ["/run/quiz-empty"])
         self.assertEqual(ADOPT.snapshot_health({"Test": ["NONE"]}), {"test": ["NONE"]})
         container["HostConfig"]["Privileged"] = True
         with self.assertRaises(ValueError):
@@ -256,7 +257,7 @@ class AdoptionTest(unittest.TestCase):
         self.assertEqual(ADOPT.addresses("https://quiz.example.com/"), ("https://quiz.example.com", "quiz.example.com", 80))
         self.assertEqual(ADOPT.addresses("http://127.0.0.1:18080"), ("http://127.0.0.1:18080", "http://:80", 18080))
         self.assertEqual(ADOPT.addresses("https://quiz.example.com:443")[0], "https://quiz.example.com")
-        for origin in ("https://user:pass@host", "https://host/path", "https://host:8443", "http://host:443", "http://host:0", "http://host:65536"):
+        for origin in ("https://user:pass@host", "https://host/path", "https://host:8443", "http://localhost:443", "http://localhost:0", "http://localhost:65536"):
             with self.assertRaises(ValueError):
                 ADOPT.addresses(origin)
         self.assertEqual(ADOPT.dotenv({"VALUE": "$literal's"}), "VALUE='$literal\\'s'\n")
@@ -278,17 +279,17 @@ class AdoptionTest(unittest.TestCase):
 
     def test_main_uses_the_host_lock_and_redacts_failures(self):
         with patch.object(ADOPT, "docker", side_effect=self.docker), \
-                patch("sys.argv", [str(SOURCE), "--root", str(self.base)]), contextlib.redirect_stdout(io.StringIO()):
+                patch("sys.argv", [str(SOURCE), "--root", str(self.base), "--origin", TEST_ORIGIN]), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(ADOPT.main(), 0)
         errors = io.StringIO()
         with patch.object(ADOPT, "prepare", side_effect=ValueError(PRIVATE_VALUE)), \
-                patch("sys.argv", [str(SOURCE), "--root", str(self.base)]), contextlib.redirect_stderr(errors):
+                patch("sys.argv", [str(SOURCE), "--root", str(self.base), "--origin", TEST_ORIGIN]), contextlib.redirect_stderr(errors):
             self.assertEqual(ADOPT.main(), 1)
         self.assertNotIn(PRIVATE_VALUE, errors.getvalue())
 
     def test_cli_entrypoint_has_sanitized_failure(self):
         errors = io.StringIO()
-        with patch("sys.argv", [str(SOURCE), "--root", str(self.base / "missing")]), \
+        with patch("sys.argv", [str(SOURCE), "--root", str(self.base / "missing"), "--origin", TEST_ORIGIN]), \
                 contextlib.redirect_stderr(errors), self.assertRaises(SystemExit) as exited:
             runpy.run_path(str(SOURCE), run_name="__main__")
         self.assertEqual(exited.exception.code, 1)
