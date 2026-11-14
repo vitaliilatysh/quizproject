@@ -2,6 +2,7 @@ package ua.nure.latysh.quizzes.api.admin;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,10 +60,7 @@ public class QuizAdminService {
     }
 
     public Page<QuizResponse> quizzes(Pageable pageable) {
-        // The admin listing has no search or level filter of its own, so it asks
-        // for every quiz through the same query the public catalogue uses.
-        Page<Quiz> quizzes = quizRepository.search(
-                null, true, QuizRepository.ANY_COMPLEXITY, pageable);
+        Page<Quiz> quizzes = quizRepository.findCatalogue(Specification.unrestricted(), pageable);
         Map<Integer, Long> questionCounts = questionCountsByQuizId(quizzes.getContent());
         return quizzes.map(quiz -> toQuizResponse(quiz, questionCounts.getOrDefault(quiz.getId(), 0L)));
     }

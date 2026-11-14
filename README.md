@@ -7,6 +7,9 @@ Spring Boot REST API для створення та проходження те�
 React-клієнт розвивається окремо в [quizproject-web](https://github.com/vitaliilatysh/quizproject-web).
 Legacy JSP/Servlet WAR більше не є частиною backend.
 
+Практичні приклади Specification, Strategy та Facade описані в
+[архітектурних патернах бекенду](docs/backend-patterns.md).
+
 ## Технології
 
 - Java 25

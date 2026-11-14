@@ -2,8 +2,15 @@ package ua.nure.latysh.quizzes.api;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.transaction.annotation.Transactional;
+import ua.nure.latysh.quizzes.api.domain.Quiz;
+import ua.nure.latysh.quizzes.api.domain.QuizRepository;
+import ua.nure.latysh.quizzes.api.domain.QuizSpecifications;
+import java.util.List;
 import java.util.Arrays;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -14,6 +21,50 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** The API contract for the public catalogue: listing, paging, search, filtering and the summary. */
 class QuizCatalogueContractTest extends ApiContractTestBase {
+    @Test
+    void composesIndependentFiltersAndCountsMatchesAcrossPages() {
+        QuizRepository repository = applicationContext.getBean(QuizRepository.class);
+        var java = QuizSpecifications.nameOrSubjectContains("  JAVA  ");
+        var medium = QuizSpecifications.hasAnyComplexity(List.of(" medium ", "MEDIUM"));
+
+        var either = java.or(medium);
+        var first = repository.findCatalogue(either, PageRequest.of(0, 1, Sort.by("id").descending()));
+        var second = repository.findCatalogue(either, PageRequest.of(1, 1));
+        assertThat(first.getContent()).extracting(Quiz::getId).containsExactly(1);
+        assertThat(second.getContent()).extracting(Quiz::getId).containsExactly(2);
+        assertThat(first.getTotalElements()).isEqualTo(2);
+        assertThat(second.getTotalElements()).isEqualTo(2);
+        assertThat(first.getTotalPages()).isEqualTo(2);
+
+        assertThat(repository.findCatalogue(java.and(medium), Pageable.unpaged()).getContent()).isEmpty();
+    }
+
+    @Test
+    void fetchesCatalogueRelationsBeforeTheRepositoryTransactionCloses() {
+        QuizRepository repository = applicationContext.getBean(QuizRepository.class);
+        var quizzes = repository.findCatalogue(QuizSpecifications.matching(null, null), Pageable.unpaged());
+        var persistence = entityManagerFactory.getPersistenceUnitUtil();
+
+        assertThat(quizzes.getContent()).extracting(Quiz::getId).containsExactly(1, 2);
+        for (Quiz quiz : quizzes) {
+            assertThat(persistence.isLoaded(quiz, "subject")).isTrue();
+            assertThat(persistence.isLoaded(quiz, "level")).isTrue();
+        }
+    }
+
+    @Test
+    @Transactional
+    void findsLiteralWildcardsAndTheEscapeCharacterInNamesAndSubjects() {
+        jdbcTemplate.update("UPDATE quizzes SET name = ? WHERE id = 1", "50%_! quiz");
+        jdbcTemplate.update("UPDATE subjects SET name = ? WHERE id = 2", "50%_! subject");
+
+        var page = quizQueryService.findAll("  50%_!  ", null, PageRequest.of(0, 1));
+        assertThat(page.getTotalElements()).isEqualTo(2);
+        assertThat(page.getContent()).extracting("id").containsExactly(1);
+        assertThat(quizQueryService.findAll("50%_!", List.of("medium"), Pageable.unpaged()).getContent())
+                .extracting("id").containsExactly(2);
+    }
+
     @Test
     void listsQuizzesAndReturnsOneById() throws Exception {
         mockMvc.perform(get("/api/v1/quizzes"))
