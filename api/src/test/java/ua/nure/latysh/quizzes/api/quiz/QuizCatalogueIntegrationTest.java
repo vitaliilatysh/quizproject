@@ -44,8 +44,7 @@ class QuizCatalogueIntegrationTest {
 
     @Test
     void listsEverythingWhenNoFilterIsGiven() {
-        // Exercises the ANY_COMPLEXITY placeholder against MySQL. Passing a
-        // genuinely empty collection here renders IN () and fails outright.
+        // Empty filters must omit the IN predicate entirely on MySQL.
         long total = quizQueryService.findAll(null, null, PageRequest.of(0, 50)).getTotalElements();
         assertThat(total).isPositive();
 
@@ -86,6 +85,23 @@ class QuizCatalogueIntegrationTest {
         assertThat(quizQueryService.findAll(null, List.of("no-such-level"), PageRequest.of(0, 50))
                 .getTotalElements())
                 .isZero();
+    }
+
+    @Test
+    void keepsFilteredCountsAndIdOrderAcrossPagesOnMySql() {
+        var all = quizQueryService.findAll(null, null, PageRequest.of(0, 100));
+        List<String> levels = all.getContent().stream().map(QuizResponse::complexity).distinct().toList();
+        var first = quizQueryService.findAll(null, levels, PageRequest.of(0, 1));
+        var second = quizQueryService.findAll(null, levels, PageRequest.of(1, 1));
+
+        // A full one-item page forces a real count query, including its level predicate.
+        assertThat(all.getTotalElements()).isGreaterThan(1);
+        assertThat(first.getTotalElements()).isEqualTo(all.getTotalElements());
+        assertThat(second.getTotalElements()).isEqualTo(all.getTotalElements());
+        assertThat(first.getContent()).extracting(QuizResponse::id)
+                .containsExactly(all.getContent().get(0).id());
+        assertThat(second.getContent()).extracting(QuizResponse::id)
+                .containsExactly(all.getContent().get(1).id());
     }
 
     @Test
