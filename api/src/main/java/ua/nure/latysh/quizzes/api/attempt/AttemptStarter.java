@@ -1,13 +1,10 @@
 package ua.nure.latysh.quizzes.api.attempt;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import ua.nure.latysh.quizzes.api.domain.Attempt;
-import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
-import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
-import ua.nure.latysh.quizzes.api.domain.Quiz;
-import ua.nure.latysh.quizzes.api.domain.QuizRepository;
-import ua.nure.latysh.quizzes.api.domain.UserRepository;
+import ua.nure.latysh.quizzes.api.quiz.QuestionRepository;
+import ua.nure.latysh.quizzes.api.quiz.Quiz;
+import ua.nure.latysh.quizzes.api.quiz.QuizRepository;
+import ua.nure.latysh.quizzes.api.identity.UserRepository;
 import ua.nure.latysh.quizzes.api.observability.QuizMetrics;
 import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
 import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
@@ -26,18 +23,6 @@ final class AttemptStarter {
     private final AttemptSnapshotStore snapshots;
     private final Clock clock;
     private final QuizMetrics metrics;
-
-    @Autowired
-    AttemptStarter(
-            QuizRepository quizRepository,
-            UserRepository userRepository,
-            AttemptRepository attemptRepository,
-            QuestionRepository questionRepository,
-            AttemptSnapshotStore snapshots,
-            QuizMetrics metrics) {
-        this(quizRepository, userRepository, attemptRepository, questionRepository,
-                snapshots, Clock.systemUTC(), metrics);
-    }
 
     AttemptStarter(
             QuizRepository quizRepository,

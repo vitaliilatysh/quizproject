@@ -5,10 +5,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-import ua.nure.latysh.quizzes.api.domain.Quiz;
-import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
-import ua.nure.latysh.quizzes.api.domain.QuizRepository;
-import ua.nure.latysh.quizzes.api.domain.QuizSpecifications;
 import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
 
 import java.util.Collection;

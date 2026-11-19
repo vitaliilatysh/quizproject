@@ -11,13 +11,17 @@ import ua.nure.latysh.quizzes.api.security.InMemoryRateLimitService;
 import ua.nure.latysh.quizzes.api.security.RateLimitService;
 import ua.nure.latysh.quizzes.api.security.RedisRateLimitService;
 
+import java.time.Clock;
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RateLimitConfigurationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withInitializer(new ConfigDataApplicationContextInitializer())
-            .withUserConfiguration(RateLimitConfiguration.class, PropertiesConfiguration.class)
+            .withUserConfiguration(RateLimitConfiguration.class, TimeConfiguration.class, PropertiesConfiguration.class)
             .withPropertyValues("JWT_SECRET=test-secret");
 
     @Test
@@ -27,6 +31,19 @@ class RateLimitConfigurationTest {
                     .doesNotHaveBean(StringRedisTemplate.class);
             assertThat(context.getBean(RateLimitService.class)).isInstanceOf(InMemoryRateLimitService.class);
         });
+    }
+
+    @Test
+    void memoryModeUsesTheConfiguredClock() {
+        Clock clock = mock(Clock.class);
+        when(clock.millis()).thenReturn(0L, 60_000L);
+        contextRunner.withPropertyValues("RATE_LIMIT_BACKEND=memory")
+                .withBean("testClock", Clock.class, () -> clock, bean -> bean.setPrimary(true))
+                .run(context -> {
+                    var service = context.getBean(RateLimitService.class);
+                    assertThat(service.acquire("client", 1, Duration.ofSeconds(30)).allowed()).isTrue();
+                    assertThat(service.acquire("client", 1, Duration.ofSeconds(30)).allowed()).isTrue();
+                });
     }
 
     @Test

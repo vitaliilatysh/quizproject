@@ -8,14 +8,16 @@ import tools.jackson.databind.ObjectMapper;
 import ua.nure.latysh.quizzes.api.support.ApiError;
 
 import java.io.IOException;
-import java.time.Instant;
+import java.time.Clock;
 
 @Component
 public class ApiErrorWriter {
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
-    public ApiErrorWriter(ObjectMapper objectMapper) {
+    public ApiErrorWriter(ObjectMapper objectMapper, Clock clock) {
         this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     public void write(
@@ -26,6 +28,6 @@ public class ApiErrorWriter {
         response.setStatus(status.value());
         response.setContentType("application/json");
         objectMapper.writeValue(response.getOutputStream(), new ApiError(
-                Instant.now(), status.value(), status.getReasonPhrase(), message, request.getRequestURI()));
+                clock.instant(), status.value(), status.getReasonPhrase(), message, request.getRequestURI()));
     }
 }

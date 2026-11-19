@@ -9,7 +9,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
-import ua.nure.latysh.quizzes.api.auth.ActiveSessionJwtValidator;
+import ua.nure.latysh.quizzes.api.identity.ActiveSessionJwtValidator;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;

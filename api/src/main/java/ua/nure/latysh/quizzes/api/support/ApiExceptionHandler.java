@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-import ua.nure.latysh.quizzes.api.auth.InvalidRefreshTokenException;
+import ua.nure.latysh.quizzes.api.identity.InvalidRefreshTokenException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -31,11 +31,7 @@ public class ApiExceptionHandler {
 
     private final Clock clock;
 
-    public ApiExceptionHandler() {
-        this(Clock.systemUTC());
-    }
-
-    ApiExceptionHandler(Clock clock) {
+    public ApiExceptionHandler(Clock clock) {
         this.clock = clock;
     }
 

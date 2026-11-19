@@ -1,13 +1,9 @@
 package ua.nure.latysh.quizzes.api.attempt;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
-import ua.nure.latysh.quizzes.api.domain.Attempt;
-import ua.nure.latysh.quizzes.api.domain.AttemptQuestion;
-import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
-import ua.nure.latysh.quizzes.api.domain.Result;
-import ua.nure.latysh.quizzes.api.domain.ResultRepository;
+import ua.nure.latysh.quizzes.api.quiz.AnswerRepository;
+import ua.nure.latysh.quizzes.api.result.Result;
+import ua.nure.latysh.quizzes.api.result.ResultRepository;
 import ua.nure.latysh.quizzes.api.observability.QuizMetrics;
 import ua.nure.latysh.quizzes.api.support.InvalidRequestException;
 import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
@@ -31,16 +27,6 @@ final class AttemptCompleter {
     private final AttemptSnapshotStore snapshots;
     private final Clock clock;
     private final QuizMetrics metrics;
-
-    @Autowired
-    AttemptCompleter(
-            AttemptRepository attemptRepository,
-            AnswerRepository answerRepository,
-            ResultRepository resultRepository,
-            AttemptSnapshotStore snapshots,
-            QuizMetrics metrics) {
-        this(attemptRepository, answerRepository, resultRepository, snapshots, Clock.systemUTC(), metrics);
-    }
 
     AttemptCompleter(
             AttemptRepository attemptRepository,

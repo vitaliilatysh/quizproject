@@ -5,7 +5,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
+import ua.nure.latysh.quizzes.api.attempt.AttemptRepository;
 
 /**
  * Reads run in one read-only transaction so that every statement a request

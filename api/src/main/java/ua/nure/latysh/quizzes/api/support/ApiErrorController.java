@@ -38,11 +38,7 @@ public class ApiErrorController implements ErrorController {
 
     private final Clock clock;
 
-    public ApiErrorController() {
-        this(Clock.systemUTC());
-    }
-
-    ApiErrorController(Clock clock) {
+    public ApiErrorController(Clock clock) {
         this.clock = clock;
     }
 

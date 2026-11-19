@@ -1,0 +1,90 @@
+package ua.nure.latysh.quizzes.api.quiz;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+
+import java.util.List;
+
+public interface QuizAdminModels {
+    /**
+     * How many options a question offers.
+     *
+     * <p>Named because two places need the number and they must not spell it
+     * separately: the constraint that enforces it on the way in, and the
+     * message {@code QuestionAdminService} returns when a stored question does
+     * not have that many. A number written twice is a message waiting to lie.
+     */
+    int ANSWERS_PER_QUESTION = 4;
+
+    @Schema(name = "AdminSubject", requiredProperties = {"id", "name"})
+    record SubjectResponse(int id, String name) {
+    }
+
+    @Schema(name = "AdminLevel", requiredProperties = {"id", "name"})
+    record LevelResponse(int id, String name) {
+    }
+
+    @Schema(name = "AdminQuiz", requiredProperties = {"id", "name", "timeToPassMinutes", "levelId",
+            "complexity", "subjectId", "subject", "totalQuestions"})
+    record QuizResponse(
+            int id,
+            String name,
+            int timeToPassMinutes,
+            int levelId,
+            String complexity,
+            int subjectId,
+            String subject,
+            int totalQuestions) {
+    }
+
+    @Schema(name = "AdminAnswer", requiredProperties = {"id", "text", "correct"})
+    record AnswerResponse(int id, String text, boolean correct) {
+    }
+
+    @Schema(name = "AdminQuestion", requiredProperties = {"id", "quizId", "text", "answers"})
+    record QuestionResponse(int id, int quizId, String text, List<AnswerResponse> answers) {
+    }
+
+    record SubjectRequest(@NotBlank @Size(max = 25) String name) {
+    }
+
+    @Schema(requiredProperties = {"name", "subjectId", "levelId", "timeToPassMinutes"})
+    record QuizRequest(
+            @NotBlank @Size(max = 50) String name,
+            @Positive int subjectId,
+            @Positive int levelId,
+            @Min(1) @Max(1440) int timeToPassMinutes) {
+    }
+
+    /**
+     * One option as the administrator wants it to stand.
+     *
+     * <p>{@code id} names the stored row this is an edit of, and is what makes
+     * the order of the list its own business. It is optional because a client
+     * that has always sent the four options in the order it received them is
+     * not wrong, and did not have an id to send before this field existed —
+     * {@code updateQuestion} falls back to position when it is absent. Creating
+     * a question leaves it null: there is nothing yet to name.
+     */
+    @Schema(requiredProperties = {"text", "correct"})
+    record AnswerRequest(Integer id, @NotBlank @Size(max = 50) String text, boolean correct) {
+        AnswerRequest(String text, boolean correct) {
+            this(null, text, correct);
+        }
+    }
+
+    record QuestionRequest(
+            @NotBlank @Size(max = 250) String text,
+            @NotNull @Size(min = ANSWERS_PER_QUESTION, max = ANSWERS_PER_QUESTION)
+            List<@NotNull @Valid AnswerRequest> answers) {
+    }
+
+}
+

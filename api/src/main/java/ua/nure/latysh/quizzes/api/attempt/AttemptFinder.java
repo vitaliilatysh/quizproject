@@ -1,8 +1,6 @@
 package ua.nure.latysh.quizzes.api.attempt;
 
 import org.springframework.stereotype.Component;
-import ua.nure.latysh.quizzes.api.domain.Attempt;
-import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
 import ua.nure.latysh.quizzes.api.support.ResourceNotFoundException;
 
 /** Reads an attempt only through its ownership boundary. */
