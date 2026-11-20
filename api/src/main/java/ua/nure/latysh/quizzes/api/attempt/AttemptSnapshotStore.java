@@ -1,12 +1,9 @@
 package ua.nure.latysh.quizzes.api.attempt;
 
 import org.springframework.stereotype.Component;
-import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
-import ua.nure.latysh.quizzes.api.domain.Attempt;
-import ua.nure.latysh.quizzes.api.domain.AttemptQuestion;
-import ua.nure.latysh.quizzes.api.domain.AttemptQuestionRepository;
-import ua.nure.latysh.quizzes.api.domain.Question;
-import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
+import ua.nure.latysh.quizzes.api.quiz.AnswerRepository;
+import ua.nure.latysh.quizzes.api.quiz.Question;
+import ua.nure.latysh.quizzes.api.quiz.QuestionRepository;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

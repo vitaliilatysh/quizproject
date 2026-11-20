@@ -1,7 +1,5 @@
 package ua.nure.latysh.quizzes.api.security;
 
-import ua.nure.latysh.quizzes.api.config.SecurityProperties;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -12,11 +10,7 @@ public class InMemoryRateLimitService implements RateLimitService {
     private final int maxClients;
     private final Map<String, Window> windows = new LinkedHashMap<>(16, 0.75f, true);
 
-    public InMemoryRateLimitService(SecurityProperties properties) {
-        this(Clock.systemUTC(), properties.rateLimit().maxClients());
-    }
-
-    InMemoryRateLimitService(Clock clock, int maxClients) {
+    public InMemoryRateLimitService(Clock clock, int maxClients) {
         this.clock = clock;
         this.maxClients = maxClients;
     }

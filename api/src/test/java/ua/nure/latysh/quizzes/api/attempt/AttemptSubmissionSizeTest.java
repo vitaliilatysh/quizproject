@@ -1,11 +1,8 @@
 package ua.nure.latysh.quizzes.api.attempt;
 
 import org.junit.jupiter.api.Test;
-import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
-import ua.nure.latysh.quizzes.api.domain.Attempt;
-import ua.nure.latysh.quizzes.api.domain.AttemptQuestion;
-import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
-import ua.nure.latysh.quizzes.api.domain.ResultRepository;
+import ua.nure.latysh.quizzes.api.quiz.AnswerRepository;
+import ua.nure.latysh.quizzes.api.result.ResultRepository;
 import ua.nure.latysh.quizzes.api.observability.QuizMetrics;
 import ua.nure.latysh.quizzes.api.support.InvalidRequestException;
 

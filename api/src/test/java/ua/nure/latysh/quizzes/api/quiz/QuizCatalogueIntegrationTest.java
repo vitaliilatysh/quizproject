@@ -8,7 +8,6 @@ import org.springframework.data.domain.PageRequest;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
-import ua.nure.latysh.quizzes.api.domain.SubjectRepository;
 
 import java.util.List;
 import java.util.Locale;

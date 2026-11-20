@@ -1,5 +1,10 @@
 package ua.nure.latysh.quizzes.api.admin;
 
+import ua.nure.latysh.quizzes.api.quiz.QuestionAdminService;
+import ua.nure.latysh.quizzes.api.identity.UserAdminService;
+import ua.nure.latysh.quizzes.api.quiz.CatalogueAdminService;
+import ua.nure.latysh.quizzes.api.result.ResultAdminService;
+import ua.nure.latysh.quizzes.api.quiz.QuizAdminService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,16 +28,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.LevelResponse;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.QuestionRequest;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.QuestionResponse;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.QuizRequest;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.QuizResponse;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.ResultResponse;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.SubjectRequest;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.SubjectResponse;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.UserResponse;
-import ua.nure.latysh.quizzes.api.admin.AdminModels.UserStatusRequest;
+import ua.nure.latysh.quizzes.api.quiz.QuizAdminModels.LevelResponse;
+import ua.nure.latysh.quizzes.api.quiz.QuizAdminModels.QuestionRequest;
+import ua.nure.latysh.quizzes.api.quiz.QuizAdminModels.QuestionResponse;
+import ua.nure.latysh.quizzes.api.quiz.QuizAdminModels.QuizRequest;
+import ua.nure.latysh.quizzes.api.quiz.QuizAdminModels.QuizResponse;
+import ua.nure.latysh.quizzes.api.result.ResultAdminModels.ResultResponse;
+import ua.nure.latysh.quizzes.api.quiz.QuizAdminModels.SubjectRequest;
+import ua.nure.latysh.quizzes.api.quiz.QuizAdminModels.SubjectResponse;
+import ua.nure.latysh.quizzes.api.identity.UserAdminModels.UserResponse;
+import ua.nure.latysh.quizzes.api.identity.UserAdminModels.UserStatusRequest;
 import ua.nure.latysh.quizzes.api.support.PaginationSupport;
 
 import java.time.Instant;

@@ -7,13 +7,12 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
-import ua.nure.latysh.quizzes.api.account.AccountService;
-import ua.nure.latysh.quizzes.api.auth.RegisterRequest;
-import ua.nure.latysh.quizzes.api.domain.AnswerRepository;
-import ua.nure.latysh.quizzes.api.domain.AttemptRepository;
-import ua.nure.latysh.quizzes.api.domain.QuestionRepository;
-import ua.nure.latysh.quizzes.api.domain.QuizRepository;
-import ua.nure.latysh.quizzes.api.domain.ResultRepository;
+import ua.nure.latysh.quizzes.api.identity.AccountService;
+import ua.nure.latysh.quizzes.api.identity.RegisterRequest;
+import ua.nure.latysh.quizzes.api.quiz.AnswerRepository;
+import ua.nure.latysh.quizzes.api.quiz.QuestionRepository;
+import ua.nure.latysh.quizzes.api.quiz.QuizRepository;
+import ua.nure.latysh.quizzes.api.result.ResultRepository;
 import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
 
 import java.util.List;
