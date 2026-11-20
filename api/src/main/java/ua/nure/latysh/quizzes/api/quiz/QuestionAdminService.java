@@ -14,8 +14,7 @@ import ua.nure.latysh.quizzes.api.support.ResourceConflictException;
 
 import static ua.nure.latysh.quizzes.api.quiz.QuizAdminModels.ANSWERS_PER_QUESTION;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,7 +51,12 @@ public class QuestionAdminService {
         if (!quizRepository.existsById(quizId)) {
             throw ResourceErrors.missing("Quiz", quizId);
         }
-        return questionsWithAnswers(quizId);
+        List<Question> questions = questionRepository.findAllByQuiz_IdOrderByIdAsc(quizId);
+        Map<Integer, List<Answer>> answers = answerRepository.findAllByQuestionQuizIdOrderByQuestionIdAndId(quizId)
+                .stream().collect(Collectors.groupingBy(answer -> answer.getQuestion().getId()));
+        return questions.stream()
+                .map(question -> toQuestionResponse(question, answers.getOrDefault(question.getId(), List.of())))
+                .toList();
     }
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
@@ -62,8 +66,10 @@ public class QuestionAdminService {
         validateAnswers(request.answers());
         var question = new Question(request.text().trim(), quiz);
         questionRepository.saveAndFlush(question);
-        insertAnswers(question, request.answers());
-        return reread(quizId, question.getId());
+        List<Answer> answers = request.answers().stream()
+                .map(answer -> new Answer(answer.text().trim(), answer.correct(), question))
+                .toList();
+        return toQuestionResponse(question, answerRepository.saveAll(answers));
     }
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
@@ -84,7 +90,7 @@ public class QuestionAdminService {
             answer.setAnswer(answerRequest.text().trim());
             answer.setCorrect(answerRequest.correct());
         }
-        return reread(question.getQuiz().getId(), questionId);
+        return toQuestionResponse(question, answers);
     }
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
@@ -144,33 +150,11 @@ public class QuestionAdminService {
                 .toList();
     }
 
-    /**
-     * The question as it now stands, read back through the same path a listing
-     * takes, so that what a write returns and what a later read returns cannot
-     * disagree about the shape of it.
-     */
-    private QuestionResponse reread(int quizId, int questionId) {
-        return questionsWithAnswers(quizId).stream()
-                .filter(response -> response.id() == questionId)
-                .findFirst()
-                .orElseThrow(() -> ResourceErrors.missing(QUESTION_RESOURCE, questionId));
-    }
-
-    private List<QuestionResponse> questionsWithAnswers(int quizId) {
-        var questions = new LinkedHashMap<Integer, MutableQuestion>();
-        for (Question question : questionRepository.findAllByQuiz_IdOrderByIdAsc(quizId)) {
-            questions.put(question.getId(), new MutableQuestion(question.getQuestion()));
-        }
-        for (Answer answer : answerRepository.findAllByQuestionQuizIdOrderByQuestionIdAndId(quizId)) {
-            var question = questions.get(answer.getQuestion().getId());
-            if (question != null) {
-                question.answers().add(new AnswerResponse(answer.getId(), answer.getAnswer(), answer.isCorrect()));
-            }
-        }
-        return questions.entrySet().stream()
-                .map(entry -> new QuestionResponse(
-                        entry.getKey(), quizId, entry.getValue().text(), List.copyOf(entry.getValue().answers())))
-                .toList();
+    private static QuestionResponse toQuestionResponse(Question question, List<Answer> answers) {
+        return new QuestionResponse(question.getId(), question.getQuiz().getId(), question.getQuestion(),
+                answers.stream().sorted(Comparator.comparing(Answer::getId))
+                        .map(answer -> new AnswerResponse(answer.getId(), answer.getAnswer(), answer.isCorrect()))
+                        .toList());
     }
 
     private static void validateAnswers(List<AnswerRequest> answers) {
@@ -179,16 +163,4 @@ public class QuestionAdminService {
         }
     }
 
-    private void insertAnswers(Question question, List<AnswerRequest> answers) {
-        List<Answer> rows = answers.stream()
-                .map(answer -> new Answer(answer.text().trim(), answer.correct(), question))
-                .toList();
-        answerRepository.saveAll(rows);
-    }
-
-    private record MutableQuestion(String text, List<AnswerResponse> answers) {
-        private MutableQuestion(String text) {
-            this(text, new ArrayList<>());
-        }
-    }
 }
