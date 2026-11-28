@@ -1,510 +1,275 @@
 # Quiz Project API
 
-Spring Boot REST API для створення та проходження тестів. Студенти можуть реєструватися,
-проходити тести й переглядати результати, а адміністратори — керувати користувачами,
+Spring Boot REST API для створення та проходження тестів. Студенти реєструються,
+проходять тести й переглядають результати; адміністратори керують користувачами,
 предметами, тестами, запитаннями та результатами.
 
-React-клієнт розвивається окремо в [quizproject-web](https://github.com/vitaliilatysh/quizproject-web).
-Legacy JSP/Servlet WAR більше не є частиною backend.
+Frontend: [quizproject-web](https://github.com/vitaliilatysh/quizproject-web).
+Публічний застосунок: [http://164.92.163.71/](http://164.92.163.71/).
 
-Практичні приклади Specification, Strategy та Facade описані в
-[архітектурних патернах бекенду](docs/backend-patterns.md).
+## Поточна архітектура
 
+Один Gradle-модуль `api`; код у `api/src/main/java/ua/nure/latysh/quizzes/api`
+організований за функціями:
 
-## Структура коду
+| Пакет | Відповідальність |
+| --- | --- |
+| `identity` | авторизація, профіль, користувачі, ролі, статуси та refresh-сесії |
+| `quiz` | каталог, предмети, рівні, запитання, відповіді та їх адміністрування |
+| `attempt` | спроби, знімки запитань, дедлайни й завершення |
+| `result` | результати, підсумки та адміністративні звіти |
+| `admin` | HTTP-маршрути адміністрування |
+| `security`, `config`, `observability`, `support` | захист, конфігурація, метрики та обробка помилок |
 
-Один Gradle-модуль `api` містить пакети за функціями:
+Сутності, репозиторії, сервіси та DTO розміщені поруч із відповідною функцією.
+Транзакційні межі належать сервісам; один UTC `Clock` передається через конструктори.
+Запис запитання повертає змінену сутність без повторного читання всього тесту.
 
-- `identity` — авторизація, профіль, користувачі, ролі, статуси та refresh-сесії;
-- `quiz` — каталог, предмети, рівні, запитання, відповіді та їх адміністрування;
-- `attempt` — спроби, незмінні знімки запитань, дедлайни й завершення;
-- `result` — результати, статистика та адміністративні звіти;
-- `admin` — спільні HTTP-маршрути адміністрування;
-- `security`, `config`, `observability`, `support` — захист запитів, конфігурація, метрики та спільна обробка помилок.
-
-Сутності, репозиторії, сервіси та DTO лежать біля функції, якій належать.
-Окремих загальних пакетів `domain`, `auth` та `account` немає. Тести сервісів
-розміщені у відповідних пакетах тестового дерева; HTTP-контракти залишаються
-спільними для API.
-
-`TimeConfiguration` надає один UTC `Clock` для часових позначок застосунку,
-токенів, refresh-сесій, дедлайнів спроб і локального rate limiting. У тестах
-час можна передати явно, без додаткового конструктора для системного годинника.
+Specification для каталогу, Strategy для rate limiting і Facade для спроб описані в
+[архітектурних патернах](docs/backend-patterns.md).
 
 ## Технології
 
-- Java 25
-- Spring Boot 4.1
-- Spring Security, короткоживучі JWT і ротація refresh-сесій
-- Spring Data JPA (Hibernate) та MySQL 8
-- Spring Data Redis і атомарні distributed rate limits
-- Micrometer і Prometheus
-- Flyway
-- Gradle 9.9.1
-- JUnit 6, Testcontainers і JaCoCo
-- SonarCloud із блокувальним quality gate
-- OpenAPI / Swagger UI
+- Java 25, Spring Boot 4.1, Spring Security;
+- Spring Data JPA / Hibernate, MySQL 8.4, Flyway;
+- Spring Data Redis, JWT і ротація refresh-сесій;
+- Micrometer / Prometheus, OpenAPI / Swagger UI;
+- Gradle Wrapper, JUnit 6, Testcontainers, JaCoCo та SonarCloud.
 
-## Збірка і перевірка
+Точні версії: [api/build.gradle](api/build.gradle), [build.gradle](build.gradle),
+[Gradle Wrapper](gradle/wrapper/gradle-wrapper.properties) та закомічені `gradle.lockfile`.
+Перевизначення версій Tomcat і Jackson у `api/build.gradle` також входять до lockfile.
+
+## Локальний запуск
+
+Потрібні JDK 25, MySQL 8.4 і Redis. Наведений нижче приклад запускає базу та Redis
+через Docker Engine; Compose v2 використовується в deployment-стеку.
+
+~~~bash
+docker run --detach --rm --name quiz-mysql \
+  --publish 127.0.0.1:3306:3306 \
+  --volume quizproject-dev-mysql:/var/lib/mysql \
+  --env MYSQL_DATABASE=tests_db \
+  --env MYSQL_USER=quiz_app \
+  --env MYSQL_PASSWORD=local-db-password \
+  --env MYSQL_ROOT_PASSWORD=local-root-password \
+  mysql:8.4
+
+docker run --detach --rm --name quiz-redis \
+  --publish 127.0.0.1:6379:6379 redis:8.2.8-alpine
+~~~
+
+MySQL зберігає дані в локальному volume `quizproject-dev-mysql`; `--rm` видаляє
+контейнер після зупинки, але залишає цей volume. Змінні `MYSQL_*` створюють базу
+та користувача лише під час першої ініціалізації порожнього volume.
+
+Дочекайтеся успішного виконання перевірки MySQL:
+
+~~~bash
+docker exec --env MYSQL_PWD=local-db-password quiz-mysql \
+  mysql --protocol=TCP --host=127.0.0.1 --user=quiz_app \
+  --database=tests_db --execute="SELECT 1"
+~~~
+
+Після цього запустіть API з кореня репозиторію:
+
+~~~bash
+export DB_URL="jdbc:mysql://localhost:3306/tests_db?characterEncoding=UTF-8&serverTimezone=UTC"
+export DB_USERNAME="quiz_app"
+export DB_PASSWORD="local-db-password"
+export REDIS_HOST="localhost"
+export JWT_SECRET="$(openssl rand -base64 32)"
+export CORS_ALLOWED_ORIGINS="http://127.0.0.1:4173"
+./gradlew :api:bootRun
+~~~
+
+У Windows задайте ті самі змінні та виконайте `gradlew.bat :api:bootRun`.
+Flyway застосовує міграції під час запуску.
+
+| Локальна адреса | Призначення |
+| --- | --- |
+| `http://localhost:8081/api/v1/quizzes` | публічний каталог |
+| `http://localhost:8081/swagger-ui.html` | Swagger UI |
+| `http://localhost:8081/v3/api-docs` | OpenAPI JSON |
+| `http://localhost:9081/actuator/health/readiness` | readiness на окремому management-порту |
+
+Для ізольованої розробки без Redis можна встановити `RATE_LIMIT_BACKEND=memory`,
+`REDIS_HEALTH_ENABLED=false` і `READINESS_HEALTH_INDICATORS=readinessState,db`.
+Цей режим розрахований на один екземпляр API.
+
+### Локальний адміністратор
+
+Міграції додають ролі та навчальні тести, але не створюють користувачів.
+Зареєструйте `localadmin` із власним паролем через frontend або
+`POST /api/v1/auth/register`; реєстрація завжди надає роль `student`.
+Для цієї локальної бази призначте роль адміністратора:
+
+~~~bash
+docker exec --env MYSQL_PWD=local-db-password quiz-mysql \
+  mysql --protocol=TCP --host=127.0.0.1 --user=quiz_app --database=tests_db \
+  --execute="UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'admin') WHERE login = 'localadmin';"
+~~~
+
+Вийдіть і ввійдіть знову, щоб отримати JWT з новою роллю. Цей користувач також
+підходить для локального Playwright-прогону frontend.
+
+## Збірка і перевірки
 
 ~~~bash
 ./gradlew clean :api:check :api:integrationTest :api:bootJar
 ~~~
 
-`:api:check` запускає unit та contract-тести й перевіряє покриття:
+- `:api:check` запускає unit/contract-тести та вимагає **100% покриття рядків, методів і гілок**.
+- `:api:integrationTest` потребує Docker: Testcontainers піднімає MySQL і Redis,
+  перевіряє Flyway-міграції, конкурентні операції, rate limits, кешування та HTTP-поведінку.
+- `:api:bootJar` створює executable JAR у `api/build/libs`.
+- JaCoCo-звіти доступні в `api/build/reports/jacoco/test`.
 
-```
-INSTRUCTION  100.00%
-BRANCH       100.00%
-LINE         100.00%
-METHOD       100.00%
-CLASS        100.00%
-```
-
-`jacocoTestCoverageVerification` вимагає 100% покриття рядків, методів і гілок.
-Обробка адміністративних запитань використовує один mapper для читання та
-запису; створення й редагування повертають змінене запитання без перечитування
-всіх запитань та відповідей тесту.
-
-Contract-тести розкладені на шість класів за областю API — `AuthenticationContractTest`,
-`QuizCatalogueContractTest`, `AttemptContractTest`, `AdminContractTest`, `HttpContractTest`
-і `TransactionContractTest` — зі спільним `ApiContractTestBase`. До того це був один
-`ApiContractTest`: у ньому падіння в одній області нічого не казало про те, яку саме
-частину контракту зламано, і весь файл перезапускався заради одного перевіреного
-маршруту. `ApiDocumentationSwitchTest` стоїть окремо, бо йому потрібен власний
-Spring-контекст із вимкненими документаційними шляхами, і тому ж — власне ім'я
-H2-бази: `application-test.yml` тримає одну базу з `DB_CLOSE_DELAY=-1`, тож другий
-контекст запустив би `schema.sql` по вже створених таблицях.
-
-`:api:integrationTest` піднімає чисті MySQL 8.4 і Redis 8.2 через Testcontainers. Перевірки
-застосовують production Flyway-міграції, доводять, що різні екземпляри API використовують один
-атомарний rate limit, і що одночасне завершення однієї спроби двома запитами не може подвоїти
-результат — пессимістичне блокування рядка допускає рівно одне успішне завершення.
-
-Готовий executable JAR створюється в `api/build/libs`.
-
-### Залежності зафіксовані локами
-
-`dependencyLocking` увімкнено для всіх конфігурацій, а стан зберігається в `gradle.lockfile`
-кореня та модуля `api`. Збірка звіряє кожну резолюцію з локом і падає, якщо вона розійшлася,
-тому **не запускайте `--write-locks` у CI** — там це мовчки прийняло б те, що upstream віддає
-зараз, тобто рівно те, від чого локи й захищають. Зміна залежності означає локальний
-`./gradlew --write-locks` і коміт оновлених локів.
-
-Dependabot оновлює Gradle-залежності щотижня і регенерує `gradle.lockfile` разом із версією в
-`build.gradle`, включно з транзитивними змінами, тож ручний крок для його PR не потрібний.
-
-Версія Tomcat навмисно піднята над тим, чим керує Spring Boot 4.1.1
-(`ext['tomcat.version'] = '11.0.25'` в `api/build.gradle`): на керовану 11.0.24 припадають три
-CRITICAL-адвізорі про обхід автентифікації та контролю доступу. Перевизначення прибирається,
-щойно з'явиться реліз Boot, який сам керує 11.0.25 або новішою; передчасне прибирання помітить
-Trivy-скан у `container.yml`.
-
-## Якість коду
-
-Workflow **SonarQube analysis** аналізує код у SonarCloud на кожен pull request і на push у
-`master`. Проєкт — `vitaliilatysh_quizproject` в організації `vitaliilatysh`; SQL-міграції
-виключені з аналізу (`sonar.exclusions`).
+Швидка перевірка без інтеграційного стека:
 
 ~~~bash
-./gradlew :api:test :api:jacocoTestReport :api:jacocoTestCoverageVerification sonar
+./gradlew :api:check
 ~~~
 
-`sonar.qualitygate.wait=true`, тому крок чекає на вердикт quality gate і падає, якщо той не
-пройдений — аналіз тут блокує, а не лише звітує. Покриття Sonar читає з
-`api/build/reports/jacoco/test/jacocoTestReport.xml`, який створює `jacocoTestReport` на основі
-`:api:test`. Тому workflow **навмисно не запускає** `:api:integrationTest`: його execution data
-до цього звіту не потрапляє, а другий стек MySQL і Redis через Testcontainers на кожен PR коштує
-часу без користі для аналізу. `:api:integrationTest` залишається в `ci.yml`.
-
-Потрібен repository secret `SONAR_TOKEN`. Для PR від Dependabot job пропускається цілком:
-такі прогони не отримують секретів репозиторію, тож `sonar` падав би на кожному bump. Гейт
-покриття при цьому не втрачається — `ci.yml` виконує `:api:check` (а отже
-`jacocoTestCoverageVerification`) і на цих PR теж.
-
-## Автоматичний мерж Dependabot
-
-Workflow **Dependabot auto-merge** автоматично зливає оновлення Dependabot через squash,
-включно з major-версіями. Він запускається після CI та повторно перевіряє відкриті PR
-кожні 15 хвилин; за потреби його можна запустити вручну з вкладки Actions.
-
-Мерж дозволений лише для справжнього `dependabot[bot]`, гілки в цьому репозиторії та
-цільової гілки `master`. Чернетки, конфлікти, незавершені або невдалі перевірки та
-активні `Changes requested` залишають PR відкритим. Перевіряються результати саме
-останнього коміту; SHA повторно перевіряється безпосередньо під час мерджу.
-Обов'язкові workflows — CI, перевірка контейнера та SonarQube analysis.
-Для SonarCloud зберігається наявне правило пропуску запусків від Dependabot; невдалий
-аналіз блокує мерж.
-
-Використовується лише вбудований `GITHUB_TOKEN`, без додаткових секретів або зміни
-налаштувань репозиторію. Оскільки мерж цим токеном не запускає звичайні Actions на
-`push`, автоматизація явно запускає ті самі CI, SonarCloud і публікацію образу
-на основній гілці. Частково невдалий запуск цих workflows відновлюється наступною
-плановою перевіркою. Скрипт не надсилає dispatch для workflow розгортання.
-
-## Безперервна інтеграція
-
-Чотири workflow у `.github/workflows`:
-
-| Workflow | Коли | Що робить |
-| --- | --- | --- |
-| `ci.yml` — **CI** | PR, push у `master` | `./gradlew clean :api:check :api:integrationTest :api:bootJar`, потім рендерить і перевіряє Kustomize overlays |
-| `sonarqube.yml` — **SonarQube analysis** | PR, push у `master` | тести, JaCoCo-звіт, аналіз SonarCloud і quality gate |
-| `container.yml` — **Backend container delivery** | PR, push у `master` | збірка образу, Trivy, smoke-перевірка проти MySQL і Redis; після `master` — публікація, SBOM і підпис cosign |
-| `deploy-digitalocean.yml` — **Deploy to DigitalOcean** | після успішного delivery з `master`, або вручну | DigitalOcean за digest; staging — opt-in, production — вручну через protected environment |
-
-Java 25 і Gradle wrapper (з перевіркою wrapper) встановлює спільний composite action
-`.github/actions/setup-java-gradle`, тому pinned SHA сторонніх actions живуть в одному місці.
-Сторонні actions скрізь закріплені за commit SHA, а Dependabot тримає їх актуальними.
-
-## Локальний запуск
-
-Створіть порожню базу MySQL, запустіть Redis і передайте конфігурацію через змінні середовища:
+Експорт контракту для frontend:
 
 ~~~bash
-docker run --rm --name quiz-redis -p 6379:6379 redis:8.2.8-alpine
+./gradlew :api:test --tests '*OpenApiExportTest' --no-daemon
 ~~~
 
-В іншому терміналі:
+Результат: `api/build/openapi/openapi.json`. Frontend CI порівнює цей експорт
+з актуального `master` зі своїм snapshot і згенерованими типами.
 
-~~~bash
-export DB_URL="jdbc:mysql://localhost:3306/tests_db?characterEncoding=UTF-8&serverTimezone=UTC"
-export DB_USERNAME="root"
-export DB_PASSWORD="secret"
-export REDIS_HOST="localhost"
-export JWT_SECRET="$(openssl rand -base64 32 | tr -d '\n')"
-export CORS_ALLOWED_ORIGINS="http://localhost:4173"
-./gradlew :api:bootRun
-~~~
-
-У Windows задайте ті самі змінні середовища та виконайте `gradlew.bat :api:bootRun`.
-Типовий порт — `8081`; його можна змінити через `API_PORT`. Production використовує Redis
-за замовчуванням. Для ізольованої локальної розробки можна встановити
-`RATE_LIMIT_BACKEND=memory`, `REDIS_HEALTH_ENABLED=false` і
-`READINESS_HEALTH_INDICATORS=readinessState,db`, але цей режим не можна використовувати з кількома
-екземплярами API.
-
-Великі JSON, HTML, JavaScript, CSS і текстові відповіді стискаються gzip, якщо клієнт передає
-`Accept-Encoding: gzip`. Типовий поріг — 1 KiB; його можна змінити через
-`HTTP_COMPRESSION_MIN_RESPONSE_SIZE` або вимкнути компресію через `HTTP_COMPRESSION_ENABLED=false`.
-
-Публічний каталог `GET /api/v1/quizzes` і окремі тести повертають weak `ETag` та можуть
-кешуватися браузером або proxy протягом однієї хвилини з обов'язковою подальшою перевіркою.
-TTL задається через `PUBLIC_QUIZ_CACHE_MAX_AGE`; умовний запит з `If-None-Match` отримує
-`304 Not Modified`, якщо представлення не змінилося.
-
-Flyway автоматично перевіряє та застосовує міграції під час запуску API. Окремий ручний крок
-перед стартом застосунку більше не потрібний.
-
-`JWT_SECRET` має бути Base64-значенням щонайменше з 32 випадкових байтів. Access JWT живе 15 хвилин
-(`JWT_TTL`), а opaque refresh token — 7 днів (`REFRESH_TOKEN_TTL`). Login і registration повертають
-обидва токени. Refresh передається JSON-тілом `{"refreshToken":"..."}` у
-`POST /api/v1/auth/refresh`; успішний обмін ротує refresh token і продовжує його sliding TTL.
-
-У MySQL зберігається лише SHA-256 hash refresh token. Повторне використання вже ротованого token
-вважається replay-атакою і відкликає всю сесію. Access JWT містить `sid`, а кожен захищений запит
-перевіряє активність відповідної сесії в базі. Тому logout, зміна пароля, блокування або видалення
-акаунта негайно роблять недійсними і access, і refresh token на всіх pod-ах. Після розгортання цієї
-версії старі JWT без `sid` будуть відхилені — користувачеві треба один раз увійти знову.
-
-Перевірка пароля та створення сесії входу виконуються в одній транзакції під блокуванням
-рядка користувача. Зміна пароля бере те саме блокування: вона або відкликає сесію, створену
-попереднім входом, або змушує наступний вхід перевіряти вже новий пароль. Оновлення
-`login_date` записує лише це поле й не може повернути попередній пароль.
-
-### Змінні середовища
-
-Повний перелік із `api/src/main/resources/application.yml`. Обов'язкова рівно одна — `JWT_SECRET`;
-решта має придатні для локальної розробки значення за замовчуванням.
-
-| Змінна | Типово | Що робить |
-| --- | --- | --- |
-| `JWT_SECRET` | — (**обов'язкова**) | Base64 щонайменше з 32 випадкових байтів для підпису access JWT |
-| `JWT_TTL` | `PT15M` | час життя access JWT |
-| `REFRESH_TOKEN_TTL` | `P7D` | sliding TTL opaque refresh token |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | allowlist origin-ів для CORS |
-| `DB_URL` | `jdbc:mysql://localhost:3306/tests_db?...` | JDBC URL MySQL |
-| `DB_USERNAME` / `DB_PASSWORD` | `root` / порожній | облікові дані бази |
-| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | адреса Redis |
-| `REDIS_PASSWORD` | порожній | пароль Redis |
-| `REDIS_CONNECT_TIMEOUT` / `REDIS_TIMEOUT` | `2s` / `2s` | таймаути клієнта Redis |
-| `REDIS_HEALTH_ENABLED` | `true` | чи входить Redis у health-перевірку |
-| `READINESS_HEALTH_INDICATORS` | `readinessState,db,redis` | склад readiness-групи |
-| `RATE_LIMIT_BACKEND` | `redis` | `redis` або `memory` (лише один екземпляр API) |
-| `API_RATE_LIMIT_REQUESTS` | `120` | ліміт запитів до API у вікні |
-| `LOGIN_RATE_LIMIT_REQUESTS` | `5` | ліміт для `auth`-scope: login, register і зміна пароля |
-| `API_RATE_LIMIT_WINDOW` | `PT1M` | розмір вікна rate limit |
-| `API_RATE_LIMIT_MAX_CLIENTS` | `10000` | максимум відстежуваних клієнтів у in-memory backend |
-| `TRUSTED_PROXY_CIDRS` | `127.0.0.1/32,::1/128` | мережі proxy, яким довіряють `X-Forwarded-For` |
-| `SWAGGER_UI_ENABLED` | `true` | віддавати `/swagger-ui.html`; у ConfigMap кластера `false` |
-| `API_DOCS_ENABLED` | `true` | віддавати `/v3/api-docs`; у ConfigMap кластера `false` |
-| `API_PORT` | `8081` | порт API |
-| `MANAGEMENT_PORT` | `9081` | окремий порт actuator |
-| `SHUTDOWN_TIMEOUT` | `20s` | ліміт graceful shutdown |
-| `HTTP_COMPRESSION_ENABLED` | `true` | gzip для великих відповідей |
-| `HTTP_COMPRESSION_MIN_RESPONSE_SIZE` | `1KB` | поріг компресії |
-| `PUBLIC_QUIZ_CACHE_MAX_AGE` | `PT1M` | TTL кешу публічного каталогу |
-| `LOG_FORMAT` | `logstash` | формат структурованих console logs |
+Залежності зафіксовані в кореневому та `api/gradle.lockfile`.
+Після ручної зміни залежностей оновіть lockfile локально через
+`./gradlew :dependencies :api:dependencies --write-locks` і закомітьте його.
+Завдання `dependencies` резолвлять конфігурації кореня та `api`; один прапорець
+`--write-locks` без завдань не виконує повного оновлення. CI перевіряє наявні локи;
+Dependabot оновлює їх разом із залежностями.
 
 ## Основні маршрути
 
-- `POST /api/v1/auth/login` — вхід;
-- `POST /api/v1/auth/register` — реєстрація та отримання пари access/refresh;
-- `POST /api/v1/auth/refresh` — ротація refresh token і отримання нової пари;
-- `POST /api/v1/auth/logout` — відкликання поточної сесії;
-- `GET /api/v1/users/me` — профіль;
-- `PUT /api/v1/users/me/password` — зміна пароля;
-- `GET /api/v1/quizzes` — список тестів (з `search`, `complexity` і пагінацією);
-- `GET /api/v1/quizzes/summary` — `totalQuizzes` і `totalSubjects` для зведення;
-- `GET /api/v1/quizzes/{id}` — один тест;
-- `POST /api/v1/quizzes/{id}/attempts` — початок спроби;
-- `GET /api/v1/attempts/{id}` — поточна спроба;
-- `POST /api/v1/attempts/{id}/complete` — завершення спроби;
-- `GET /api/v1/results/me` — результати користувача;
-- `/api/v1/admin/**` — адміністративні операції;
-- `/swagger-ui.html` — інтерактивна OpenAPI-документація.
+| Метод і шлях | Призначення |
+| --- | --- |
+| `POST /api/v1/auth/register`, `POST /api/v1/auth/login` | створення акаунта / вхід, пара access і refresh token |
+| `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout` | ротація токенів / відкликання сесії |
+| `GET /api/v1/users/me`, `PUT /api/v1/users/me/password` | профіль / зміна пароля |
+| `GET /api/v1/quizzes`, `GET /api/v1/quizzes/{id}` | каталог / окремий тест |
+| `GET /api/v1/quizzes/summary` | кількість тестів і предметів із тестами |
+| `POST /api/v1/quizzes/{id}/attempts` | початок спроби |
+| `GET /api/v1/attempts/{id}`, `POST /api/v1/attempts/{id}/complete` | читання / завершення спроби |
+| `GET /api/v1/results/me`, `GET /api/v1/results/me/summary` | історія / підсумки за всю історію |
+| `/api/v1/admin/**` | операції ролі `ADMIN` |
 
-Завершення спроби приймає всі вибрані `answerIds` із її snapshot, зокрема понад 1000
-варіантів у великих тестах. Чужі ідентифікатори та `null` відхиляються з `400`;
-`null` серед варіантів відповіді в адміністративному запиті також дає `400`.
+Захищені маршрути приймають `Authorization: Bearer <token>`.
+Каталог підтримує `search` і повторюваний `complexity`
+(`low`, `medium`, `high`, `advanced`); пошук виконує база даних.
 
-Обидва документаційні шляхи (`/swagger-ui.html` і `/v3/api-docs`) дозволені без
-автентифікації, тож там, де вони увімкнені, уся поверхня API — кожен маршрут,
-схема й обмеження валідації — доступна будь-кому, хто дістає порт. На локальній
-машині та в CI це те, що треба, і саме це закріплює `HttpContractTest`. У
-ConfigMap кластера обидва вимкнені; `SWAGGER_UI_ENABLED=true` повертає їх для
-конкретного середовища, без перезбірки образу.
+Колекції тестів, власних результатів, адміністративних користувачів і результатів
+підтримують zero-based `page` і `size` (1–100, типово 20).
+Відповідь — JSON-масив; метадані передаються в `X-Page-Number`, `X-Page-Size`,
+`X-Total-Count` та `X-Total-Pages`. Без параметрів пагінації повертається повний список.
 
-Actuator слухає окремий порт (`MANAGEMENT_PORT`, типово `9081`), а не порт API
-(`API_PORT`, типово `8081`). `/actuator/prometheus` мусить лишатися відкритим, бо
-scraper не має чим автентифікуватися, і віддає він весь реєстр — лічильники
-автентифікації, версію JVM, пул з'єднань, серію на кожен URI API. Тому цей порт не
-опублікований у Service `quiz-api`: до нього дістаються kubelet (проби), Prometheus
-(через headless Service `quiz-api-management`) і оператор через `kubectl port-forward`.
+Помилки мають форму `{timestamp, status, error, message, path}`.
+`X-Correlation-ID` пов'язує відповідь із записом у журналі.
+Публічний каталог підтримує weak `ETag`, `If-None-Match` і `304 Not Modified`.
 
-- `/actuator/health` — стан застосунку;
-- `/actuator/metrics` — метрики, доступні лише адміністратору;
-- `/actuator/prometheus` — endpoint для Prometheus scrape.
+## Конфігурація
 
-Помилки повертаються однією формою — `{timestamp, status, error, message, path}` — для всіх
-випадків: валідація, 404, 405, 415, конфлікти та непередбачені збої (500). `message` для 500
-фіксований (`Unexpected server error`), а сам виняток іде в лог під тим самим `X-Correlation-ID`,
-що й у відповіді.
+Джерело значень за замовчуванням — [application.yml](api/src/main/resources/application.yml).
+`JWT_SECRET` обов'язковий; для MySQL і Redis потрібні доступні сервіси та відповідні облікові дані.
 
-Захищені маршрути приймають `Authorization: Bearer <token>`. Адміністративні операції
-доступні лише ролі `ADMIN`.
+| Змінна | Типово | Призначення |
+| --- | --- | --- |
+| `JWT_SECRET` | обов'язкова | Base64 щонайменше з 32 випадкових байтів |
+| `JWT_TTL` / `REFRESH_TOKEN_TTL` | `PT15M` / `P7D` | час життя access / refresh token |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | дозволені origin; для Vite задайте `http://127.0.0.1:4173` |
+| `DB_URL` | локальний MySQL, база `tests_db` | JDBC URL |
+| `DB_USERNAME` / `DB_PASSWORD` | `root` / порожній | облікові дані MySQL |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | `localhost` / `6379` / порожній | підключення до Redis |
+| `REDIS_CONNECT_TIMEOUT` / `REDIS_TIMEOUT` | `2s` / `2s` | таймаути Redis |
+| `RATE_LIMIT_BACKEND` | `redis` | `redis` або локальний `memory` |
+| `API_RATE_LIMIT_REQUESTS` / `LOGIN_RATE_LIMIT_REQUESTS` | `120` / `5` | загальний / auth-ліміт |
+| `API_RATE_LIMIT_WINDOW` / `API_RATE_LIMIT_MAX_CLIENTS` | `PT1M` / `10000` | вікно / місткість in-memory лічильників |
+| `TRUSTED_PROXY_CIDRS` | `127.0.0.1/32,::1/128` | довірені proxy для `X-Forwarded-For` |
+| `REDIS_HEALTH_ENABLED` | `true` | перевірка Redis |
+| `READINESS_HEALTH_INDICATORS` | `readinessState,db,redis` | склад readiness |
+| `API_PORT` / `MANAGEMENT_PORT` | `8081` / `9081` | окремі API / Actuator конектори |
+| `SWAGGER_UI_ENABLED` / `API_DOCS_ENABLED` | `true` / `true` | Swagger UI / OpenAPI |
+| `HTTP_COMPRESSION_ENABLED` / `HTTP_COMPRESSION_MIN_RESPONSE_SIZE` | `true` / `1KB` | gzip |
+| `PUBLIC_QUIZ_CACHE_MAX_AGE` | `PT1M` | TTL публічного каталогу |
+| `SHUTDOWN_TIMEOUT` / `LOG_FORMAT` | `20s` / `logstash` | graceful shutdown / формат логів |
 
-Колекції тестів, власних результатів та адміністративних тестів, користувачів і результатів
-підтримують необов'язкові zero-based параметри `page` і `size` (`size` від 1 до 100, типово 20,
-коли пагінацію ввімкнено). Без цих параметрів зберігається попередня поведінка з повним JSON-масивом.
-Відповідь залишається масивом, а metadata повертається в `X-Page-Number`, `X-Page-Size`,
-`X-Total-Count` і `X-Total-Pages`, тому наявний React-клієнт не потребує одночасного оновлення.
+## CI/CD і залежності
 
-`GET /api/v1/quizzes` додатково приймає `search` і `complexity`:
+| Workflow | Запуск | Перевірки / дія |
+| --- | --- | --- |
+| [CI](.github/workflows/ci.yml) | PR, push у `master`, вручну | Python-тести automation, Compose, unit/contract/integration-тести, покриття, JAR і OpenAPI artifact |
+| [SonarQube analysis](.github/workflows/sonarqube.yml) | PR, push у `master`, вручну | JaCoCo, покриття Python-скриптів, SonarCloud і блокувальний quality gate |
+| [Backend container delivery](.github/workflows/container.yml) | PR, push у `master`, вручну | Docker build, Trivy, smoke-тести MySQL/Redis і Compose; публікація образу з основної гілки |
+| [Dependabot auto-merge](.github/workflows/dependabot-auto-merge.yml) | після перевірок, кожні 15 хвилин, вручну | squash перевірених Dependabot PR |
+| [DigitalOcean preflight](.github/workflows/digitalocean-preflight.yml) | вручну / зміни власних файлів у `master` | перевірка SSH і метаданих сервера |
+| [Prepare existing DigitalOcean deployment](.github/workflows/digitalocean-prepare.yml) | вручну / зміни власних файлів у `master` | підготовка наявного Compose-стека та резервної копії |
+| [Deploy to DigitalOcean](.github/workflows/deploy-digitalocean.yml) | production вручну; staging за opt-in | перевірка підпису й release gates, SSH rollout за digest |
 
-- `search` (до 50 символів) шукає підрядок у назві тесту **або** назві предмета, без урахування
-  регістру. Символи `%` і `_` трактуються як звичайний текст, а не як шаблони LIKE;
-- `complexity` (до 25 символів) звужує за міткою рівня **як вона збережена** — `low`, `medium`,
-  `high`, `advanced` — і може повторюватися, щоб прийняти кілька: `?complexity=high&complexity=advanced`.
+SonarCloud потребує `SONAR_TOKEN`; job пропускається для запусків від `dependabot[bot]`.
+Гейт покриття залишається в CI. Повний Sonar-аналіз використовує JaCoCo для Java
+та `build/python-coverage.xml` для deployment/automation-скриптів.
+Для ручного аналізу запустіть **SonarQube analysis → Run workflow**;
+для повторення локально відтворіть обидва кроки збору покриття з workflow перед `sonar`.
 
-Обидва застосовуються базою даних, а не клієнтом. Це принципово для пагінованого ендпоінта:
-відфільтрувати одну завантажену сторінку означало б мовчки приховати всі збіги на інших сторінках.
+Dependabot auto-merge перевіряє всі обов'язкові workflows для поточного SHA,
+конфлікти та `Changes requested`. Після мержа через `GITHUB_TOKEN` він явно запускає
+перевірки й публікацію на `master`; deployment окремо запускається вручну.
 
-API навмисно не приймає узагальнені категорії на кшталт «easy/medium/hard». Такі групування
-належать конкретному інтерфейсу, а мітки рівнів у базі — закритий набір із чотирьох значень.
-Клієнт, який показує три кнопки, надсилає відповідні мітки сам.
-
-`GET /api/v1/quizzes/summary` повертає `totalQuizzes` і `totalSubjects` для клієнтів, які показують
-зведення, не завантажуючи весь каталог. Пагінований список на це відповісти не може: `X-Total-Count`
-каже, скільки тестів збігається, але не скільки різних предметів вони охоплюють.
-
-`totalSubjects` рахує предмети, які мають **хоча б один тест**, а не всі рядки таблиці `subjects`.
-Саме так це число рахувалося на клієнті, тож підрахунок таблиці мовчки завищив би показник.
-
-## Міграції бази даних
-
-Production-міграції знаходяться в `api/src/main/resources/db/migration` і входять до JAR:
-
-- `V1__baseline.sql` створює початкову схему та довідники;
-- `V2__secure_attempts.sql` посилює зберігання паролів, спроб і відповідей;
-- `V3__index_paginated_queries.sql` додає складені індекси для швидких сторінок власних та
-  адміністративних результатів у порядку від найновіших;
-- `V4__snapshot_attempt_questions.sql` фіксує склад запитань на момент початку спроби;
-- `V5__invalidate_tokens_on_password_change.sql` додає історичну мітку зміни пароля;
-- `V6__refresh_sessions.sql` додає серверні refresh-сесії з ротацією та відкликанням.
-
-Для наявної бази без `flyway_schema_history` спочатку створіть резервну копію та позначте
-поточну схему як baseline версії 1 перед запуском нової версії API.
-
-## Docker
+## Контейнер і DigitalOcean
 
 ~~~bash
 docker build -t quizproject-api:local .
-docker run --rm -p 8081:8081 \
-  -e DB_URL="jdbc:mysql://host.docker.internal:3306/tests_db?serverTimezone=UTC" \
-  -e DB_USERNAME=root \
-  -e DB_PASSWORD=secret \
-  -e REDIS_HOST=host.docker.internal \
-  -e JWT_SECRET="$(openssl rand -base64 32 | tr -d '\n')" \
-  -e CORS_ALLOWED_ORIGINS=http://localhost:4173 \
-  quizproject-api:local
 ~~~
 
-Образ запускає лише Spring Boot API від непривілейованого користувача.
+Production працює на Droplet `quiz-project-prod` через Docker Compose:
+API + MySQL + Redis; Caddy і frontend належать окремому репозиторію.
+Публічний `/api` проксується до API; база, Redis і management-порт залишаються
+внутрішніми. Production Compose вимикає Swagger UI та OpenAPI.
 
-## Kubernetes: довідкові маніфести
+Delivery публікує `ghcr.io/vitaliilatysh/quizproject:master` і `sha-<commit>`
+для `linux/amd64` та `linux/arm64`, додає SBOM/provenance і підписує digest через cosign.
 
-Ці маніфести призначені лише для ручного використання. CI/CD більше не встановлює
-`kubectl`, не рендерить і не публікує Kubernetes artifacts; автоматичне розгортання
-виконується лише через Docker Compose на DigitalOcean.
+Ручний production deploy у GitHub Actions:
 
-Базові маніфести знаходяться в `deploy/kubernetes/backend`, а готові конфігурації оточень — у
-`deploy/kubernetes/overlays/local`, `deploy/kubernetes/overlays/staging` і
-`deploy/kubernetes/overlays/production`. Вони створюють:
+1. Дочекайтеся успішних CI, SonarQube analysis та Backend container delivery на `master`.
+2. Відкрийте **Actions → Deploy to DigitalOcean → Run workflow**.
+3. Оберіть `master`, `environment=production`; `image_tag` можна залишити порожнім
+   для `sha-<commit>` вибраної версії.
+4. Якщо оновлюєте обидва компоненти, спочатку розгорніть backend, потім frontend.
 
-- два екземпляри API;
-- Redis 8.2 для спільних атомарних rate limits;
-- `ClusterIP` Service;
-- startup, liveness і readiness probes;
-- resource requests/limits;
-- `PodDisruptionBudget`;
-- розподіл API pod-ів між Kubernetes nodes;
-- безпечне завершення трафіку через `preStop` і Spring graceful shutdown;
-- non-root контейнери з read-only root filesystem;
-- NetworkPolicy, яка дозволяє доступ до Redis лише pod-ам API.
+У GitHub environment потрібні variable `DO_HOST` та secrets `DO_SSH_KEY`,
+`DO_KNOWN_HOSTS`. Variables `DO_SSH_USER` і `DO_SSH_PORT` необов'язкові:
+типові значення — `deploy` і `22`. Паролі та JWT залишаються на сервері.
+Автоматичний staging вмикається окремо через `DO_STAGING_ENABLED=true`.
 
-Production overlay також додає `HorizontalPodAutoscaler`: API масштабується від 2 до 6 pod-ів,
-коли середнє використання CPU перевищує 70%. Для роботи HPA кластер повинен надавати resource
-metrics через [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) або сумісний
-metrics API. Scale-down стабілізується протягом п'яти хвилин, щоб уникнути коливань кількості
-pod-ів під нерівномірним навантаженням.
+Спільний серверний lock координує обидва репозиторії. При невдалому rollout
+скрипт намагається відновити попередній image/configuration; результат rollback
+теж перевіряється. Перший deployment без попереднього release не має такого
+відкату; дані зберігаються. Відкат образу не відкочує Flyway-міграції.
+Інструкції: [DigitalOcean deployment](docs/digitalocean-deployment.md) і
+[резервне копіювання та відновлення](docs/database-recovery.md).
 
-Pod template має стандартні `prometheus.io/*` annotations. Якщо в кластері встановлений
-[Prometheus Operator](https://prometheus-operator.dev/), додатково застосуйте готові
-`ServiceMonitor` і `PrometheusRule`:
+`deploy/kubernetes` містить довідкові Kustomize-маніфести для окремого ручного
+розгортання; поточний deployment workflow використовує Compose.
 
-~~~bash
-kubectl apply -k deploy/kubernetes/monitoring
-~~~
+## Безпека та спостережуваність
 
-Monitoring bundle додає alerts для недоступності API, високої частки `5xx`, p95 latency понад
-одну секунду та відмов Redis-backed rate limiter. Він не входить до основного overlay, тому
-звичайний Kubernetes-кластер без Prometheus CRD продовжує приймати backend manifests.
-
-Для локального кластера спочатку зберіть образ, створіть Secret із `DB_URL`, `DB_USERNAME`,
-`DB_PASSWORD`, `JWT_SECRET` і `REDIS_PASSWORD`, після чого застосуйте local overlay:
-
-~~~bash
-docker build -t quizproject-api:local .
-kubectl apply -f deploy/kubernetes/backend/namespace.yaml
-kubectl -n quizproject create secret generic quiz-api-secrets \
-  --from-env-file=deploy/kubernetes/backend/secret.env \
-  --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -k deploy/kubernetes/overlays/local
-kubectl -n quizproject rollout status deployment/quiz-api
-~~~
-
-Production overlay використовує `ghcr.io/vitaliilatysh/quizproject:master`. Для відтворюваного
-розгортання застосовуйте manifest artifact із delivery workflow: у ньому image зафіксований
-registry digest `sha256:...`.
-
-Spring Boot запускає Flyway до переходу readiness probe у стан `UP`, тому pod не приймає трафік
-зі схемою, яка ще не пройшла міграцію. Readiness також перевіряє Redis.
-
-`TRUSTED_PROXY_CIDRS` повинен містити лише мережі фактичних ingress/load-balancer proxy.
-Заголовок `X-Forwarded-For` ігнорується для запитів безпосередньо з недовіреної адреси.
-
-## Delivery контейнера
-
-Workflow **Backend container delivery** виконується для кожного pull request:
-
-- збирає production Docker image;
-- блокує зміни з виправними критичними та високими вразливостями за допомогою Trivy
-  (сканування образу також включає пошук секретів у шарах);
-- використовує точні commit SHA для сторонніх GitHub Actions, звірені з immutable release tags;
-- запускає image від непривілейованого користувача з read-only filesystem разом із MySQL 8.4 і
-  Redis 8.2 та перевіряє readiness, liveness і OpenAPI;
-- рендерить local і production Kustomize overlays.
-
-Після push у `master` workflow публікує multi-platform образи для `linux/amd64` і `linux/arm64`:
-
-- `ghcr.io/vitaliilatysh/quizproject:master`;
-- `ghcr.io/vitaliilatysh/quizproject:sha-<commit>`.
-
-До образу додаються SBOM і build provenance. Опублікований digest підписується keyless-режимом
-cosign (OIDC-токен GitHub Actions обмінюється на короткоживучий сертифікат Fulcio, тож ключі ніде
-не зберігаються) і одразу перевіряється в тому ж прогоні — зламане підписування завалить реліз,
-а не опублікує непідписаний образ. Перевірити опублікований образ самостійно:
-
-~~~bash
-cosign verify \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github.com/vitaliilatysh/quizproject/\.github/workflows/container\.yml@' \
-  ghcr.io/vitaliilatysh/quizproject@sha256:...
-~~~
-
-DigitalOcean workflow отримує перевірений immutable image digest безпосередньо з GHCR.
-Kubernetes manifest artifacts більше не створюються.
-
-## Розгортання на DigitalOcean
-
-Workflow **Deploy to DigitalOcean** розгортає підписаний GHCR image за digest на DigitalOcean Droplet
-через SSH і Docker Compose. Для production збережено перевірку CI/Sonar/container
-delivery для image revision і deployment checkout; frontend також вимагає E2E.
-Розгортаємо backend першим, frontend другим. Спільний серверний lock координує
-обидва репозиторії; невдалий запуск повертає попередній release без видалення даних.
-
-Production запускається вручну через `workflow_dispatch`. Автоматичний staging
-вмикається лише repository variable `DO_STAGING_ENABLED=true` після окремого налаштування.
-GitHub environment потребує variables `DO_HOST`, `DO_SSH_USER`, `DO_SSH_PORT`
-та secrets `DO_SSH_KEY`, `DO_KNOWN_HOSTS`; паролі бази та JWT залишаються на сервері.
-
-Повна інструкція: [DigitalOcean deployment](docs/digitalocean-deployment.md). Kubernetes manifests залишаються
-доступними для окремого розгортання у Kubernetes і не використовуються цим workflow.
-
-## Спостережуваність
-
-Production console logs мають структурований Logstash JSON-формат. Кожна HTTP-відповідь містить
-`X-Correlation-ID`; безпечне значення клієнта зберігається, а відсутнє або некоректне замінюється
-UUID. Те саме значення потрапляє до MDC та completion log разом із методом, шляхом, статусом і
-тривалістю запиту. Формат можна змінити змінною `LOG_FORMAT`.
-
-Prometheus endpoint містить стандартні HTTP, JVM, HikariCP і Redis client metrics, а також
-низькокардинальні бізнес-метрики:
-
-- `quiz_authentication_attempts_total{outcome=...}`;
-- `quiz_account_registrations_total`;
-- `quiz_token_refreshes_total`;
-- `quiz_attempts_total{state=...}`;
-- `quiz_attempt_score_*`;
-- `quiz_rate_limit_requests_total{scope=...,outcome=...}`.
-
-Не використовуйте username, IP, attempt ID або інші необмежені значення як metric labels.
-
-## Безпека
-
-- паролі зберігаються як salted PBKDF2-HMAC-SHA256;
-- legacy-паролі з відкритим текстом (стара схема мала `password VARCHAR(15)`, а `V2` лише розширив
-  колонку, не конвертуючи значень) перехешовуються під час першого ж успішного входу, тож із
-  перенесеної бази вони вимиваються самі, а не лишаються назавжди;
-- те саме стосується хешів, записаних зі слабшою кількістю ітерацій: `upgradeEncoding` повертає
-  `true` не лише для не-префіксованих значень, а й коли ітерацій у рядку менше за ту, з якою
-  `encode` пише сьогодні, тож після підняття цієї кількості старі хеші переписуються самі під час
-  входу. Кількість задана константою `DEFAULT_ITERATION_COUNT` (600 000) у
-  `LegacyPasswordEncoder`, а не властивістю чи змінною середовища, тож підняти її означає змінити
-  код і розгорнути нову версію — через конфігурацію деплою це не робиться;
-- рядок із кількістю ітерацій `<= 0` вважається зламаним і не проходить перевірку взагалі, бо
-  інакше `PBEKeySpec` кинув би виняток, який на цьому рівні не відрізнити від невірного пароля;
-- CORS використовує allowlist із `CORS_ALLOWED_ORIGINS`;
-- refresh token зберігається лише як SHA-256 hash, ротується після кожного обміну й має replay-захист;
-- logout, зміна пароля та блокування акаунта негайно відкликають серверні сесії;
-- API та `auth` мають окремі атомарні Redis rate limits, спільні для всіх pod-ів; у строгий
-  `auth`-бакет (`LOGIN_RATE_LIMIT_REQUESTS`) потрапляють усі три маршрути, що приймають пароль:
-  `/api/v1/auth/login`, `/api/v1/auth/register` і `/api/v1/users/me/password` — інакше підбір
-  достатньо було перенести з логіну на зміну пароля, щоб отримати ліміт у 120 спроб замість 5;
-- IP клієнта визначається справа наліво через ланцюжок лише довірених proxy;
-- відмова Redis закриває доступ контрольованою відповіддю `503`;
-- помилки `401`, `403` і `429` повертаються в одному JSON-форматі;
-- завершення спроби перевіряє власника, термін дії та допустимі відповіді;
-- секрети не зберігаються в репозиторії.
+- Паролі зберігаються як salted PBKDF2-HMAC-SHA256; застарілі записи оновлюються під час входу.
+- У базі зберігається SHA-256 hash refresh token; ротація має replay-захист.
+- Logout, зміна пароля й блокування акаунта відкликають серверні сесії.
+- Redis забезпечує спільні атомарні ліміти; його відмова дає контрольований `503`.
+- Завершення спроби перевіряє власника, snapshot, дедлайн і відповіді;
+  блокування захищає від подвійного результату.
+- Структуровані JSON-логи містять `X-Correlation-ID`; Prometheus на management-порту
+  надає HTTP/JVM/Redis та бізнес-метрики.
+- Flyway-міграції з `api/src/main/resources/db/migration` входять до JAR.
+  Для наявної схеми без `flyway_schema_history` потрібні резервна копія,
+  звірка схеми та окремий baseline перед першим запуском Flyway.
 
