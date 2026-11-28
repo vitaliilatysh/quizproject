@@ -42,12 +42,13 @@ Specification для каталогу, Strategy для rate limiting і Facade �
 
 ## Локальний запуск
 
-Потрібні JDK 25 і Docker із Compose v2. Для запуску API підготуйте MySQL та Redis,
-наприклад в окремих локальних контейнерах:
+Потрібні JDK 25, MySQL 8.4 і Redis. Наведений нижче приклад запускає базу та Redis
+через Docker Engine; Compose v2 використовується в deployment-стеку.
 
 ~~~bash
 docker run --detach --rm --name quiz-mysql \
   --publish 127.0.0.1:3306:3306 \
+  --volume quizproject-dev-mysql:/var/lib/mysql \
   --env MYSQL_DATABASE=tests_db \
   --env MYSQL_USER=quiz_app \
   --env MYSQL_PASSWORD=local-db-password \
@@ -58,7 +59,19 @@ docker run --detach --rm --name quiz-redis \
   --publish 127.0.0.1:6379:6379 redis:8.2.8-alpine
 ~~~
 
-Після готовності MySQL запустіть API з кореня репозиторію:
+MySQL зберігає дані в локальному volume `quizproject-dev-mysql`; `--rm` видаляє
+контейнер після зупинки, але залишає цей volume. Змінні `MYSQL_*` створюють базу
+та користувача лише під час першої ініціалізації порожнього volume.
+
+Дочекайтеся успішного виконання перевірки MySQL:
+
+~~~bash
+docker exec --env MYSQL_PWD=local-db-password quiz-mysql \
+  mysql --protocol=TCP --host=127.0.0.1 --user=quiz_app \
+  --database=tests_db --execute="SELECT 1"
+~~~
+
+Після цього запустіть API з кореня репозиторію:
 
 ~~~bash
 export DB_URL="jdbc:mysql://localhost:3306/tests_db?characterEncoding=UTF-8&serverTimezone=UTC"
@@ -83,6 +96,22 @@ Flyway застосовує міграції під час запуску.
 Для ізольованої розробки без Redis можна встановити `RATE_LIMIT_BACKEND=memory`,
 `REDIS_HEALTH_ENABLED=false` і `READINESS_HEALTH_INDICATORS=readinessState,db`.
 Цей режим розрахований на один екземпляр API.
+
+### Локальний адміністратор
+
+Міграції додають ролі та навчальні тести, але не створюють користувачів.
+Зареєструйте `localadmin` із власним паролем через frontend або
+`POST /api/v1/auth/register`; реєстрація завжди надає роль `student`.
+Для цієї локальної бази призначте роль адміністратора:
+
+~~~bash
+docker exec --env MYSQL_PWD=local-db-password quiz-mysql \
+  mysql --protocol=TCP --host=127.0.0.1 --user=quiz_app --database=tests_db \
+  --execute="UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'admin') WHERE login = 'localadmin';"
+~~~
+
+Вийдіть і ввійдіть знову, щоб отримати JWT з новою роллю. Цей користувач також
+підходить для локального Playwright-прогону frontend.
 
 ## Збірка і перевірки
 
@@ -113,7 +142,9 @@ Flyway застосовує міграції під час запуску.
 
 Залежності зафіксовані в кореневому та `api/gradle.lockfile`.
 Після ручної зміни залежностей оновіть lockfile локально через
-`./gradlew --write-locks` і закомітьте його. CI перевіряє наявні локи;
+`./gradlew :dependencies :api:dependencies --write-locks` і закомітьте його.
+Завдання `dependencies` резолвлять конфігурації кореня та `api`; один прапорець
+`--write-locks` без завдань не виконує повного оновлення. CI перевіряє наявні локи;
 Dependabot оновлює їх разом із залежностями.
 
 ## Основні маршрути
@@ -182,11 +213,10 @@ Dependabot оновлює їх разом із залежностями.
 | [Deploy to DigitalOcean](.github/workflows/deploy-digitalocean.yml) | production вручну; staging за opt-in | перевірка підпису й release gates, SSH rollout за digest |
 
 SonarCloud потребує `SONAR_TOKEN`; job пропускається для запусків від `dependabot[bot]`.
-Гейт покриття залишається в CI. Для локального Sonar-аналізу:
-
-~~~bash
-./gradlew :api:test :api:jacocoTestReport :api:jacocoTestCoverageVerification sonar
-~~~
+Гейт покриття залишається в CI. Повний Sonar-аналіз використовує JaCoCo для Java
+та `build/python-coverage.xml` для deployment/automation-скриптів.
+Для ручного аналізу запустіть **SonarQube analysis → Run workflow**;
+для повторення локально відтворіть обидва кроки збору покриття з workflow перед `sonar`.
 
 Dependabot auto-merge перевіряє всі обов'язкові workflows для поточного SHA,
 конфлікти та `Changes requested`. Після мержа через `GITHUB_TOKEN` він явно запускає
@@ -214,12 +244,15 @@ Delivery публікує `ghcr.io/vitaliilatysh/quizproject:master` і `sha-<co
    для `sha-<commit>` вибраної версії.
 4. Якщо оновлюєте обидва компоненти, спочатку розгорніть backend, потім frontend.
 
-У GitHub environment потрібні variables `DO_HOST`, `DO_SSH_USER`, `DO_SSH_PORT`
-та secrets `DO_SSH_KEY`, `DO_KNOWN_HOSTS`. Паролі та JWT залишаються на сервері.
+У GitHub environment потрібні variable `DO_HOST` та secrets `DO_SSH_KEY`,
+`DO_KNOWN_HOSTS`. Variables `DO_SSH_USER` і `DO_SSH_PORT` необов'язкові:
+типові значення — `deploy` і `22`. Паролі та JWT залишаються на сервері.
 Автоматичний staging вмикається окремо через `DO_STAGING_ENABLED=true`.
 
-Спільний серверний lock координує обидва репозиторії; невдалий rollout повертає
-попередній image/configuration. Відкат образу не відкочує Flyway-міграції.
+Спільний серверний lock координує обидва репозиторії. При невдалому rollout
+скрипт намагається відновити попередній image/configuration; результат rollback
+теж перевіряється. Перший deployment без попереднього release не має такого
+відкату; дані зберігаються. Відкат образу не відкочує Flyway-міграції.
 Інструкції: [DigitalOcean deployment](docs/digitalocean-deployment.md) і
 [резервне копіювання та відновлення](docs/database-recovery.md).
 
@@ -237,5 +270,6 @@ Delivery публікує `ghcr.io/vitaliilatysh/quizproject:master` і `sha-<co
 - Структуровані JSON-логи містять `X-Correlation-ID`; Prometheus на management-порту
   надає HTTP/JVM/Redis та бізнес-метрики.
 - Flyway-міграції з `api/src/main/resources/db/migration` входять до JAR.
-  Перед підключенням старої бази без історії Flyway дотримуйтесь процедури резервного копіювання.
+  Для наявної схеми без `flyway_schema_history` потрібні резервна копія,
+  звірка схеми та окремий baseline перед першим запуском Flyway.
 
